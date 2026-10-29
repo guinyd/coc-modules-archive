@@ -21,29 +21,32 @@ import {
 } from '../../../shared/coc7e.js';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api.js';
 import {
-  Badge, Button, EmptyState, Field, Input, Panel, Select, Textarea, WarningList, cx,
+  Badge, Button, EmptyState, Field, Input, Panel, Select, Tabs, Textarea, WarningList, cx,
 } from '../ui.jsx';
 import { ExportCardModal } from './CardTransferModal.jsx';
 
 const STATUS_TONE = { draft: 'slate', active: 'emerald', retired: 'amber', dead: 'red' };
 const REVIEW_TONE = { none: 'slate', pending: 'amber', approved: 'emerald', rejected: 'red' };
 
+/** 字段标签放大到 12.5px：ui.jsx 的 Field 内部写死 9.5px，这里用后代选择器覆盖，不改共享组件 */
+const FIELD_LABEL = '[&>span:first-child>span:first-child]:text-[14px] [&>span:first-child>span:first-child]:tracking-[0.12em]';
+
 function StatBox({ label, value, sub, tone = 'emerald' }) {
-  const tones = { emerald: 'text-emerald-400', amber: 'text-amber-400', cyan: 'text-cyan-300' };
+  const tones = { emerald: 'text-forest', amber: 'text-ochre', cyan: 'text-moon' };
   return (
-    <div className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-center">
-      <div className="text-[11px] text-slate-500 mb-0.5">{label}</div>
-      <div className={cx('text-xl font-black font-mono', tones[tone])}>{value}</div>
-      {sub ? <div className="text-[10px] text-slate-600">{sub}</div> : null}
+    <div className="rounded-[2px] border border-line-strong bg-paper-deep/40 px-2.5 py-3 text-center">
+      <div className="font-mono text-[14px] font-semibold tracking-[0.14em] text-ink-mute">{label}</div>
+      <div className={cx('tabular mt-2 font-serif text-[28px] font-bold leading-none', tones[tone])}>{value}</div>
+      {sub ? <div className="mt-1.5 text-[14px] leading-snug text-ink-mute">{sub}</div> : null}
     </div>
   );
 }
 
 /** 规则提示的严重级别配色 */
 const FINDING_TONE = {
-  error: 'border-red-500/40 bg-red-500/5 text-red-200',
-  warn: 'border-amber-500/40 bg-amber-500/5 text-amber-200',
-  info: 'border-cyan-500/40 bg-cyan-500/5 text-cyan-200',
+  error: 'border-red-500/45 bg-red-500/[0.06] text-vermilion',
+  warn: 'border-amber-500/45 bg-amber-500/[0.06] text-ochre',
+  info: 'border-cyan-500/40 bg-cyan-500/[0.05] text-moon',
 };
 
 export default function CharacterDetail({
@@ -170,20 +173,20 @@ export default function CharacterDetail({
   return (
     <div className="space-y-5">
       {/* 头部 */}
-      <Panel className="p-5">
+      <Panel className="p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-4">
-            <Button variant="ghost" onClick={onBack} className="!p-2.5"><ArrowLeft className="w-4 h-4" /></Button>
+            <Button variant="ghost" onClick={onBack} className="!p-3"><ArrowLeft className="h-4 w-4" /></Button>
             <div>
-              <h2 className="text-3xl font-black text-white flex items-center gap-3 flex-wrap">
+              <h2 className="flex flex-wrap items-center gap-x-3 gap-y-2 font-serif text-[34px] font-bold leading-[1.15] tracking-[-0.005em] text-ink sm:text-[38px]">
                 {c.name}
-                <Badge tone={STATUS_TONE[c.status]}>{STATUS_LABEL[c.status]}</Badge>
+                <Badge tone={STATUS_TONE[c.status]} className="!text-[14px]">{STATUS_LABEL[c.status]}</Badge>
                 {review.status !== 'none' ? (
-                  <Badge tone={REVIEW_TONE[review.status]}>{REVIEW_LABEL[review.status]}</Badge>
+                  <Badge tone={REVIEW_TONE[review.status]} className="!text-[14px]">{REVIEW_LABEL[review.status]}</Badge>
                 ) : null}
-                {c.isPublic ? <Badge tone="cyan">公开只读</Badge> : null}
+                {c.isPublic ? <Badge tone="cyan" className="!text-[14px]">公开只读</Badge> : null}
               </h2>
-              <p className="text-slate-400 text-sm mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[16px] leading-[1.7] text-ink-soft">
                 <span className="flex items-center gap-1"><UserIcon className="w-3.5 h-3.5" />{c.ownerName}</span>
                 <span>{d.occupation?.name || '无职业'}</span>
                 <span>{c.age} 岁</span>
@@ -194,46 +197,46 @@ export default function CharacterDetail({
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="ghost" onClick={() => setExportOpen(true)}><Share2 className="w-4 h-4" />导出编码 / 骰娘指令</Button>
-            <Button variant="ghost" onClick={() => onPrint(c)}><Printer className="w-4 h-4" />打印 / 导出 PDF</Button>
+            <Button variant="ghost" className="!px-3 !py-1.5 !text-[14px]" onClick={() => setExportOpen(true)}><Share2 className="h-4 w-4" />导出编码 / 骰娘指令</Button>
+            <Button variant="ghost" className="!px-3 !py-1.5 !text-[14px]" onClick={() => onPrint(c)}><Printer className="h-4 w-4" />打印 / 导出 PDF</Button>
             {c.isOwner && (review.status === 'none' || review.status === 'rejected') ? (
-              <Button variant="amber" onClick={submitReview}>
-                <Send className="w-4 h-4" />{review.status === 'rejected' ? '修改后重新提交' : '提交 KP 审核'}
+              <Button variant="amber" className="!px-3 !py-1.5 !text-[14px]" onClick={submitReview}>
+                <Send className="h-4 w-4" />{review.status === 'rejected' ? '修改后重新提交' : '提交 KP 审核'}
               </Button>
             ) : null}
             {c.isOwner && review.status === 'pending' ? (
-              <Button variant="ghost" onClick={withdrawReview}><Undo2 className="w-4 h-4" />撤回审核</Button>
+              <Button variant="ghost" className="!px-3 !py-1.5 !text-[14px]" onClick={withdrawReview}><Undo2 className="h-4 w-4" />撤回审核</Button>
             ) : null}
-            {c.canEdit ? <Button onClick={() => onEdit(c)}><Edit className="w-4 h-4" />编辑</Button> : null}
+            {c.canEdit ? <Button className="!px-3.5 !py-1.5 !text-[14px]" onClick={() => onEdit(c)}><Edit className="h-4 w-4" />编辑</Button> : null}
           </div>
         </div>
 
         {/* 驳回批复：只在这里显示，不进角色卡、不打印 */}
         {review.status === 'rejected' && review.comment ? (
-          <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/5 p-4">
-            <div className="text-red-300 font-bold text-sm mb-1 flex items-center gap-2">
+          <div className="mt-5 border-l-2 border-red-500/50 bg-red-500/[0.05] px-4 py-3.5">
+            <div className="mb-1.5 flex items-center gap-2 text-[16px] font-bold text-vermilion">
               <XCircle className="w-4 h-4" />KP 批复（{review.reviewedByName || 'KP'} · {review.reviewedAt ? new Date(review.reviewedAt).toLocaleString() : ''}）
             </div>
-            <p className="text-red-100 text-sm whitespace-pre-wrap leading-relaxed">{review.comment}</p>
-            <p className="text-[11px] text-red-300/70 mt-2">批复只用于沟通，不会出现在角色卡或打印件上。</p>
+            <p className="whitespace-pre-wrap text-[16px] leading-[1.85] text-ink-soft">{review.comment}</p>
+            <p className="mt-2 text-[14px] text-ink-mute">批复只用于沟通，不会出现在角色卡或打印件上。</p>
           </div>
         ) : null}
         {review.status === 'approved' ? (
-          <div className="mt-4 rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-3 text-sm text-emerald-200 flex items-center gap-2">
+          <div className="mt-5 flex items-center gap-2 border-l-2 border-forest/50 bg-forest/[0.06] px-4 py-3 text-[14px] text-forest">
             <CheckCircle className="w-4 h-4" />
             已通过 KP 审核{review.reviewedByName ? `（${review.reviewedByName}）` : ''}。批复在通过时已清空。
           </div>
         ) : null}
         {review.status === 'pending' ? (
-          <div className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 text-sm text-amber-200 flex items-center gap-2">
+          <div className="mt-5 flex items-center gap-2 border-l-2 border-ochre/50 bg-ochre/[0.06] px-4 py-3 text-[14px] text-ochre">
             <ClipboardCheck className="w-4 h-4" />已提交审核，等待 KP 批复。
           </div>
         ) : null}
       </Panel>
 
       {/* 派生值 */}
-      <Panel className="p-5 space-y-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+      <Panel className="p-5 space-y-5 sm:p-6">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3 lg:grid-cols-7">
           <StatBox label="生命值 HP" value={d.hp} />
           <StatBox label="魔法点 MP" value={d.mp} />
           <StatBox label="理智 SAN" value={d.san} />
@@ -247,20 +250,20 @@ export default function CharacterDetail({
             tone={d.creditInRange === false ? 'amber' : 'cyan'}
           />
         </div>
-        <div className="grid sm:grid-cols-2 gap-3 text-xs text-slate-400">
-          <div>职业技能点：<b className="text-white font-mono">{d.spent.occupation}</b> / {d.budget.occupation}</div>
-          <div>兴趣技能点：<b className="text-white font-mono">{d.spent.interest}</b> / {d.budget.interest}（智力×2）</div>
+        <div className="grid gap-2 text-[14.5px] leading-[1.8] text-ink-soft sm:grid-cols-2">
+          <div>职业技能点：<b className="font-mono text-[14px] font-bold tabular text-ink">{d.spent.occupation}</b> / {d.budget.occupation}</div>
+          <div>兴趣技能点：<b className="font-mono text-[14px] font-bold tabular text-ink">{d.spent.interest}</b> / {d.budget.interest}（智力×2）</div>
         </div>
         <WarningList items={c.warnings} />
       </Panel>
 
       {/* KP 审核面板 */}
       {c.canReview ? (
-        <Panel className="p-5 space-y-4 border-amber-500/30">
+        <Panel className="space-y-4 border-amber-600/40 p-5 sm:p-6">
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <h3 className="font-bold text-white flex items-center gap-2">
-              <Shield className="w-4 h-4 text-amber-400" />KP 审核区
-              <span className="text-xs font-normal text-slate-500">仅 KP 可见 · 不影响玩家看到的角色卡内容</span>
+            <h3 className="flex items-center gap-2 font-serif text-[17px] font-bold tracking-[0.01em] text-ink">
+              <Shield className="w-4 h-4 text-ochre" />KP 审核区
+              <span className="text-[14px] font-normal text-ink-mute">仅 KP 可见 · 不影响玩家看到的角色卡内容</span>
             </h3>
             {c.audit ? (
               <Badge tone={c.audit.passed ? 'emerald' : 'red'}>
@@ -271,42 +274,42 @@ export default function CharacterDetail({
 
           {c.audit ? (
             <div className="space-y-3">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div className="bg-slate-950 border border-slate-800 rounded-lg p-3">
-                  <div className="text-slate-500">属性总和</div>
-                  <div className="font-mono font-black text-white">{c.audit.stats.charTotal}</div>
+              <div className="grid grid-cols-2 gap-3 text-[14px] sm:grid-cols-4">
+                <div className="rounded-[2px] border border-line-strong bg-paper-deep/40 p-3">
+                  <div className="text-ink-mute">属性总和</div>
+                  <div className="tabular mt-1 font-serif text-[17px] font-bold text-ink">{c.audit.stats.charTotal}</div>
                 </div>
-                <div className="bg-slate-950 border border-slate-800 rounded-lg p-3">
-                  <div className="text-slate-500">职业点</div>
-                  <div className="font-mono font-black text-white">{c.audit.stats.occupationPoints} / {c.audit.stats.occupationBudget}</div>
+                <div className="rounded-[2px] border border-line-strong bg-paper-deep/40 p-3">
+                  <div className="text-ink-mute">职业点</div>
+                  <div className="tabular mt-1 font-serif text-[17px] font-bold text-ink">{c.audit.stats.occupationPoints} / {c.audit.stats.occupationBudget}</div>
                 </div>
-                <div className="bg-slate-950 border border-slate-800 rounded-lg p-3">
-                  <div className="text-slate-500">兴趣点</div>
-                  <div className="font-mono font-black text-white">{c.audit.stats.interestPoints} / {c.audit.stats.interestBudget}</div>
+                <div className="rounded-[2px] border border-line-strong bg-paper-deep/40 p-3">
+                  <div className="text-ink-mute">兴趣点</div>
+                  <div className="tabular mt-1 font-serif text-[17px] font-bold text-ink">{c.audit.stats.interestPoints} / {c.audit.stats.interestBudget}</div>
                 </div>
-                <div className="bg-slate-950 border border-slate-800 rounded-lg p-3">
-                  <div className="text-slate-500">自定义技能</div>
-                  <div className="font-mono font-black text-white">{c.audit.stats.customSkillCount}</div>
+                <div className="rounded-[2px] border border-line-strong bg-paper-deep/40 p-3">
+                  <div className="text-ink-mute">自定义技能</div>
+                  <div className="tabular mt-1 font-serif text-[17px] font-bold text-ink">{c.audit.stats.customSkillCount}</div>
                 </div>
               </div>
 
               {c.audit.findings.length > 0 ? (
                 <ul className="space-y-1.5">
                   {c.audit.findings.map((f, i) => (
-                    <li key={`${f.id}-${i}`} className={cx('rounded-lg border p-2.5 text-sm', FINDING_TONE[f.level])}>
+                    <li key={`${f.id}-${i}`} className={cx('rounded-[2px] border p-3 text-[14.5px] leading-[1.75]', FINDING_TONE[f.level])}>
                       <b>{f.label}</b>：{f.detail}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-emerald-400 flex items-center gap-1.5"><CheckCircle className="w-4 h-4" />按当前规则未发现问题</p>
+                <p className="flex items-center gap-1.5 text-[16px] text-forest"><CheckCircle className="w-4 h-4" />按当前规则未发现问题</p>
               )}
             </div>
           ) : null}
 
           {canReview ? (
-            <div className="border-t border-slate-800 pt-4 space-y-3">
-              <Field label="驳回时的批复" hint="通过时批复会被清空，不需要填写">
+            <div className="border-t border-line pt-4 space-y-3">
+              <Field label="驳回时的批复" hint="通过时批复会被清空，不需要填写" className={FIELD_LABEL}>
                 <Textarea
                   rows={2}
                   maxLength={500}
@@ -325,19 +328,19 @@ export default function CharacterDetail({
               </div>
             </div>
           ) : (
-            <p className="text-xs text-slate-500">
+            <p className="text-[16px] leading-[1.75] text-ink-soft">
               {review.status === 'pending' ? '该卡处于待审核状态，可在上方直接批复。' : '该卡当前不在待审核队列中。'}
             </p>
           )}
 
           {c.reviewHistory?.length ? (
-            <details className="text-xs text-slate-500">
-              <summary className="cursor-pointer hover:text-slate-300">审核历史（{c.reviewHistory.length}）</summary>
+            <details className="text-[14px] leading-[1.75] text-ink-mute">
+              <summary className="cursor-pointer hover:text-ink-soft">审核历史（{c.reviewHistory.length}）</summary>
               <ul className="mt-2 space-y-1">
                 {c.reviewHistory.map((h) => (
                   <li key={h.id}>
                     {new Date(h.createdAt).toLocaleString()} · {h.kpName} ·{' '}
-                    <span className={h.verdict === 'approved' ? 'text-emerald-400' : 'text-red-400'}>
+                    <span className={h.verdict === 'approved' ? 'text-forest' : 'text-vermilion'}>
                       {h.verdict === 'approved' ? '通过' : '驳回'}
                     </span>
                     {h.comment ? `：${h.comment}` : ''}
@@ -350,42 +353,39 @@ export default function CharacterDetail({
       ) : null}
 
       {/* 分页 */}
-      <div className="flex gap-1 border-b border-slate-800">
-        {[['sheet', '属性与技能', Wand2], ['story', '背景故事', BookOpen], ['journal', '装备与经历', ScrollText]].map(([k, label, Icon]) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => setTab(k)}
-            className={cx('px-4 py-3 font-bold text-sm flex items-center gap-2 border-b-2 -mb-px transition',
-              tab === k ? 'text-emerald-400 border-emerald-500' : 'text-slate-500 border-transparent hover:text-slate-300')}
-          >
-            <Icon className="w-4 h-4" />{label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        items={[
+          { value: 'sheet', label: '属性与技能', icon: Wand2 },
+          { value: 'story', label: '背景故事', icon: BookOpen },
+          { value: 'journal', label: '装备与经历', icon: ScrollText },
+        ]}
+        value={tab}
+        onChange={setTab}
+        className="border-b-0"
+      />
 
       {tab === 'sheet' && (
         <div className="space-y-5 animate-in fade-in">
-          <Panel className="p-5">
-            <h3 className="font-bold text-white mb-4">属性</h3>
-            <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-3">
+          <Panel className="p-5 sm:p-6">
+            <h3 className="mb-4 font-serif text-[17px] font-bold tracking-[0.01em] text-ink">属性</h3>
+            <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-5 lg:grid-cols-9">
               {ALL_CHARS.map((k) => (
-                <div key={k} className="bg-slate-950 border border-slate-800 rounded-xl px-2 py-2.5 text-center">
-                  <div className="text-[10px] text-slate-500">{CHAR_LABEL[k]}</div>
-                  <div className={cx('text-lg font-black font-mono', d.eff[k] !== d.raw[k] ? 'text-amber-400' : 'text-white')}>
+                <div key={k} className="rounded-[2px] border border-line-strong bg-paper-deep/40 px-1.5 py-2.5 text-center">
+                  <div className="font-mono text-[14px] font-semibold tracking-[0.08em] text-ink-mute">{CHAR_LABEL[k]}</div>
+                  <div className={cx('tabular mt-1 font-serif text-[20px] font-bold leading-none', d.eff[k] !== d.raw[k] ? 'text-ochre' : 'text-ink')}>
                     {d.eff[k]}
                   </div>
-                  <div className="text-[10px] text-slate-600 font-mono">基础 {d.raw[k]}</div>
+                  <div className="tabular mt-1 text-[14px] text-ink-mute">基础 {d.raw[k]}</div>
                   {legendary.enabled ? (
-                    <div className="text-[10px] text-fuchsia-400 font-mono">传奇 +{legendaryBonus[k] || 0}</div>
+                    <div className="font-mono text-[14px] font-semibold text-ochre">传奇 +{legendaryBonus[k] || 0}</div>
                   ) : null}
-                  <div className="text-[10px] text-slate-600 font-mono">{d.half[k]}/{d.fifth[k]}</div>
+                  <div className="tabular mt-0.5 text-[14px] text-ink-mute">{d.half[k]}/{d.fifth[k]}</div>
                 </div>
               ))}
             </div>
             {legendary.enabled ? (
-              <div className="mt-3 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/5 p-3 text-xs text-fuchsia-200 flex items-start gap-2">
-                <Crown className="w-4 h-4 mt-0.5 shrink-0" />
+              <div className="mt-4 flex items-start gap-2.5 border-l-2 border-amber-600/55 bg-amber-500/[0.06] px-3.5 py-3 text-[14px] leading-[1.8] text-ink-soft">
+                <Crown className="mt-0.5 h-4 w-4 shrink-0 text-ochre" />
                 <span>
                   KP 已开启<b>传奇标记</b>：允许突破属性 99 上限，上表「传奇 +N」是额外调整值（单独一栏，不与掷骰属性混用）。
                   {legendary.note ? ` 备注：${legendary.note}` : ''}
@@ -394,12 +394,12 @@ export default function CharacterDetail({
               </div>
             ) : null}
             {c.agePenaltyWaived ? (
-              <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-xs text-emerald-200">
+              <div className="mt-4 border-l-2 border-forest/45 bg-forest/[0.06] px-3.5 py-3 text-[14px] leading-[1.8] text-forest">
                 KP 已豁免这张卡的年龄减益：属性不因年龄下降、移动力不减，教育成长照常保留。
               </div>
             ) : null}
             {d.ageAdjust.label ? (
-              <p className="text-xs text-slate-500 mt-3">
+              <p className="mt-3 text-[16px] leading-[1.8] text-ink-soft">
                 年龄补正：{d.ageAdjust.apply ? d.ageAdjust.label : '已关闭'}
                 {d.ageAdjust.apply && !c.agePenaltyWaived && d.ageAdjust.poolPoints > 0
                   ? ` · 分配：${d.ageAdjust.poolKeys.map((k) => `${CHAR_LABEL[k]} −${d.ageAdjust.alloc[k] || 0}`).join('，')}`
@@ -407,36 +407,36 @@ export default function CharacterDetail({
                 {` · 教育增强 +${d.ageAdjust.eduBonus}`}
               </p>
             ) : null}
-            <div className="mt-2 text-xs text-slate-500 space-y-1">
+            <div className="mt-3 space-y-1.5 text-[14px] leading-[1.7] text-ink-soft">
               <div className="flex flex-wrap items-center gap-2">
-                <span>教育增强记录：</span>
-                {eduGrowth.settled ? <Badge tone="emerald">已结算</Badge> : <Badge tone="amber">未结算</Badge>}
-                {eduGrowth.settled && (eduGrowth.granted || 0) <= 0 ? <Badge tone="slate">已锁定</Badge> : null}
-                {(eduGrowth.granted || 0) > 0 ? <Badge tone="cyan">KP 已授权 {eduGrowth.granted} 次重掷</Badge> : null}
-                {(eduGrowth.rerolls || 0) > 0 ? <Badge tone="amber">已重掷 {eduGrowth.rerolls} 次</Badge> : null}
+                <span className="font-semibold text-ink">教育增强记录：</span>
+                {eduGrowth.settled ? <Badge tone="emerald" className="!text-[14px]">已结算</Badge> : <Badge tone="amber" className="!text-[14px]">未结算</Badge>}
+                {eduGrowth.settled && (eduGrowth.granted || 0) <= 0 ? <Badge tone="slate" className="!text-[14px]">已锁定</Badge> : null}
+                {(eduGrowth.granted || 0) > 0 ? <Badge tone="cyan" className="!text-[14px]">KP 已授权 {eduGrowth.granted} 次重掷</Badge> : null}
+                {(eduGrowth.rerolls || 0) > 0 ? <Badge tone="amber" className="!text-[14px]">已重掷 {eduGrowth.rerolls} 次</Badge> : null}
                 {!eduGrowth.settled ? (
-                  <span className="text-amber-400">该年龄需要 {d.ageAdjust.eduChecks} 次教育增强检定</span>
+                  <span className="text-ochre">该年龄需要 {d.ageAdjust.eduChecks} 次教育增强检定</span>
                 ) : null}
               </div>
               {(eduGrowth.attempts || []).length > 0 ? (
                 <div className="space-y-0.5">
                   {(eduGrowth.attempts || []).map((a, i) => (
                     <div key={i} className="flex flex-wrap items-center gap-x-2">
-                      <span className="text-slate-600">#{i + 1}</span>
-                      <span className={cx('px-1.5 py-0.5 rounded border text-[10px]',
-                        a.via === 'manual' ? 'border-cyan-600/50 text-cyan-300'
-                          : a.via === 'reroll' ? 'border-amber-500/40 text-amber-300'
-                            : 'border-slate-700 text-slate-400')}
+                      <span className="text-ink-mute">#{i + 1}</span>
+                      <span className={cx('rounded border px-1.5 py-0.5 text-[14px]',
+                        a.via === 'manual' ? 'border-cyan-600/50 text-moon'
+                          : a.via === 'reroll' ? 'border-amber-500/40 text-ochre'
+                            : 'border-line-strong text-ink-soft')}
                       >
                         {a.via === 'manual' ? '手动录入' : a.via === 'reroll' ? '授权重掷' : '自动检定'}
                       </span>
                       {a.manual ? null : <span>检定 {a.count} 次</span>}
-                      <span>提升 <b className="font-mono text-cyan-300">+{a.gain}</b></span>
-                      <span className="text-slate-600">累计 {a.totalAfter}</span>
-                      {a.by ? <span className="text-slate-600">by {a.by}</span> : null}
-                      {a.at ? <span className="text-slate-600">{new Date(a.at).toLocaleString('zh-CN')}</span> : null}
+                      <span>提升 <b className="font-mono text-moon">+{a.gain}</b></span>
+                      <span className="text-ink-mute">累计 {a.totalAfter}</span>
+                      {a.by ? <span className="text-ink-mute">by {a.by}</span> : null}
+                      {a.at ? <span className="text-ink-mute">{new Date(a.at).toLocaleString('zh-CN')}</span> : null}
                       {a.rolls?.length ? (
-                        <span className="font-mono text-slate-500">{a.rolls.map((r) => `D100=${r.roll}→+${r.gain}`).join('、')}</span>
+                        <span className="font-mono text-ink-mute">{a.rolls.map((r) => `D100=${r.roll}→+${r.gain}`).join('、')}</span>
                       ) : null}
                     </div>
                   ))}
@@ -446,7 +446,7 @@ export default function CharacterDetail({
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <Button variant="subtle" onClick={grantEdu}>授权重掷一次</Button>
                   <Button variant="subtle" onClick={resetEdu}>重置教育增强</Button>
-                  <span className="text-[11px] text-slate-600">
+                  <span className="text-[14px] leading-[1.7] text-ink-mute">
                     玩家已结算后不能自助重掷；授权会在他下次结算时消耗一次，并记入流水。
                   </span>
                 </div>
@@ -454,14 +454,14 @@ export default function CharacterDetail({
             </div>
           </Panel>
 
-          <Panel className="p-5">
+          <Panel className="p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-              <h3 className="font-bold text-white flex items-center"><Wand2 className="w-4 h-4 mr-2 text-emerald-500" />技能（{usedSkills.length}）</h3>
-              <span className="text-xs text-slate-500">★ = 本职技能 · ✎ = 自定义技能 · 打印时会列出全部技能与基础值</span>
+              <h3 className="flex items-center font-serif text-[17px] font-bold text-ink"><Wand2 className="mr-2 h-4 w-4 text-forest" />技能（{usedSkills.length}）</h3>
+              <span className="text-[14px] text-ink-mute">★ = 本职技能 · ✎ = 自定义技能 · 打印时会列出全部技能与基础值</span>
             </div>
-            <div className="overflow-x-auto rounded-xl border border-slate-800">
-              <table className="w-full text-sm min-w-[620px]">
-                <thead className="bg-slate-950 text-slate-400 text-xs">
+            <div className="overflow-x-auto rounded-[2px] border border-line-strong">
+              <table className="w-full min-w-[620px] text-[14.5px] leading-[1.65]">
+                <thead className="bg-paper-deep/70 text-[14px] text-ink-mute">
                   <tr>
                     <th className="p-3 text-left">技能</th>
                     <th className="p-3 w-20 text-center">基础</th>
@@ -472,58 +472,58 @@ export default function CharacterDetail({
                     <th className="p-3 w-24 text-center">困难/极难</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-line-strong">
                   {usedSkills.map((s) => (
                     <tr
                       key={s.id}
                       className={cx(
                         s.isOccupation && 'bg-emerald-500/[0.03]',
                         s.special === 'credit' && 'bg-amber-500/[0.06]',
-                        s.special === 'cthulhu' && 'bg-fuchsia-500/[0.06]',
+                        s.special === 'cthulhu' && 'bg-amber-500/[0.06]',
                       )}
                     >
-                      <td className="p-3 text-slate-200">
+                      <td className="p-3 text-ink">
                         {s.kind === 'custom'
-                          ? <span className="text-cyan-400 mr-1.5">✎</span>
-                          : (s.isOccupation ? <span className="text-emerald-500 mr-1.5">★</span> : <span className="text-slate-700 mr-1.5">·</span>)}
-                        <span className={cx(s.special && 'font-bold text-white')}>{s.name}</span>
+                          ? <span className="text-moon mr-1.5">✎</span>
+                          : (s.isOccupation ? <span className="text-forest mr-1.5">★</span> : <span className="text-ink-mute/70 mr-1.5">·</span>)}
+                        <span className={cx(s.special && 'font-bold text-ink')}>{s.name}</span>
                       </td>
-                      <td className="p-3 text-center font-mono text-slate-500">{s.base}</td>
-                      <td className="p-3 text-center font-mono text-slate-300">{s.occ || '-'}</td>
-                      <td className="p-3 text-center font-mono text-slate-300">{s.interest || '-'}</td>
-                      <td className="p-3 text-center font-mono text-slate-300">{s.growth || '-'}</td>
-                      <td className="p-3 text-center font-mono font-black text-emerald-400">{s.total}%</td>
-                      <td className="p-3 text-center font-mono text-slate-400">{s.half} / {s.fifth}</td>
+                      <td className="p-3 text-center font-mono text-[14px] text-ink-mute">{s.base}</td>
+                      <td className="p-3 text-center font-mono text-ink-soft">{s.occ || '-'}</td>
+                      <td className="p-3 text-center font-mono text-ink-soft">{s.interest || '-'}</td>
+                      <td className="p-3 text-center font-mono text-ink-soft">{s.growth || '-'}</td>
+                      <td className="tabular p-3 text-center text-[14px] font-bold text-forest">{s.total}%</td>
+                      <td className="p-3 text-center font-mono text-[14px] text-ink-soft">{s.half} / {s.fifth}</td>
                     </tr>
                   ))}
                   {usedSkills.length === 0 && (
-                    <tr><td colSpan={7} className="p-8 text-center text-slate-500">还没有分配任何技能点</td></tr>
+                    <tr><td colSpan={7} className="p-8 text-center text-[14.5px] text-ink-mute">还没有分配任何技能点</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
           </Panel>
 
-          <Panel className="p-5">
-            <h3 className="font-bold text-white flex items-center mb-4"><Sword className="w-4 h-4 mr-2 text-emerald-500" />武器</h3>
+          <Panel className="p-5 sm:p-6">
+            <h3 className="mb-4 flex items-center font-serif text-[17px] font-bold text-ink"><Sword className="mr-2 h-4 w-4 text-forest" />武器</h3>
             {(c.weapons || []).length === 0 ? (
-              <p className="text-sm text-slate-500">未登记武器</p>
+              <p className="text-[16px] text-ink-mute">未登记武器</p>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-800">
-                <table className="w-full text-sm min-w-[640px]">
-                  <thead className="bg-slate-950 text-slate-400 text-xs">
+              <div className="overflow-x-auto rounded-[2px] border border-line-strong">
+                <table className="w-full min-w-[640px] text-[14.5px] leading-[1.65]">
+                  <thead className="bg-paper-deep/70 text-[14px] text-ink-mute">
                     <tr>{['武器', '技能', '伤害', '射程', '攻击', '装弹', '故障'].map((h) => <th key={h} className="p-3 text-left">{h}</th>)}</tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60">
+                  <tbody className="divide-y divide-line-strong">
                     {c.weapons.map((w, i) => (
                       <tr key={i}>
-                        <td className="p-3 text-slate-200 font-bold">{w.name}</td>
-                        <td className="p-3 text-slate-400">{w.skill}</td>
-                        <td className="p-3 text-slate-300 font-mono">{w.damage}</td>
-                        <td className="p-3 text-slate-400">{w.range}</td>
-                        <td className="p-3 text-slate-400">{w.attacks}</td>
-                        <td className="p-3 text-slate-400">{w.ammo}</td>
-                        <td className="p-3 text-slate-400">{w.malfunction}</td>
+                        <td className="p-3 font-bold text-ink">{w.name}</td>
+                        <td className="p-3 text-ink-soft">{w.skill}</td>
+                        <td className="p-3 text-ink-soft font-mono">{w.damage}</td>
+                        <td className="p-3 text-ink-soft">{w.range}</td>
+                        <td className="p-3 text-ink-soft">{w.attacks}</td>
+                        <td className="p-3 text-ink-soft">{w.ammo}</td>
+                        <td className="p-3 text-ink-soft">{w.malfunction}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -535,14 +535,14 @@ export default function CharacterDetail({
       )}
 
       {tab === 'story' && (
-        <Panel className="p-5 animate-in fade-in">
-          <h3 className="font-bold text-white mb-4 flex items-center"><BookOpen className="w-4 h-4 mr-2 text-emerald-500" />背景故事</h3>
+        <Panel className="animate-in fade-in p-5 sm:p-6">
+          <h3 className="mb-5 flex items-center font-serif text-[17px] font-bold text-ink"><BookOpen className="mr-2 h-4 w-4 text-forest" />背景故事</h3>
           <div className="grid md:grid-cols-2 gap-5">
             {BACKGROUND_FIELDS.map(([key, label]) => (
               <div key={key}>
-                <div className="text-sm font-bold text-slate-400 border-b border-slate-800 pb-1.5 mb-2">{label}</div>
-                <p className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed min-h-[2rem]">
-                  {c.background?.[key] || <span className="text-slate-600">—</span>}
+                <div className="mb-2.5 border-b border-line pb-2 text-[14px] font-bold tracking-[0.04em] text-ink-soft">{label}</div>
+                <p className="min-h-[2rem] whitespace-pre-wrap text-[16px] leading-[1.9] text-ink-soft">
+                  {c.background?.[key] || <span className="text-ink-mute">—</span>}
                 </p>
               </div>
             ))}
@@ -552,53 +552,53 @@ export default function CharacterDetail({
 
       {tab === 'journal' && (
         <div className="space-y-5 animate-in fade-in">
-          <Panel className="p-5 space-y-4">
-            <h3 className="font-bold text-white flex items-center"><ScrollText className="w-4 h-4 mr-2 text-emerald-500" />经历（关联模组）</h3>
+          <Panel className="space-y-4 p-5 sm:p-6">
+            <h3 className="flex items-center font-serif text-[17px] font-bold text-ink"><ScrollText className="mr-2 h-4 w-4 text-forest" />经历（关联模组）</h3>
 
             <div className="space-y-2">
               {(c.moduleLinks || []).map((l) => (
-                <div key={l.moduleId} className="flex flex-wrap items-center gap-3 bg-slate-950 border border-slate-800 rounded-xl p-3">
+                <div key={l.moduleId} className="flex flex-wrap items-center gap-3 rounded-[2px] border border-line-strong bg-paper-deep/40 p-3.5">
                   <Badge tone="emerald">{l.role}</Badge>
                   <div className="flex-1 min-w-[10rem]">
-                    <div className="text-slate-200 font-bold">{l.moduleTitle}</div>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-[14px] font-bold text-ink">{l.moduleTitle}</div>
+                    <div className="text-[14px] text-ink-mute">
                       {l.moduleRegion} {l.moduleEra}
                       {l.date ? ` · ${l.date}` : ''}
                       {l.note ? ` · ${l.note}` : ''}
                     </div>
                   </div>
                   {c.canEdit ? (
-                    <button type="button" onClick={() => removeLink(l.moduleId, l.moduleTitle)} className="p-2 text-slate-500 hover:text-red-400" title="移除">
+                    <button type="button" onClick={() => removeLink(l.moduleId, l.moduleTitle)} className="p-2.5 text-ink-mute transition-colors hover:text-vermilion" title="移除">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   ) : null}
                 </div>
               ))}
-              {(c.moduleLinks || []).length === 0 && <p className="text-sm text-slate-500 py-2">还没有关联任何模组。</p>}
+              {(c.moduleLinks || []).length === 0 && <p className="py-2 text-[16px] text-ink-mute">还没有关联任何模组。</p>}
             </div>
 
             {c.canEdit ? (
-              <div className="border-t border-slate-800 pt-4 space-y-3">
-                <p className="text-xs text-slate-500 flex items-center gap-1.5">
+              <div className="border-t border-line pt-4 space-y-3">
+                <p className="flex items-center gap-1.5 text-[16px] text-ink-soft">
                   <Link2 className="w-3.5 h-3.5" />关联一个跑过的模组（玩家与 KP 均可添加）
                 </p>
                 <div className="grid sm:grid-cols-4 gap-3">
-                  <Field label="模组" className="sm:col-span-2">
+                  <Field label="模组" className={cx('sm:col-span-2', FIELD_LABEL)}>
                     <Select value={linkForm.moduleId} onChange={(e) => setLinkForm({ ...linkForm, moduleId: e.target.value })}>
                       <option value="">请选择模组…</option>
                       {moduleOptions.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
                     </Select>
                   </Field>
-                  <Field label="参与身份">
+                  <Field label="参与身份" className={FIELD_LABEL}>
                     <Select value={linkForm.role} onChange={(e) => setLinkForm({ ...linkForm, role: e.target.value })}>
                       {MODULE_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                     </Select>
                   </Field>
-                  <Field label="日期">
+                  <Field label="日期" className={FIELD_LABEL}>
                     <Input type="date" value={linkForm.date} onChange={(e) => setLinkForm({ ...linkForm, date: e.target.value })} style={{ colorScheme: 'dark' }} />
                   </Field>
                 </div>
-                <Field label="经历备注">
+                <Field label="经历备注" className={FIELD_LABEL}>
                   <Textarea rows={2} maxLength={200} value={linkForm.note} onChange={(e) => setLinkForm({ ...linkForm, note: e.target.value })} placeholder="例：第一次跑团，角色失去 5 点理智" />
                 </Field>
                 <Button onClick={addLink} disabled={adding}><Plus className="w-4 h-4" />{adding ? '添加中…' : '加入经历'}</Button>
@@ -606,54 +606,54 @@ export default function CharacterDetail({
             ) : null}
           </Panel>
 
-          <Panel className="p-5 space-y-4">
-            <h3 className="font-bold text-white flex items-center"><FileText className="w-4 h-4 mr-2 text-emerald-500" />装备与资产</h3>
+          <Panel className="space-y-4 p-5 sm:p-6">
+            <h3 className="flex items-center font-serif text-[17px] font-bold text-ink"><FileText className="mr-2 h-4 w-4 text-forest" />装备与资产</h3>
             <div>
-              <div className="text-sm font-bold text-slate-400 mb-1.5">装备和物品</div>
-              <p className="text-sm text-slate-300 whitespace-pre-wrap bg-slate-950 border border-slate-800 rounded-xl p-3">
-                {c.equipment || <span className="text-slate-600">—</span>}
+              <div className="mb-2 text-[14.5px] font-bold text-ink">装备和物品</div>
+              <p className="whitespace-pre-wrap rounded-[2px] border border-line-strong bg-paper-deep/40 p-3.5 text-[16px] leading-[1.85] text-ink-soft">
+                {c.equipment || <span className="text-ink-mute">—</span>}
               </p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-3">
-              <div className="text-xs text-slate-500">
+            <div className="space-y-3 rounded-[2px] border border-line-strong bg-paper-deep/30 p-4">
+              <div className="text-[14px] leading-[1.7] text-ink-mute">
                 按「{c.era} · {d.wealth?.currencyLabel}」与信用评级 {d.creditRating}% 自动计算（不可手改）
               </div>
               <div className="grid sm:grid-cols-3 gap-4">
                 {[['消费水平', d.wealth?.level], ['现金', d.wealth?.cashText], ['资产', d.wealth?.assetsText]].map(([l, v]) => (
-                  <div key={l} className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                    <div className="text-xs text-slate-500 mb-1">{l}</div>
-                    <div className="text-slate-100 font-mono font-bold">{v || '—'}</div>
+                  <div key={l} className="border border-line rounded-[3px] bg-paper-deep/45 p-3">
+                    <div className="mb-1.5 text-[14px] text-ink-mute">{l}</div>
+                    <div className="font-mono text-[16px] font-bold text-ink">{v || '—'}</div>
                   </div>
                 ))}
               </div>
               <div>
-                <div className="text-xs text-slate-500 mb-1">额外资产</div>
-                <div className="text-slate-200 whitespace-pre-wrap">{c.extraAssets || '—'}</div>
+                <div className="mb-1.5 text-[14px] text-ink-mute">额外资产</div>
+                <div className="whitespace-pre-wrap text-[14px] leading-[1.8] text-ink-soft">{c.extraAssets || '—'}</div>
               </div>
             </div>
             {c.experience ? (
               <div>
-                <div className="text-sm font-bold text-slate-400 mb-1.5">经历记录</div>
-                <p className="text-sm text-slate-300 whitespace-pre-wrap bg-slate-950 border border-slate-800 rounded-xl p-3">{c.experience}</p>
+                <div className="mb-2 text-[14.5px] font-bold text-ink">经历记录</div>
+                <p className="whitespace-pre-wrap rounded-[2px] border border-line-strong bg-paper-deep/40 p-3.5 text-[16px] leading-[1.85] text-ink-soft">{c.experience}</p>
               </div>
             ) : null}
           </Panel>
 
-          <Panel className="p-5">
+          <Panel className="p-5 sm:p-6">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-              <h3 className="font-bold text-white flex items-center gap-2">
-                <FileText className="w-4 h-4 text-cyan-400" />备注
+              <h3 className="flex items-center gap-2 font-serif text-[17px] font-bold tracking-[0.01em] text-ink">
+                <FileText className="w-4 h-4 text-moon" />备注
               </h3>
-              <span className="text-[11px] text-slate-500">只做记录，不会出现在骰娘指令与打印件上</span>
+              <span className="text-[14px] text-ink-mute">只做记录，不会出现在骰娘指令与打印件上</span>
             </div>
-            <p className="text-sm text-slate-300 whitespace-pre-wrap bg-slate-950 border border-slate-800 rounded-xl p-3">
-              {c.notes || <span className="text-slate-600">—</span>}
+            <p className="whitespace-pre-wrap rounded-[2px] border border-line-strong bg-paper-deep/40 p-3.5 text-[16px] leading-[1.85] text-ink-soft">
+              {c.notes || <span className="text-ink-mute">—</span>}
             </p>
           </Panel>
         </div>
       )}
 
-      <div className="text-xs text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[14px] text-ink-mute">
         <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />创建 {new Date(c.createdAt).toLocaleString()}</span>
         <span>最近更新 {new Date(c.updatedAt).toLocaleString()}</span>
         <span className="flex items-center gap-1"><Shield className="w-3.5 h-3.5" />归属 {c.ownerName}</span>

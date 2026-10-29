@@ -56,7 +56,7 @@ export default function LegendaryQuickModal({ open, item, onClose, onSaved, show
   return (
     <Modal open={open} onClose={onClose} title={`传奇标记 · ${item.name}`} wide>
       <div className="space-y-4">
-        <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/[0.05] p-4 space-y-3">
+        <div className="rounded-[3px] border border-red-500/25 bg-red-500/[0.04] p-4 space-y-3">
           <Toggle
             checked={enabled}
             onChange={setEnabled}
@@ -68,15 +68,15 @@ export default function LegendaryQuickModal({ open, item, onClose, onSaved, show
           </Field>
         </div>
 
-        <div className={cx('rounded-xl border p-4', enabled ? 'border-slate-700 bg-slate-950' : 'border-slate-800 bg-slate-950/50 opacity-60')}>
+        <div className={cx('rounded-[3px] border p-4', enabled ? 'border-line bg-paper-deep/70' : 'border-line bg-paper-deep/70 opacity-60')}>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <div className="text-sm text-slate-300 font-bold">额外调整值（单独一栏）</div>
-            <div className="text-xs text-slate-500">合计 <b className="text-fuchsia-300 font-mono">+{total}</b></div>
+            <div className="font-serif text-[16px] text-slate-200">额外调整值（单独一栏）</div>
+            <div className="text-[14px] text-slate-500">合计 <b className="text-red-300 font-mono">+{total}</b></div>
           </div>
           <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
             {ALL_CHARS.map((k) => (
-              <label key={k} className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5">
-                <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
+              <label key={k} className="rounded-[4px] border border-line bg-paper-deep/45 px-2 py-1.5">
+                <div className="flex items-center justify-between text-[14px] text-slate-500 mb-1">
                   <span>{CHAR_LABEL[k]}</span>
                   {preview ? <span className="font-mono">→ {preview.eff[k]}</span> : null}
                 </div>
@@ -90,21 +90,21 @@ export default function LegendaryQuickModal({ open, item, onClose, onSaved, show
                     const n = Math.max(0, Math.min(999, Math.trunc(Number(e.target.value)) || 0));
                     setBonus((prev) => ({ ...prev, [k]: n }));
                   }}
-                  className="w-full px-2 py-1 bg-slate-950 border border-slate-700 rounded text-center font-mono text-sm text-white disabled:opacity-50"
+                  className="w-full rounded-[3px] border border-line bg-paper-deep/70 px-2 py-1 text-center font-mono text-[14px] tabular text-slate-100 outline-none transition focus:border-amber-500/45 disabled:opacity-50"
                 />
               </label>
             ))}
           </div>
           {preview ? (
-            <p className="text-[11px] text-slate-500 mt-3">
+            <p className="text-[14px] text-slate-500 mt-3">
               预览：{ALL_CHARS.filter((k) => (bonus[k] || 0) > 0).map((k) => `${CHAR_LABEL[k]} ${preview.raw[k]}→${preview.eff[k]}`).join('　') || '（尚未填写调整值）'}
             </p>
           ) : null}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-xs text-slate-500 flex items-center gap-2">
-            <Crown className="w-3.5 h-3.5 text-fuchsia-400" />
+          <div className="text-[14px] text-slate-500 flex items-center gap-2">
+            <Crown className="w-3.5 h-3.5 text-red-300/80" />
             只有 KP 能改这两项；玩家自己保存时服务端会保留这里的值。
             {item.legendary?.enabled ? <Badge tone="red">当前已开启</Badge> : null}
           </div>

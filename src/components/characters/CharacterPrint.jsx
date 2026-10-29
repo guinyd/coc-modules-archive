@@ -22,7 +22,7 @@ function Line({ value, className = '' }) {
     // ⚠️ 必须单行：whitespace-nowrap + 定宽 + 超出裁切，否则长姓名/长住地会折行把基础信息撑成两行
     <span
       title={typeof value === 'string' ? value : undefined}
-      className={`inline-block border-b border-gray-400 align-bottom min-w-[2rem] px-1 whitespace-nowrap overflow-hidden text-ellipsis ${className}`}
+      className={`inline-block border-b border-ink/45 align-bottom min-w-[2rem] px-1 whitespace-nowrap overflow-hidden text-ellipsis ${className}`}
     >
       {value || '\u00a0'}
     </span>
@@ -31,10 +31,10 @@ function Line({ value, className = '' }) {
 
 function Box({ label, value, sub }) {
   return (
-    <div className="border border-gray-500 rounded px-1.5 py-1 text-center leading-tight">
-      <div className="text-[10.5px] text-gray-600">{label}</div>
-      <div className="text-[19px] font-bold font-mono">{value ?? '—'}</div>
-      {sub ? <div className="text-[10.5px] text-gray-500">{sub}</div> : null}
+    <div className="border border-ink/25 rounded-[3px] bg-paper px-1.5 py-1 text-center leading-tight">
+      <div className="text-[10.5px] text-ink-mute">{label}</div>
+      <div className="text-[19px] font-bold font-mono text-ink">{value ?? '—'}</div>
+      {sub ? <div className="text-[10.5px] text-ink-mute">{sub}</div> : null}
     </div>
   );
 }
@@ -46,7 +46,7 @@ function Box({ label, value, sub }) {
 function SkillColumn({ skills }) {
   return (
     // table-fixed + colgroup：列宽固定、技能名单行裁切 —— 保证「一个技能一行」
-    <table className="w-full text-[12.5px] border-collapse table-fixed">
+    <table className="w-full self-start text-[12.5px] border-collapse table-fixed">
       <colgroup>
         <col style={{ width: '15px' }} />
         <col style={{ width: '11px' }} />
@@ -63,18 +63,19 @@ function SkillColumn({ skills }) {
           return (
             <tr
               key={s.id}
-              className={`border-b border-gray-300 ${allocated ? 'bg-gray-100 font-bold' : ''}`}
+              style={{ height: 22 }}
+              className={`border-b border-ink/12 ${allocated ? 'bg-paper font-bold' : ''}`}
             >
-              <td className="py-[1.5px] align-middle text-[15px] leading-none">{s.marked ? '☑' : '☐'}</td>
-              <td className="py-[1.5px] text-gray-500">{s.isOccupation ? '★' : (s.kind === 'custom' ? '✎' : '')}</td>
-              <td className={`py-[1.5px] pr-1 whitespace-nowrap overflow-hidden text-ellipsis ${tight ? 'text-[11px]' : ''}`}>
+              <td className="py-[1.5px] align-middle text-center text-[12px] leading-[18px]">{s.marked ? '☑' : '☐'}</td>
+              <td className="py-[1.5px] text-[11px] leading-[18px] text-ink-mute">{s.isOccupation ? '★' : (s.kind === 'custom' ? '✎' : '')}</td>
+              <td className={`py-[1.5px] pr-1 leading-[18px] whitespace-nowrap overflow-hidden text-ellipsis ${tight ? 'text-[11px]' : ''}`}>
                 <span title={label}>{s.name}</span>
-                <span className="text-gray-500 font-normal">（{s.base}%）</span>
+                <span className="text-ink-mute font-normal">（{s.base}%）</span>
               </td>
-              <td className="py-[1.5px] text-right font-mono whitespace-nowrap text-gray-500 font-normal">
+              <td className="py-[1.5px] text-right font-mono leading-[18px] whitespace-nowrap text-ink-mute font-normal">
                 {s.half}/{s.fifth}
               </td>
-              <td className="py-[1.5px] text-right font-mono whitespace-nowrap">{s.total}%</td>
+              <td className="py-[1.5px] text-right font-mono leading-[18px] whitespace-nowrap">{s.total}%</td>
             </tr>
           );
         })}
@@ -99,13 +100,13 @@ export default function CharacterPrint({ character }) {
   const w = d.wealth || { level: '—', cashText: '—', assetsText: '—' };
 
   return (
-    <div className="print-root text-gray-900">
+    <div className="print-root text-ink">
       {/* ============================ 第 1 页 ============================ */}
       <section className="print-paper print-page">
-        <div className="border-2 border-double border-gray-700 p-3">
-          <div className="text-center border-b-2 border-gray-700 pb-1 mb-2">
-            <div className="text-[12.5px] tracking-[0.5em] text-gray-600">{character.era || '1920s'} 调查员</div>
-            <div className="text-2xl font-black tracking-[0.3em]">COC 七版 角色卡</div>
+        <div className="border border-ink/45 p-3 shadow-[inset_0_0_0_1px_#dccdb1]">
+          <div className="text-center border-b border-ink/45 pb-1 mb-2">
+            <div className="text-[11.5px] tracking-[0.5em] text-ochre">❖ {character.era || '1920s'} 调查员 · 秘密调查档案馆 ❖</div>
+            <div className="text-2xl font-semibold font-serif tracking-[0.26em]">COC 七版 角色卡</div>
           </div>
 
           {/* 基本信息 */}
@@ -140,10 +141,10 @@ export default function CharacterPrint({ character }) {
           </div>
 
           {/* 技能 */}
-          <div className="border border-gray-500 rounded">
-            <div className="bg-gray-200 px-2 py-1 text-[12.5px] font-bold flex justify-between flex-wrap gap-2">
+          <div className="border border-ink/25 rounded-[3px] overflow-hidden">
+            <div className="bg-paper-deep px-2 py-1 text-[12.5px] font-bold text-ink-soft flex justify-between flex-wrap gap-2 shadow-[inset_0_-1px_0_0_var(--color-line)]">
               <span>调查员技能（★本职 · ✎自定义 · 加粗=已投点 · ☐=本局大成功标记 · 括号内为基础值）</span>
-              <span className="font-normal text-gray-600">
+              <span className="font-normal text-ink-mute">
                 职业 {d.spent.occupation}/{d.budget.occupation} · 兴趣 {d.spent.interest}/{d.budget.interest}
               </span>
             </div>
@@ -153,11 +154,11 @@ export default function CharacterPrint({ character }) {
           </div>
 
           {/* 武器 */}
-          <div className="border border-gray-500 rounded mt-2">
-            <div className="bg-gray-200 px-2 py-1 text-[12.5px] font-bold">武器</div>
+          <div className="border border-ink/25 rounded-[3px] overflow-hidden mt-2">
+            <div className="bg-paper-deep px-2 py-1 text-[12.5px] font-bold text-ink-soft tracking-[0.15em] shadow-[inset_0_-1px_0_0_var(--color-line)]">❖ 武器</div>
             <table className="w-full text-[11.5px] border-collapse">
               <thead>
-                <tr className="border-b border-gray-400 text-gray-600">
+                <tr className="border-b border-ink/25 text-ink-mute">
                   <th className="text-left px-2 py-[2px]">武器名称</th>
                   <th className="text-left px-2 py-[2px]">使用技能</th>
                   <th className="text-left px-2 py-[2px]">伤害</th>
@@ -169,7 +170,7 @@ export default function CharacterPrint({ character }) {
               </thead>
               <tbody>
                 {(character.weapons || []).map((row, i) => (
-                  <tr key={`${row.name}-${i}`} className="border-b border-gray-200">
+                  <tr key={`${row.name}-${i}`} className="border-b border-ink/12">
                     <td className="px-2 py-[3px] font-bold">{row.name}</td>
                     <td className="px-2 py-[3px]">{row.skill}</td>
                     <td className="px-2 py-[3px]">{row.damage}</td>
@@ -180,7 +181,7 @@ export default function CharacterPrint({ character }) {
                   </tr>
                 ))}
                 {Array.from({ length: Math.max(0, 4 - (character.weapons || []).length) }).map((_, i) => (
-                  <tr key={`e${i}`} className="border-b border-gray-200">
+                  <tr key={`e${i}`} className="border-b border-ink/12">
                     {Array.from({ length: 7 }).map((__, j) => <td key={j} className="px-2 py-[8px]" />)}
                   </tr>
                 ))}
@@ -188,18 +189,18 @@ export default function CharacterPrint({ character }) {
             </table>
           </div>
 
-          <div className="text-[10.5px] text-gray-500 mt-1.5 text-center">
-            {character.ownerName || character.playerName || ''} · 由「秘密调查档案馆」生成 · {printedAt}
+          <div className="text-[10.5px] text-ink-mute mt-1.5 text-center">
+            ❖ {character.ownerName || character.playerName || ''} · 由「秘密调查档案馆」生成 · {printedAt} ❖
           </div>
         </div>
       </section>
 
       {/* ============================ 第 2 页 ============================ */}
       <section className="print-paper print-page">
-        <div className="border-2 border-double border-gray-700 p-3 h-full flex flex-col">
-          <div className="text-center border-b-2 border-gray-700 pb-1 mb-2">
-            <div className="text-xl font-black tracking-[0.3em]">背景故事</div>
-            <div className="text-[11.5px] text-gray-500">
+        <div className="border border-ink/45 p-3 h-full flex flex-col shadow-[inset_0_0_0_1px_#dccdb1]">
+          <div className="text-center border-b border-ink/45 pb-1 mb-2">
+            <div className="text-xl font-semibold font-serif tracking-[0.26em]">背景故事</div>
+            <div className="text-[11.5px] text-ink-mute">
               {character.name}{character.playerName ? ` · ${character.playerName}` : ''}
             </div>
           </div>
@@ -207,7 +208,7 @@ export default function CharacterPrint({ character }) {
           <div className="grid grid-cols-2 gap-x-4 gap-y-2">
             {BACKGROUND_FIELDS.map(([key, label]) => (
               <div key={key} className="print-avoid-break">
-                <div className="text-[12.5px] font-bold border-b border-gray-400 mb-[2px]">{label}</div>
+                <div className="text-[12.5px] font-bold text-ink border-b border-ink/25 mb-[2px]">{label}</div>
                 <div className="text-[11.5px] leading-[1.55] whitespace-pre-wrap min-h-[2.9rem]">
                   {character.background?.[key] || ''}
                 </div>
@@ -216,22 +217,22 @@ export default function CharacterPrint({ character }) {
           </div>
 
           <div className="grid grid-cols-2 gap-3 mt-3">
-            <div className="border border-gray-500 rounded">
-              <div className="bg-gray-200 px-2 py-1 text-[12.5px] font-bold">装备和物品</div>
+            <div className="border border-ink/25 rounded-[3px] overflow-hidden">
+              <div className="bg-paper-deep px-2 py-1 text-[12.5px] font-bold text-ink-soft tracking-[0.15em] shadow-[inset_0_-1px_0_0_var(--color-line)]">❖ 装备和物品</div>
               <div className="p-2 text-[11.5px] leading-[1.65] whitespace-pre-wrap min-h-[5.5rem]">{character.equipment || ''}</div>
             </div>
-            <div className="border border-gray-500 rounded">
-              <div className="bg-gray-200 px-2 py-1 text-[12.5px] font-bold flex justify-between">
-                <span>资产</span>
-                <span className="font-normal text-gray-600">按信用评级自动计算</span>
+            <div className="border border-ink/25 rounded-[3px] overflow-hidden">
+              <div className="bg-paper-deep px-2 py-1 text-[12.5px] font-bold text-ink-soft tracking-[0.15em] shadow-[inset_0_-1px_0_0_var(--color-line)] flex justify-between">
+                <span>❖ 资产</span>
+                <span className="font-normal text-ink-mute tracking-normal">按信用评级自动计算</span>
               </div>
               <div className="p-2 text-[11.5px] space-y-1">
                 <div>时代 / 货币：<b>{character.era} · {w.currencyLabel || ''}</b></div>
                 <div>消费水平：<b>{w.level}</b><span className="mx-2">·</span>信用评级：<b className="font-mono">{d.creditRating}%</b>
-                  {d.occupation ? <span className="text-gray-500">（{d.occupation.cr[0]}-{d.occupation.cr[1]}）</span> : null}
+                  {d.occupation ? <span className="text-ink-mute">（{d.occupation.cr[0]}-{d.occupation.cr[1]}）</span> : null}
                 </div>
                 <div>现金：<b className="font-mono">{w.cashText}</b><span className="mx-2">·</span>资产：<b className="font-mono">{w.assetsText}</b></div>
-                <div className="pt-1 border-t border-gray-300">
+                <div className="pt-1 border-t border-ink/12">
                   额外资产：<span className="whitespace-pre-wrap">{character.extraAssets || '—'}</span>
                 </div>
               </div>
@@ -239,14 +240,14 @@ export default function CharacterPrint({ character }) {
           </div>
 
           {/* 经历：模组关联 */}
-          <div className="border border-gray-500 rounded mt-3 flex-1">
-            <div className="bg-gray-200 px-2 py-1 text-[12.5px] font-bold flex justify-between">
-              <span>经历（跑团记录）</span>
-              <span className="font-normal text-gray-600">共 {(character.moduleLinks || []).length} 个模组</span>
+          <div className="border border-ink/25 rounded-[3px] overflow-hidden mt-3 flex-1">
+            <div className="bg-paper-deep px-2 py-1 text-[12.5px] font-bold text-ink-soft tracking-[0.15em] shadow-[inset_0_-1px_0_0_var(--color-line)] flex justify-between">
+              <span>❖ 经历（跑团记录）</span>
+              <span className="font-normal text-ink-mute tracking-normal">共 {(character.moduleLinks || []).length} 个模组</span>
             </div>
             <table className="w-full text-[11.5px] border-collapse">
               <thead>
-                <tr className="border-b border-gray-400 text-gray-600">
+                <tr className="border-b border-ink/25 text-ink-mute">
                   <th className="text-left px-2 py-[2px] w-[22%]">日期</th>
                   <th className="text-left px-2 py-[2px]">模组</th>
                   <th className="text-left px-2 py-[2px] w-[12%]">身份</th>
@@ -255,7 +256,7 @@ export default function CharacterPrint({ character }) {
               </thead>
               <tbody>
                 {(character.moduleLinks || []).map((l) => (
-                  <tr key={l.moduleId} className="border-b border-gray-200">
+                  <tr key={l.moduleId} className="border-b border-ink/12">
                     <td className="px-2 py-[3px] font-mono">{l.date || ''}</td>
                     <td className="px-2 py-[3px]">{l.moduleTitle}</td>
                     <td className="px-2 py-[3px]">{l.role}</td>
@@ -263,19 +264,19 @@ export default function CharacterPrint({ character }) {
                   </tr>
                 ))}
                 {(character.moduleLinks || []).length === 0 && (
-                  <tr><td colSpan={4} className="px-2 py-3 text-center text-gray-400">暂无记录</td></tr>
+                  <tr><td colSpan={4} className="px-2 py-3 text-center text-ink-mute/70">暂无记录</td></tr>
                 )}
               </tbody>
             </table>
             {character.experience ? (
-              <div className="p-2 text-[11.5px] leading-[1.65] whitespace-pre-wrap border-t border-gray-300">
+              <div className="p-2 text-[11.5px] leading-[1.65] whitespace-pre-wrap border-t border-ink/12">
                 {character.experience}
               </div>
             ) : null}
           </div>
 
-          <div className="text-[10.5px] text-gray-500 mt-1.5 text-center">
-            角色卡由「秘密调查档案馆」生成 · COC 第 7 版规则
+          <div className="text-[10.5px] text-ink-mute mt-1.5 text-center">
+            ❖ 角色卡由「秘密调查档案馆」生成 · COC 第 7 版规则 ❖
           </div>
         </div>
       </section>

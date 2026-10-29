@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /**
- * README 配图采集脚本 —— 用无头 Chrome 真实跑一遍站点，把关键功能页截成 PNG。
+ * README 配图采集脚本 —— 用无头 Chrome 跑一遍真实站点，把关键页面截成 JPEG（quality 91）。
  *
  *   node tools/screenshots.mjs [站点地址] [接口地址] [输出目录]
  *     默认 http://127.0.0.1:4173  http://127.0.0.1:3000  docs/images
  *
  * 前置条件：
- *   1) 已用 `node tools/seed-demo.mjs` 造好演示库，并以 COCOC_DATA_DIR 指向它启动后端；
+ *   1) 已用 `node tools/seed-demo.mjs .demo-data` 造好演示库，并以 COCOC_DATA_DIR 指向它启动后端；
  *   2) `npm run build` 产物在跑（vite preview 或 Nginx）；
  *   3) 本机装有 Chrome / Edge。
  *
- * 脚本不做断言的「界面测试」，只负责把图拍清楚：每一步都等待渲染完成，
- * 遇到找不到的按钮会打印告警而不是中断，方便在不同版本上微调。
+ * 脚本不做断言式的「界面测试」，只负责把图拍清楚：每一步都等待渲染完成；
+ * 遇到找不到的按钮会打印警告而不是中断，方便在不同版本上微调。
  */
 
 import { spawn } from 'node:child_process';
@@ -83,6 +83,19 @@ class Cdp {
 // ---------------------------------------------------------------- 小工具
 let shotCount = 0;
 async function shot(page, name, { full = false, maxHeight = 2600, selector = null, note = '' } = {}) {
+  // 全页截图前先滚一遍，触发懒渲染/入场动画，避免视口外出现黑块
+  if (full) {
+    const total = await page.eval('document.documentElement.scrollHeight');
+    const vh = await page.eval('window.innerHeight');
+    for (let y = 0; y < total; y += Math.round(vh * 0.75)) {
+      await page.eval(`window.scrollTo(0, ${y})`);
+      await sleep(240);
+    }
+  }
+  // 截图前回到顶部，避免页面滚动后把 sticky 导航拼错位
+  await page.eval('window.scrollTo({ top: 0, behavior: "instant" })');
+  await sleep(full ? 700 : 260);
+
   let clip = null;
   if (selector) {
     const box = await page.eval(`(() => {
@@ -102,10 +115,10 @@ async function shot(page, name, { full = false, maxHeight = 2600, selector = nul
       height: Math.min(m.cssContentSize.height, maxHeight),
     };
   }
-  const args = { format: 'png', captureBeyondViewport: true };
+  const args = { format: 'jpeg', quality: 91, captureBeyondViewport: !!full };
   if (clip) args.clip = clip;
   const r = await page.send('Page.captureScreenshot', args);
-  const file = path.join(OUT, name);
+  const file = path.join(OUT, name.replace(/\.png$/, '.jpg'));
   fs.writeFileSync(file, Buffer.from(r.data, 'base64'));
   shotCount += 1;
   const kb = (fs.statSync(file).size / 1024).toFixed(0);
@@ -124,6 +137,19 @@ async function click(page, text, { tag = 'button', nth = 0, wait = 1200 } = {}) 
     return true;
   })()`);
   if (!hit) console.warn(`    ⚠️  找不到「${text}」`);
+  await sleep(wait);
+  return hit;
+}
+
+/** 按 aria-label 点击（主题拨钮等无文字的按钮） */
+async function clickAria(page, label, { wait = 1200 } = {}) {
+  const hit = await page.eval(`(() => {
+    const el = document.querySelector('[aria-label=${JSON.stringify(label)}]');
+    if (!el) return false;
+    el.click();
+    return true;
+  })()`);
+  if (!hit) console.warn(`    ⚠️  找不到 aria-label「${label}」`);
   await sleep(wait);
   return hit;
 }
@@ -164,8 +190,6 @@ async function goHome(page, token, user) {
   await page.send('Page.navigate', { url: BASE });
   await sleep(2200);
 }
-
-const text = (page) => page.eval('document.body.innerText');
 
 // ---------------------------------------------------------------- 主流程
 const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coc-shots-'));
@@ -218,94 +242,64 @@ try {
     width: 1512, height: 950, deviceScaleFactor: 1, mobile: false,
   });
 
-  // ---------------------------------------------------------- 1. 访客视角
-  console.log('\n== 访客：档案馆首页 / 模组详情 ==');
+  // ---------------------------------------------------------- 1. 访客：首页 / 详情 / 登录
+  console.log('\n== 访客：档案馆首页（深海 / 盐纸） ==');
   await goHome(page, null, null);
-  await sleep(600);
-  await shot(page, '01-home.png', { full: true, maxHeight: 1700 });
+  await shot(page, '01-home-dark.png', { full: false });
+  await clickAria(page, '切换到盐纸模式', { wait: 1400 });
+  await shot(page, '02-home-light.png', { full: false });
 
-  await page.eval(`(() => {
-    const card = [...document.querySelectorAll('div.cursor-pointer')].find((d) => d.textContent.includes('查阅档案'));
-    if (card) { card.scrollIntoView({ block: 'center' }); card.click(); }
-    return Boolean(card);
+  console.log('\n== 卷宗详情 ==');
+  const opened = await page.eval(`(() => {
+    const card = [...document.querySelectorAll('[role="button"]')].find((d) => (d.innerText || '').includes('查阅档案'));
+    if (!card) return false;
+    card.scrollIntoView({ block: 'center' }); card.click();
+    return true;
   })()`);
+  if (!opened) console.warn('    ⚠️  找不到「查阅档案」卡片');
   await sleep(1800);
-  await shot(page, '02-module-detail.png', { full: true, maxHeight: 2200 });
+  await shot(page, '03-module-detail.png', { full: false });
 
-  console.log('\n== 访客：免登录车卡 ==');
-  await goHome(page, null, null);
-  await click(page, '免费车卡', { wait: 1600 });
-  await click(page, '新建角色卡', { wait: 1800 });
-  await shot(page, '03-guest-editor.png', { full: true, maxHeight: 1500 });
-
-  // ---------------------------------------------------------- 2. 玩家/KP 视角
   console.log('\n== 登录页 ==');
   await goHome(page, null, null);
-  await click(page, '登录身份', { wait: 1500 });
-  await shot(page, '04-login.png', { full: true, maxHeight: 1100 });
+  await click(page, '登录身份', { wait: 1600 });
+  await shot(page, '04-login.png', { full: false });
 
-  console.log('\n== 角色卡管理 / 详情 ==');
-  await goHome(page, login.token, login.user);
-  await click(page, '角色卡管理', { wait: 2200 });
-  await shot(page, '05-kp-characters.png', { full: true, maxHeight: 1700 });
-
-  await clickIn(page, '伊莱亚斯', '查看', { wait: 2600 });
-  await shot(page, '06-character-detail.png', { full: true, maxHeight: 2800 });
-
-  console.log('\n== 车卡编辑器 ==');
-  await click(page, '编辑', { wait: 2400 });
-  await shot(page, '07-editor-attributes.png', { full: true, maxHeight: 1700 });
-  await click(page, '技能分配', { wait: 1400 });
-  await shot(page, '08-editor-skills.png', { full: true, maxHeight: 2000 });
-  await click(page, '装备与经历', { wait: 1400 });
-  await shot(page, '09-editor-equipment.png', { full: true, maxHeight: 1800 });
-
-  console.log('\n== A4 打印版面 ==');
-  // 打印入口在角色卡详情页头部，从列表重新进一次
+  // ---------------------------------------------------------- 2. 守秘人视角
+  console.log('\n== 角色卡管理 / 详情 / 编辑器 ==');
   await goHome(page, login.token, login.user);
   await click(page, '角色卡管理', { wait: 2400 });
+  await shot(page, '05-character-cards.png', { full: false });
+
   await clickIn(page, '伊莱亚斯', '查看', { wait: 2600 });
-  await click(page, 'PDF', { wait: 3000 });
-  const printed = await page.eval(`document.body.innerText.includes('调查员') || document.body.innerText.includes('技能')`);
-  if (printed) await shot(page, '10-character-print.png', { full: true, maxHeight: 2900 });
-  else console.warn('    ⚠️  打印预览没打开');
+  await shot(page, '06-character-detail.png', { full: false });
+
+  await click(page, '编辑', { wait: 2400 });
+  await shot(page, '07-character-editor.png', { full: false });
 
   console.log('\n== 守秘人控制台 ==');
   await goHome(page, login.token, login.user);
   await click(page, 'KP 控制台', { wait: 2600 });
-  await shot(page, '11-kp-dashboard.png', { full: true, maxHeight: 2000 });
+  await shot(page, '08-kp-dashboard.png', { full: false });
 
   console.log('\n== 审卡中心 ==');
   await goHome(page, login.token, login.user);
   await click(page, '审卡中心', { wait: 2600 });
-  await shot(page, '12-review-queue.png', { full: true, maxHeight: 1500 });
-  await click(page, '打开核对', { wait: 2400 });
-  await shot(page, '13-review-detail.png', { full: true, maxHeight: 2400 });
+  await shot(page, '09-review-center.png', { full: false });
 
+  console.log('\n== 结业证书 ==');
   await goHome(page, login.token, login.user);
-  await click(page, '审卡中心', { wait: 2600 });
-  await click(page, '审卡规则', { wait: 1600 });
-  await shot(page, '14-audit-rules.png', { full: true, maxHeight: 1800 });
-  await click(page, '职业模板', { wait: 1600 });
-  await shot(page, '15-review-occupations.png', { full: true, maxHeight: 1500 });
-
-  console.log('\n== 个人中心 / 账号管理 ==');
-  await goHome(page, login.token, login.user);
-  await click(page, 'keeper', { wait: 2400 });
-  await shot(page, '16-profile.png', { full: true, maxHeight: 1800 });
-
-  await click(page, '账号管理', { wait: 2600 });
-  const adminText = await text(page);
-  if (adminText.includes('发放账号') || adminText.includes('重置')) {
-    await shot(page, '17-admin-users.png', { full: true, maxHeight: 1600 });
-  } else {
-    console.warn('    ⚠️  账号管理未打开');
-  }
-
-  await goHome(page, login.token, login.user);
-  await click(page, 'keeper', { wait: 2400 });
+  await click(page, 'keeper', { wait: 2200 });
   await click(page, '预览并下载证书', { wait: 3000 });
-  await shot(page, '18-certificate.png', { full: true, maxHeight: 2400 });
+  await shot(page, '10-certificate.png', { full: false });
+
+  // ---------------------------------------------------------- 3. 手机端
+  console.log('\n== 手机端首页 ==');
+  await page.send('Emulation.setDeviceMetricsOverride', {
+    width: 390, height: 844, deviceScaleFactor: 2, mobile: true,
+  });
+  await goHome(page, login.token, login.user);
+  await shot(page, '11-mobile-home.png', { full: false });
 
   cleanup(0);
 } catch (err) {

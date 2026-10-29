@@ -351,7 +351,7 @@ try {
         .filter((td) => td.scrollWidth > td.clientWidth + 1)
         .map((td) => td.innerText.slice(0, 20));
       const lineBlocks = [...document.querySelectorAll('.print-page span[title]')]
-        .filter((el) => el.getBoundingClientRect().height > 22).length;
+        .filter((el) => el.getBoundingClientRect().height > 26).length;
       const first = document.querySelector('.print-page');
       const cs = getComputedStyle(first);
       const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
@@ -715,11 +715,12 @@ try {
     await page.eval(`(() => { localStorage.removeItem('coc.guest.sheets.v1'); return true; })()`);
 
 
-    console.log('\n== 原生控件暗色化 / 母语语种 ==');
+    console.log('\n== 原生控件纸面化 / 母语语种 ==');
     // 上面「访客模式」那一段清掉了登录态，这里先恢复，后续步骤需要 KP 权限
     await page.eval(`(() => {
       localStorage.setItem('token', ${JSON.stringify(seedUser.token)});
       localStorage.setItem('user', ${JSON.stringify(JSON.stringify(seedUser.user))});
+      localStorage.setItem('coc-theme', 'light');
       return true;
     })()`);
     await page.send('Page.navigate', { url: BASE });
@@ -727,11 +728,18 @@ try {
     const native = await page.eval('document.querySelectorAll("datalist").length');
     ok('页面内已无原生 datalist（白色弹层根因）', native === 0, `datalist ${native}`);
     const scheme = await page.eval('getComputedStyle(document.documentElement).colorScheme');
-    ok('html color-scheme = dark（原生 select 弹层随系统暗色）', scheme === 'dark', scheme);
+    ok('日间主题 color-scheme = light（原生 select 弹层随纸面）', scheme === 'light', scheme);
+    const themeState = await page.eval(`(()=>{const root=document.documentElement; const before=root.dataset.theme; root.dataset.theme='dark'; const paper=getComputedStyle(root).getPropertyValue('--color-paper').trim(); const darkScheme=getComputedStyle(root).colorScheme; root.dataset.theme=before||'light'; return { before, paper, darkScheme };})()`);
+    const paperRgb = (() => {
+      const m = String(themeState.paper).match(/([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i);
+      return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : null;
+    })();
+    ok('夜间主题切换生效（纸色变深 + color-scheme = dark）', Boolean(paperRgb) && paperRgb.every((n) => n < 80) && themeState.darkScheme === 'dark', JSON.stringify(themeState));
+    await sleep(700);
     const optBg = await page.eval(`(()=>{const o=document.querySelector('select option'); return o?getComputedStyle(o).backgroundColor:''})()`);
-    ok("option 显式暗色背景", Boolean(optBg) && !optBg.startsWith("rgb(255"), optBg);
+    ok('option 显式纸色背景', Boolean(optBg) && optBg !== 'rgba(0, 0, 0, 0)' && !optBg.startsWith('rgb(23'), optBg);
 
-    // 合集选择器：自绘暗色下拉
+    // 合集选择器：自绘纸面下拉
     await page.eval(`(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('发布模组'));b&&b.click();return 1})()`);
     await sleep(1800);
     await page.eval(`(()=>{const i=[...document.querySelectorAll('input')].find(x=>x.placeholder&&x.placeholder.includes('合集'));
@@ -742,11 +750,11 @@ try {
       if(!p) return null;
       const bg=getComputedStyle(p).backgroundColor;
       const esc = String.fromCharCode(10);
-      // Tailwind v4 用 oklch 表示颜色，这里只判断「不是透明、不是白色」
-      const dark = bg !== "rgba(0, 0, 0, 0)" && !bg.startsWith("rgb(255");
-      return { bg, dark, text: p.innerText.split(esc).join('/').slice(0,40) };
+      // Tailwind v4 用 oklch 表示颜色，这里只判断「不是透明」
+      const solid = Boolean(bg) && bg !== "rgba(0, 0, 0, 0)";
+      return { bg, solid, text: p.innerText.split(esc).join('/').slice(0,40) };
     })()`);
-    ok('合集下拉是自绘暗色面板', darkPanel?.dark === true && (darkPanel.text || '').length > 0, JSON.stringify(darkPanel));
+    ok('合集下拉是自绘纸面面板', darkPanel?.solid === true && (darkPanel.text || '').length > 0, JSON.stringify(darkPanel));
 
     // 母语语种
     await page.send('Page.navigate', { url: BASE }); await sleep(2000);
@@ -773,31 +781,40 @@ try {
     const saveBtn = await page.eval(`Boolean([...document.querySelectorAll('button')].find(x=>x.textContent.includes('保存用户名')))`);
     ok('提供保存用户名按钮', saveBtn === true);
 
-    console.log('\n== 模组封面（档案封印） ==');
+    console.log('\n== 模组封面（铅印色版） ==');
     await page.send('Page.navigate', { url: BASE });
     await sleep(2400);
     const cover = await page.eval(`(()=>{
-      const art=[...document.querySelectorAll('div[aria-hidden="true"]')].find(d=>d.textContent.includes('NO.'));
+      const art=document.querySelector('[data-cover-plate="card"]');
       if(!art) return null;
       const txt=art.textContent||'';
-      const seal=art.querySelectorAll('.rounded-full').length;
-      const brackets=[...art.querySelectorAll('span')].filter(s=>String(s.className).includes('border-amber-200/45')).length;
-      return { hasFileNo: /NO\.[0-9A-Z]{4,8}/.test(txt), sealRings: seal, brackets, text: txt.slice(0,24) };
+      const title=art.querySelector('h3');
+      return {
+        hasFileNo: /NO\\.[0-9A-Z]{4,8}/.test(txt),
+        corners: art.querySelectorAll('[data-cover-corner]').length,
+        motif: Boolean(art.querySelector('svg')),
+        ink: art.getAttribute('data-cover-ink')||'',
+        bg: getComputedStyle(art).backgroundImage,
+        titleFont: title ? getComputedStyle(title).fontFamily : '',
+        text: txt.slice(0,24),
+      };
     })()`);
     ok('卡片封面出现档案编号', cover?.hasFileNo === true, JSON.stringify(cover));
-    ok('卡片封面有四角装饰角标', (cover?.brackets || 0) >= 4, `角标 ${cover?.brackets}`);
-    ok('卡片封面有蜡封印章', (cover?.sealRings || 0) >= 2, `圆环 ${cover?.sealRings}`);
-    const goldDivider = await page.eval(`document.querySelectorAll('span.rotate-45').length`);
-    ok('标题下有烫金分隔线', goldDivider > 0, `菱形 ${goldDivider}`);
+    ok('卡片封面有四角套准角标', (cover?.corners || 0) >= 4, `角标 ${cover?.corners}`);
+    ok('卡片封面有大号雕刻图案', cover?.motif === true);
+    ok('封面使用深空油墨渐变', Boolean(cover?.ink) && String(cover?.bg || '').includes('gradient'), `${cover?.ink} / ${String(cover?.bg).slice(0, 48)}`);
+    ok('封面题名使用衬线字体', /serif|Songti|SimSun|Georgia|Noto Serif/i.test(cover?.titleFont || ''), cover?.titleFont);
 
     // 详情页头图用同一套装饰
     await page.eval(`(()=>{const c=[...document.querySelectorAll('div.cursor-pointer')].find(d=>d.textContent.includes('查阅档案'));c&&c.click();return 1})()`);
     await sleep(2000);
     const heroCover = await page.eval(`(()=>{
-      const art=[...document.querySelectorAll('div[aria-hidden="true"]')].find(d=>d.textContent.includes('档案编号'));
-      return art ? (art.textContent||'').slice(0,30) : null;
+      const art=document.querySelector('[data-cover-plate="hero"]');
+      if(!art) return null;
+      return { text:(art.textContent||'').slice(0,40), corners:art.querySelectorAll('[data-cover-corner]').length };
     })()`);
-    ok('详情页头图也有档案封印', Boolean(heroCover) && heroCover.includes('档案编号'), String(heroCover));
+    ok('详情页头图也有档案封印', Boolean(heroCover) && heroCover.text.includes('档案编号'), String(heroCover?.text));
+    ok('详情页头图保留四角套准角标', (heroCover?.corners || 0) >= 4, `角标 ${heroCover?.corners}`);
 
     const shot = await page.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(path.join(SHOTS, 'editor.png'), Buffer.from(shot.data, 'base64'));

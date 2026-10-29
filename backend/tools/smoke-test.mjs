@@ -10,10 +10,6 @@
  *
  * 用法：
  *   node tools/smoke-test.mjs [原始database.json路径]
- *
- * 不传路径时使用内置夹具 `tools/fixtures/legacy-v1-database.json`：
- * 一份 v1.0 形态的合成旧库（含明文口令与明文令牌），因此「旧库迁移」这一段
- * 在没有真实历史数据的机器上也能照跑，不会因为缺少 backend/database.json 而失败。
  */
 
 import { spawn } from 'node:child_process';
@@ -24,7 +20,9 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
-const SEED = process.argv[2] || path.join(__dirname, 'fixtures', 'legacy-v1-database.json');
+const LOCAL_DB = path.join(ROOT, 'database.json');
+const FIXTURE_DB = path.join(ROOT, 'tools', 'fixtures', 'legacy-v1-database.json');
+const SEED = process.argv[2] || (fs.existsSync(LOCAL_DB) ? LOCAL_DB : FIXTURE_DB);
 const PORT = Number(process.env.SMOKE_PORT || 3199);
 const BASE = `http://127.0.0.1:${PORT}`;
 

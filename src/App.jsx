@@ -1,15 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AlertCircle, BookOpen, BrainCircuit, Calendar, CheckCircle, CheckSquare, Copy, Crown,
-  ClipboardCheck, Edit, FileText, Filter, FolderArchive, Info, Layers, LayoutDashboard, LayoutGrid,
-  ListChecks, Lock, LogOut, Pin, Plus, Search, Settings, Share2, Shield, Trash2, User, Users, X,
+  CheckCircle, ClipboardCheck, FileText, Github, LayoutDashboard, LogOut, Mail, Plus, Scale, Share2,
+  Shield, Trash2, User, Users, X,
 } from 'lucide-react';
 
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, session } from './lib/api.js';
 import {
-  Badge, Button, ConfirmDialog, EmptyState, Field, Input, Panel, Select, Textarea, Toast, cx,
+  Badge, Button, ConfirmDialog, EmptyState, Panel, Toast, cx,
 } from './components/ui.jsx';
-import PasswordChangeForm from './components/PasswordChangeForm.jsx';
+import { SealMark } from './components/Emblem.jsx';
+import { TentacleBackdrop, TentacleRule } from './components/Ornaments.jsx';
+import { MenuMorph, ThemeMorph } from './components/MorphIcon.jsx';
+import { DepthGauge, RouteSweep } from './components/Motion.jsx';
 import AdminUsersPanel from './components/AdminUsersPanel.jsx';
 import KpDashboardPanel from './components/KpDashboardPanel.jsx';
 import CertificatePreview from './components/CertificatePreview.jsx';
@@ -32,17 +34,19 @@ const EMPTY_MODULE = {
   series: '', charInfo: '', occupations: '', skills: '', notes: '', isPinned: false,
 };
 
-/** 头衔特效（与证书导出版面保持一致） */
+/**
+ * 头衔样式（与证书、个人中心共用）。
+ * v3：全部改成「油墨实色 + 衬线 + 宽字距」，头衔的分量靠字重与纸上的位置表达。
+ */
 const getTitleStyles = (title, role) => {
-  if (role === 'admin') {
-    return 'text-transparent bg-clip-text bg-gradient-to-b from-yellow-200 via-amber-400 to-orange-600 font-black drop-shadow-[0_0_15px_rgba(245,158,11,1)] tracking-[0.4em] scale-105 inline-block';
-  }
+  const common = 'font-serif font-bold tracking-[0.24em]';
+  if (role === 'admin') return `${common} text-indigo`;
   switch (title) {
-    case '资深调查员': return 'text-cyan-400 font-bold drop-shadow-[0_0_5px_rgba(34,211,238,0.5)]';
-    case '精英调查员': return 'text-amber-400 font-black drop-shadow-[0_0_8px_rgba(251,191,36,0.6)] tracking-widest';
-    case '传奇调查员': return 'text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-yellow-500 to-purple-500 font-black drop-shadow-[0_0_10px_rgba(239,68,68,0.8)] tracking-[0.2em]';
-    case '神话调查员': return 'text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-500 via-cyan-400 to-emerald-400 font-black drop-shadow-[0_0_12px_rgba(217,70,239,0.8)] tracking-[0.3em]';
-    default: return 'text-slate-400 font-medium';
+    case '资深调查员': return `${common} text-slate-200`;
+    case '精英调查员': return `${common} text-amber-300`;
+    case '传奇调查员': return `${common} text-red-500`;
+    case '神话调查员': return `${common} text-cyan-300`;
+    default: return 'text-slate-400 font-normal tracking-[0.1em]';
   }
 };
 
@@ -53,6 +57,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(() => session.user);
   const [users, setUsers] = useState([]);
   const [view, setView] = useState('home');
+  const [navOpen, setNavOpen] = useState(false);
   const [viewArg, setViewArg] = useState(null);
   const [selectedModule, setSelectedModule] = useState(null);
 
@@ -82,16 +87,53 @@ export default function App() {
   const [customOccupations, setCustomOccupations] = useState([]);
   const [guestSheet, setGuestSheet] = useState(null);
   const [viewFrom, setViewFrom] = useState(null);
+  const [theme, setTheme] = useState(() => {
+    if (typeof document === 'undefined') return 'light';
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  });
+  const [wipe, setWipe] = useState(null);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    try { localStorage.setItem('coc-theme', theme); } catch { /* 隐私模式忽略 */ }
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#081311' : '#ece3d1');
+  }, [theme]);
+
+  const toggleTheme = useCallback((evt) => {
+    const el = evt?.currentTarget || document.querySelector('[data-theme-toggle]');
+    const rect = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+    const x = rect ? rect.left + rect.width / 2 : window.innerWidth - 72;
+    const y = rect ? rect.top + rect.height / 2 : 40;
+    const apply = () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    // 主题切换：让一层印泥从按钮漫开盖住页面，在覆盖最厚时换色，避免全页逐节点重绘造成卡顿
+    if (reduce) { apply(); return; }
+    setWipe({ id: Date.now(), x, y, color: '#a52a1d' });
+    window.setTimeout(apply, 240);
+  }, []);
 
   const isAdmin = currentUser?.role === 'admin';
 
   const showToast = useCallback((msg, type = 'success') => setToast({ msg, type, id: Date.now() }), []);
   const showConfirm = useCallback((msg, onConfirm, opts = {}) => setConfirmDialog({ msg, onConfirm, ...opts }), []);
+  // 归位要「瞬时」：全站开了 scroll-behavior:smooth，直接 scrollTo(0,0) 会在旧页面上
+  // 缓慢拉回顶部，等新页渲染完还在滑，和入场动画叠在一起（用户看到的「被甩一下」）。
+  const resetScroll = useCallback(() => {
+    const root = document.documentElement;
+    const prev = root.style.scrollBehavior;
+    root.style.scrollBehavior = 'auto';
+    // 只临时改内联样式不够：浏览器会把滚动请求排到下一帧，届时样式已还原成 smooth，
+    // 旧页仍会缓慢滑回顶部。behavior:'instant' 强制本帧直接归位。
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    root.style.scrollBehavior = prev;
+  }, []);
+
   const go = useCallback((nextView, arg = null) => {
+    resetScroll();
     setView((prev) => { setViewFrom(prev); return nextView; });
     setViewArg(arg);
-    window.scrollTo(0, 0);
-  }, []);
+  }, [resetScroll]);
 
   // ------------------------------------------------------------ 数据获取
   const fetchModules = useCallback(async () => {
@@ -306,7 +348,7 @@ export default function App() {
   const handlePreview = (mode, data = null) => {
     setPreviewMode(mode);
     setPreviewData(data);
-    window.scrollTo(0, 0);
+    resetScroll();
   };
 
   // ------------------------------------------------------------ 长图预览独立成页
@@ -462,198 +504,312 @@ export default function App() {
 
   // ------------------------------------------------------------ 主渲染
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-emerald-500/30 pb-20">
-      <style dangerouslySetInnerHTML={{
-        __html: `
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #020617; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
-      `,
-      }} />
+    <div className="relative flex min-h-screen flex-col bg-paper font-sans text-ink">
+      {/* 馆内的潮气与侧光（纯装饰层，样式在 index.css） */}
+      <div className="archive-ambient" aria-hidden="true">
+        <TentacleBackdrop />
+      </div>
+
+      {wipe ? (
+        <span
+          key={wipe.id}
+          aria-hidden="true"
+          className="theme-wipe"
+          style={{ '--wipe-x': `${wipe.x}px`, '--wipe-y': `${wipe.y}px`, '--wipe-color': wipe.color }}
+          onAnimationEnd={() => setWipe(null)}
+        />
+      ) : null}
 
       <Toast toast={toast} />
       <ConfirmDialog dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />
 
-      <nav className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-50 no-print">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+      <DepthGauge />
+
+      <nav className="no-print glass-bar sticky top-0 z-50 border-b border-black/50 shadow-[0_18px_40px_-34px_rgba(0,0,0,0.95)]">
+        <div className="mx-auto max-w-[1240px] px-4 sm:px-6 lg:px-8">
+          {/* 报头细目：卷期与身份 */}
+          <div className="hidden h-[22px] items-center justify-end gap-4 border-b border-white/10 font-mono text-[14px] tracking-[0.2em] text-[var(--c-masthead-ink)]/45 sm:flex sm:text-[14px] sm:tracking-[0.28em]">
+            <span className="flex shrink-0 items-center gap-2.5">
+              <span className="hidden md:inline">VOL. IV · NO. 27</span>
+              <span className="hidden items-center gap-2.5 sm:flex">
+                <span aria-hidden="true" className="h-[3px] w-[3px] bg-vermilion" />
+                <span>{currentUser ? '在册读者' : '访客阅览'}</span>
+              </span>
+            </span>
+          </div>
+
+          <div className="flex h-[64px] items-center gap-3 sm:gap-4">
+            {/* 报头：铅字社徽 + 衬线站名 */}
             <button
               type="button"
-              className="flex items-center space-x-2 group"
+              className="group flex min-w-0 shrink-0 items-center gap-2.5 text-left"
               onClick={() => { go('home'); setHomeTab('grid'); setSelectedCollection(null); }}
             >
-              <BookOpen className="h-6 w-6 text-emerald-500 group-hover:text-emerald-400 transition" />
-              <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-cyan-400 hidden sm:inline">秘密调查档案馆</span>
+              <span className="relative flex h-9 w-9 shrink-0 items-center justify-center border border-white/25 bg-white/[0.06] transition-colors duration-300 group-hover:border-vermilion/70">
+                <SealMark size={27} className="text-[var(--c-masthead-ink)] transition-transform duration-700 ease-[var(--ease-bounce)] group-hover:-rotate-12" />
+              </span>
+              <span className="flex min-w-0 flex-col leading-none">
+                <span className="truncate font-serif text-[16px] font-black tracking-[0.14em] text-[var(--c-masthead-ink)] sm:text-[17px]">秘密调查档案馆</span>
+              </span>
             </button>
-            <div className="flex items-center space-x-1 sm:space-x-2">
+
+            {/* 桌面导航：带编目的索引导航 */}
+            <div className="hidden flex-1 items-stretch justify-center self-stretch lg:flex">
+              <NavButton index="01" active={view === 'home'} onClick={() => go('home')} label="馆藏" />
+              {currentUser ? (
+                <>
+                  <NavButton index="02" active={view === 'characters'} onClick={() => go('characters')} label="我的角色卡" />
+                  {isAdmin && (
+                    <>
+                      <span aria-hidden="true" className="mx-0.5 my-4 w-px bg-white/15" />
+                      <NavButton index="03" active={view === 'moduleForm'} onClick={() => { setFormData(EMPTY_MODULE); setIsEditing(false); go('moduleForm'); }} label="发布模组" />
+                      <NavButton index="04" active={view === 'kpDashboard'} onClick={() => go('kpDashboard')} label="KP 控制台" />
+                      <NavButton index="05" active={view === 'kpCharacters'} onClick={() => go('kpCharacters')} label="角色卡管理" />
+                      <NavButton index="06" active={view === 'kpReview'} onClick={() => go('kpReview')} label="审卡中心" />
+                    </>
+                  )}
+                </>
+              ) : (
+                <NavButton index="02" active={view === 'characters'} onClick={() => go('characters')} label="免费车卡" />
+              )}
+            </div>
+
+            {/* 右侧：主题 / 身份 / 登录 / 手机菜单 */}
+            <div className="ml-auto flex shrink-0 items-center gap-1.5 md:ml-0">
+              <span className="hidden sm:inline-flex">
+                <ThemeToggle theme={theme} onToggle={toggleTheme} />
+              </span>
               {!currentUser ? (
-                <div className="flex items-center gap-2">
-                  <NavButton active={view === 'characters'} onClick={() => go('characters')} icon={Users} label="免费车卡" />
-                  <Button onClick={() => go('auth')} className="!py-2"><User className="h-4 w-4" />登录身份</Button>
-                </div>
+                <Button onClick={() => go('auth')} className="!px-3.5 !py-2 !text-[14px]">
+                  <User className="h-4 w-4" />
+                  登录身份
+                </Button>
               ) : (
                 <>
-                  <div className="hidden md:flex items-center space-x-1 mr-1 border-r border-slate-700 pr-3">
-                    <NavButton active={view === 'characters'} onClick={() => go('characters')} icon={Users} label="我的角色卡" />
-                    {isAdmin && (
-                      <>
-                        <NavButton active={view === 'moduleForm'} onClick={() => { setFormData(EMPTY_MODULE); setIsEditing(false); go('moduleForm'); }} icon={Plus} label="发布模组" tone="emerald" />
-                        <NavButton active={view === 'kpDashboard'} onClick={() => go('kpDashboard')} icon={LayoutDashboard} label="KP 控制台" tone="amber" />
-                        <NavButton active={view === 'kpCharacters'} onClick={() => go('kpCharacters')} icon={Shield} label="角色卡管理" tone="amber" />
-                        <NavButton active={view === 'kpReview'} onClick={() => go('kpReview')} icon={ClipboardCheck} label="审卡中心" tone="amber" />
-                      </>
-                    )}
-                  </div>
                   <button
                     type="button"
                     onClick={() => go('profile')}
-                    className={cx('flex items-center space-x-2 px-3 py-2 rounded-md transition', view === 'profile' ? 'bg-slate-800 text-emerald-400' : 'hover:bg-slate-800 text-slate-300')}
+                    className={cx(
+                      'group relative flex h-9 items-center gap-2 border pl-1 pr-1.5 transition-all duration-300 ease-[var(--ease-soft)] sm:pr-2',
+                      view === 'profile'
+                        ? 'border-vermilion/70 bg-white/10'
+                        : 'border-white/20 hover:border-white/45 hover:bg-white/[0.07]',
+                    )}
                   >
-                    {isAdmin ? <Crown className="h-4 w-4 text-amber-500" /> : <Shield className="h-4 w-4" />}
-                    <span className="truncate font-bold max-w-[7rem]">{currentUser.username}</span>
+                    <span className="flex h-7 w-7 items-center justify-center bg-[var(--c-masthead-ink)] font-serif text-[14px] font-black text-[var(--c-masthead)] sm:h-6 sm:w-6">
+                      {String(currentUser.username || '?').slice(0, 1)}
+                    </span>
+                    <span aria-hidden="true" className="absolute -bottom-[3px] -right-[3px] h-[6px] w-[6px] bg-vermilion" />
+                    <span className="hidden max-w-[7rem] truncate text-[14px] font-semibold text-[var(--c-masthead-ink)]/90 sm:block">{currentUser.username}</span>
+                    {isAdmin ? <span className="hidden border border-ochre/45 px-1 py-0.5 font-kai text-[14px] tracking-[0.12em] text-ochre sm:block">守秘人</span> : null}
                   </button>
-                  <button type="button" onClick={handleLogout} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-md" title="登出">
-                    <LogOut className="h-5 w-5" />
+
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="hidden p-2 text-[var(--c-masthead-ink)]/45 transition-colors hover:bg-vermilion/20 hover:text-vermilion lg:block"
+                    title="登出"
+                    aria-label="登出"
+                  >
+                    <LogOut className="h-[16px] w-[16px]" strokeWidth={1.9} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setNavOpen(true)}
+                    className="flex h-9 w-9 items-center justify-center border border-white/20 text-[var(--c-masthead-ink)]/80 transition-colors hover:border-vermilion/70 hover:text-vermilion lg:hidden"
+                    aria-label="打开导航"
+                  >
+                    <MenuMorph open={navOpen} className="text-[var(--c-masthead-ink)]/85" />
+                    <span className="sr-only">打开导航</span>
                   </button>
                 </>
               )}
             </div>
           </div>
-          {/* 移动端导航 */}
-          {currentUser && (
-            <div className="md:hidden flex gap-1 pb-2 overflow-x-auto">
-              <NavButton active={view === 'characters'} onClick={() => go('characters')} icon={Users} label="我的角色卡" />
-              {isAdmin && <NavButton active={view === 'kpCharacters'} onClick={() => go('kpCharacters')} icon={Shield} label="角色卡管理" tone="amber" />}
-              {isAdmin && <NavButton active={view === 'kpReview'} onClick={() => go('kpReview')} icon={ClipboardCheck} label="审卡中心" tone="amber" />}
-              {isAdmin && <NavButton active={view === 'moduleForm'} onClick={() => { setFormData(EMPTY_MODULE); setIsEditing(false); go('moduleForm'); }} icon={Plus} label="发布模组" tone="emerald" />}
-              {isAdmin && <NavButton active={view === 'kpDashboard'} onClick={() => go('kpDashboard')} icon={LayoutDashboard} label="KP 控制台" tone="amber" />}
-            </div>
-          )}
         </div>
       </nav>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* ---------------------------------------------------- 登录 / 初始化 */}
-        {view === 'auth' && (
-          <AuthView
-            isLoginMode={isLoginMode}
-            setIsLoginMode={setIsLoginMode}
-            username={username}
-            setUsername={setUsername}
-            password={password}
-            setPassword={setPassword}
-            authError={authError}
-            setAuthError={setAuthError}
-            onSubmit={handleAuth}
-          />
-        )}
+      <NavDrawer
+        open={navOpen}
+        onClose={() => setNavOpen(false)}
+        view={view}
+        currentUser={currentUser}
+        isAdmin={isAdmin}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onNavigate={(v) => { setNavOpen(false); go(v); }}
+        onNewModule={() => { setNavOpen(false); setFormData(EMPTY_MODULE); setIsEditing(false); go('moduleForm'); }}
+        onLogout={() => { setNavOpen(false); handleLogout(); }}
+      />
 
-        {/* ---------------------------------------------------- 模组录入 / 编辑 */}
-        {view === 'moduleForm' && isAdmin && (
-          <ModuleFormView
-            isEditing={isEditing}
-            formData={formData}
-            setFormData={setFormData}
-            uniqueSeries={uniqueSeries}
-            onSubmit={handleSubmitModule}
-            onBack={() => { go('home'); setFormData(EMPTY_MODULE); }}
-          />
-        )}
+      <main className="relative z-10 mx-auto w-full max-w-[1240px] flex-1 px-4 pb-16 pt-7 sm:px-6 sm:pt-9 lg:px-8">
+        <div key={view} className="page-in">
+          <RouteSweep />
+          {/* ---------------------------------------------------- 登录 / 初始化 */}
+          {view === 'auth' && (
+            <AuthView
+              isLoginMode={isLoginMode}
+              setIsLoginMode={setIsLoginMode}
+              username={username}
+              setUsername={setUsername}
+              password={password}
+              setPassword={setPassword}
+              authError={authError}
+              setAuthError={setAuthError}
+              onSubmit={handleAuth}
+            />
+          )}
 
-        {/* ---------------------------------------------------- 管理面板 */}
-        {view === 'adminUsers' && isAdmin && (
-          <AdminUsersPanel setView={(v) => go(v)} showToast={showToast} showConfirm={showConfirm} />
-        )}
-        {view === 'kpDashboard' && isAdmin && (
-          <KpDashboardPanel
-            modules={modules}
-            users={users}
-            showToast={showToast}
-            showConfirm={showConfirm}
-            handlePreview={handlePreview}
-          />
-        )}
+          {/* ---------------------------------------------------- 模组录入 / 编辑 */}
+          {view === 'moduleForm' && isAdmin && (
+            <ModuleFormView
+              isEditing={isEditing}
+              formData={formData}
+              setFormData={setFormData}
+              uniqueSeries={uniqueSeries}
+              onSubmit={handleSubmitModule}
+              onBack={() => { go('home'); setFormData(EMPTY_MODULE); }}
+            />
+          )}
 
-        {/* ---------------------------------------------------- 角色卡 */}
-        {['characters', 'kpCharacters', 'characterEdit', 'characterView', 'characterPrint'].includes(view) && renderCharacterView()}
+          {/* ---------------------------------------------------- 管理面板 */}
+          {view === 'adminUsers' && isAdmin && (
+            <AdminUsersPanel setView={(v) => go(v)} showToast={showToast} showConfirm={showConfirm} />
+          )}
+          {view === 'kpDashboard' && isAdmin && (
+            <KpDashboardPanel
+              modules={modules}
+              users={users}
+              showToast={showToast}
+              showConfirm={showConfirm}
+              handlePreview={handlePreview}
+            />
+          )}
 
-        {view === 'kpReview' && isAdmin && (
-          <KpReviewCenter
-            currentUser={currentUser}
-            showToast={showToast}
-            showConfirm={showConfirm}
-            onOpenCharacter={(id) => go('characterView', id)}
-          />
-        )}
+          {/* ---------------------------------------------------- 角色卡 */}
+          {['characters', 'kpCharacters', 'characterEdit', 'characterView', 'characterPrint'].includes(view) && renderCharacterView()}
 
-        {/* ---------------------------------------------------- 首页 */}
-        {view === 'home' && (
-          <HomeView
-            modules={modules}
-            currentUser={currentUser}
-            playedModules={playedModules}
-            isAdmin={isAdmin}
-            homeTab={homeTab}
-            setHomeTab={setHomeTab}
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            filterRegion={filterRegion}
-            setFilterRegion={setFilterRegion}
-            filterPlayers={filterPlayers}
-            setFilterPlayers={setFilterPlayers}
-            filterDuration={filterDuration}
-            setFilterDuration={setFilterDuration}
-            filterPlayed={filterPlayed}
-            setFilterPlayed={setFilterPlayed}
-            selectedCollection={selectedCollection}
-            setSelectedCollection={setSelectedCollection}
-            uniqueSeries={uniqueSeries}
-            uniqueRegions={uniqueRegions}
-            uniquePlayers={uniquePlayers}
-            uniqueDurations={uniqueDurations}
-            filteredModules={filteredModules}
-            onGoAuth={() => go('auth')}
-            onGoCharacters={() => go('characters')}
-            onOpenModule={(m) => { setSelectedModule(m); go('moduleDetail'); }}
-            onEditModule={openEditMode}
-            onDeleteModule={handleDeleteModule}
-            onTogglePlayed={togglePlayed}
-          />
-        )}
+          {view === 'kpReview' && isAdmin && (
+            <KpReviewCenter
+              currentUser={currentUser}
+              showToast={showToast}
+              showConfirm={showConfirm}
+              onOpenCharacter={(id) => go('characterView', id)}
+            />
+          )}
 
-        {/* ---------------------------------------------------- 模组详情 */}
-        {view === 'moduleDetail' && selectedModule && (
-          <ModuleDetailView
-            module={selectedModule}
-            isAdmin={isAdmin}
-            currentUser={currentUser}
-            played={playedModules.includes(selectedModule.id)}
-            onBack={() => go('home')}
-            onCopy={handleCopy}
-            onEdit={openEditMode}
-            onTogglePlayed={togglePlayed}
-            onGoCharacters={() => go('characters')}
-          />
-        )}
+          {/* ---------------------------------------------------- 首页 */}
+          {view === 'home' && (
+            <HomeView
+              modules={modules}
+              currentUser={currentUser}
+              playedModules={playedModules}
+              isAdmin={isAdmin}
+              homeTab={homeTab}
+              setHomeTab={setHomeTab}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              filterRegion={filterRegion}
+              setFilterRegion={setFilterRegion}
+              filterPlayers={filterPlayers}
+              setFilterPlayers={setFilterPlayers}
+              filterDuration={filterDuration}
+              setFilterDuration={setFilterDuration}
+              filterPlayed={filterPlayed}
+              setFilterPlayed={setFilterPlayed}
+              selectedCollection={selectedCollection}
+              setSelectedCollection={setSelectedCollection}
+              uniqueSeries={uniqueSeries}
+              uniqueRegions={uniqueRegions}
+              uniquePlayers={uniquePlayers}
+              uniqueDurations={uniqueDurations}
+              filteredModules={filteredModules}
+              onGoAuth={() => go('auth')}
+              onGoCharacters={() => go('characters')}
+              onOpenModule={(m) => { setSelectedModule(m); go('moduleDetail'); }}
+              onEditModule={openEditMode}
+              onDeleteModule={handleDeleteModule}
+              onTogglePlayed={togglePlayed}
+            />
+          )}
 
-        {/* ---------------------------------------------------- 个人中心 */}
-        {view === 'profile' && currentUser && (
-          <ProfileView
-            currentUser={currentUser}
-            isAdmin={isAdmin}
-            modules={modules}
-            playedModules={playedModules}
-            getTitleStyles={getTitleStyles}
-            showToast={showToast}
-            onTogglePlayed={togglePlayed}
-            onPreviewCertificate={() => handlePreview('player')}
-            onGo={go}
-            onLogout={handleLogout}
-            onRenamed={(fresh) => { setCurrentUser(fresh); session.saveUser(fresh); }}
-          />
-        )}
+          {/* ---------------------------------------------------- 模组详情 */}
+          {view === 'moduleDetail' && selectedModule && (
+            <ModuleDetailView
+              module={selectedModule}
+              isAdmin={isAdmin}
+              currentUser={currentUser}
+              played={playedModules.includes(selectedModule.id)}
+              onBack={() => go('home')}
+              onCopy={handleCopy}
+              onEdit={openEditMode}
+              onTogglePlayed={togglePlayed}
+              onGoCharacters={() => go('characters')}
+            />
+          )}
+
+          {/* ---------------------------------------------------- 个人中心 */}
+          {view === 'profile' && currentUser && (
+            <ProfileView
+              currentUser={currentUser}
+              isAdmin={isAdmin}
+              modules={modules}
+              playedModules={playedModules}
+              getTitleStyles={getTitleStyles}
+              showToast={showToast}
+              onTogglePlayed={togglePlayed}
+              onPreviewCertificate={() => handlePreview('player')}
+              onGo={go}
+              onLogout={handleLogout}
+              onRenamed={(fresh) => { setCurrentUser(fresh); session.saveUser(fresh); }}
+            />
+          )}
+        </div>
       </main>
+
+      <footer className="no-print relative z-10 mt-8 overflow-hidden border-t-[3px] border-vermilion bg-[var(--c-masthead)] text-[var(--c-masthead-ink)]">
+        <TentacleRule className="pointer-events-none absolute inset-x-0 -top-1 h-8 w-full opacity-30" />
+        <div className="mx-auto max-w-[1240px] px-4 pb-6 pt-10 sm:px-6 lg:px-8">
+          <div className="flex flex-wrap items-start justify-between gap-8">
+            <div className="flex max-w-md items-start gap-4">
+              <span className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center border border-white/25 bg-white/[0.05]">
+                <SealMark size={30} className="text-[var(--c-masthead-ink)]" />
+              </span>
+              <div>
+                <p className="font-serif text-[17px] font-black leading-none tracking-[0.14em]">秘密调查档案馆</p>
+                <p className="mt-2 font-mono text-[14px] tracking-[0.24em] text-[var(--c-masthead-ink)]/45">THE DROWNED ARCHIVE · ARCHIVE OF SECRET INQUIRY</p>
+                <p className="mt-3 font-kai text-[14px] leading-relaxed tracking-[0.1em] text-[var(--c-masthead-ink)]/60">
+                  凡不可名状者，皆有其卷宗。<br />馆内资料仅供在册调查员查阅。
+                </p>
+              </div>
+            </div>
+            <div className="grid w-full max-w-md grid-cols-1 gap-x-10 gap-y-2.5 self-center font-mono text-[14px] tracking-[0.12em] text-[var(--c-masthead-ink)]/55 sm:grid-cols-2">
+              <a
+                href="https://github.com/guinyd/coc-modules-archive"
+                target="_blank"
+                rel="noreferrer noopener"
+                title="GitHub · coc-modules-archive"
+                className="group inline-flex min-w-0 items-center gap-2.5 text-[#f0d8a4] transition-colors hover:text-[#f7ecd4]"
+              >
+                <Github className="h-[18px] w-[18px] shrink-0 text-[#f0d8a4]/80 transition-colors group-hover:text-[#f7ecd4]" strokeWidth={1.6} />
+                <span className="truncate tracking-[0.16em]">GitHub 仓库</span>
+              </a>
+              <span className="inline-flex min-w-0 items-center gap-2.5">
+                <Scale className="h-[18px] w-[18px] shrink-0 text-[var(--c-masthead-ink)]/45" strokeWidth={1.6} />
+                <span className="truncate tracking-[0.16em]">授权协议 · MIT</span>
+              </span>
+              <span className="inline-flex min-w-0 items-center gap-2.5 sm:col-span-2">
+                <Mail className="h-[18px] w-[18px] shrink-0 text-[var(--c-masthead-ink)]/45" strokeWidth={1.6} />
+                <span className="tracking-[0.16em]">馆长邮箱 · cocyd@qq.com</span>
+              </span>
+            </div>
+          </div>
+          <div className="mt-8 flex justify-end border-t border-white/12 pt-3 font-mono text-[14px] tracking-[0.24em] text-[var(--c-masthead-ink)]/35">
+            <span>OPEN SOURCE · MIT LICENSE</span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
@@ -664,83 +820,87 @@ function GuestSheetView({ sheet, onBack, onEdit, onPrint, onDelete, onLogin, sho
   const used = d.skills.filter((s) => s.used || s.occ > 0 || s.interest > 0 || s.growth > 0);
   const [exportOpen, setExportOpen] = useState(false);
   return (
-    <div className="space-y-5">
-      <Panel className="p-5">
+    <div className="space-y-6">
+      <Panel className="p-5 sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-4">
-            <Button variant="ghost" onClick={onBack} className="!p-2.5">←</Button>
+            <Button variant="ghost" onClick={onBack} className="!p-2.5" aria-label="返回">←</Button>
             <div>
-              <h2 className="text-3xl font-black text-white flex items-center gap-3 flex-wrap">
-                {sheet.name || '未命名调查员'}
+              <div className="flex flex-wrap items-baseline gap-3">
+                <h1 className="font-serif text-[30px] font-bold leading-tight text-slate-100 sm:text-[36px]">
+                  {sheet.name || '未命名调查员'}
+                </h1>
                 <Badge tone="amber">本机草稿</Badge>
-              </h2>
-              <p className="text-slate-400 text-sm mt-1">
+              </div>
+              <p className="mt-1.5 text-[16px] text-slate-400">
                 {d.occupation?.name || '无职业'} · {sheet.age} 岁 · {sheet.era}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="ghost" onClick={() => setExportOpen(true)}><Share2 className="w-4 h-4" />导出编码 / 骰娘指令</Button>
-            <Button variant="ghost" onClick={onPrint}><FileText className="w-4 h-4" />打印 / 导出 PDF</Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="ghost" onClick={() => setExportOpen(true)}><Share2 className="h-4 w-4" />导出编码 / 骰娘指令</Button>
+            <Button variant="ghost" onClick={onPrint}><FileText className="h-4 w-4" />打印 / 导出 PDF</Button>
             <Button variant="ghost" onClick={onEdit}>编辑</Button>
-            <Button onClick={onLogin}><User className="w-4 h-4" />登录后收录</Button>
-            <Button variant="danger" onClick={onDelete}><Trash2 className="w-4 h-4" />删除</Button>
+            <Button onClick={onLogin}><User className="h-4 w-4" />登录后收录</Button>
+            <Button variant="danger" onClick={onDelete}><Trash2 className="h-4 w-4" />删除</Button>
           </div>
         </div>
-        <p className="mt-4 text-xs text-amber-300/80">
-          这张卡只保存在本机浏览器，没有收录进档案馆：不能关联模组经历，也不会出现在 KP 的角色卡管理里。
-        </p>
-        <p className="mt-2 text-xs text-slate-500">
-          教育增强记录：
-          {d.eduGrowth.settled ? (
-            <span className="text-slate-300">
-              {d.eduGrowth.manual ? '手动录入' : `自动检定 ${d.eduGrowth.count} 次`}
-              ，提升 <b className="font-mono text-cyan-300">+{d.eduGrowth.gain}</b>
-              {d.eduGrowth.rolls?.length ? ` · 骰点 ${d.eduGrowth.rolls.map((r) => `D100=${r.roll}→+${r.gain}`).join('、')}` : ''}
-            </span>
-          ) : <span className="text-amber-400">尚未结算</span>}
-        </p>
-        {d.legendary.enabled ? (
-          <p className="mt-1 text-xs text-fuchsia-300">KP 已开启传奇标记（额外调整值单独一栏）。</p>
-        ) : null}
+        <div className="mt-5 border-t border-line pt-4">
+          <p className="text-[16px] leading-relaxed text-amber-300">
+            这张卡只保存在本机浏览器，没有收录进档案馆：不能关联模组经历，也不会出现在 KP 的角色卡管理里。
+          </p>
+          <p className="mt-2 text-[14px] text-slate-500">
+            教育增强记录：
+            {d.eduGrowth.settled ? (
+              <span className="text-slate-300">
+                {d.eduGrowth.manual ? '手动录入' : `自动检定 ${d.eduGrowth.count} 次`}
+                ，提升 <b className="font-serif text-cyan-300">+{d.eduGrowth.gain}</b>
+                {d.eduGrowth.rolls?.length ? ` · 骰点 ${d.eduGrowth.rolls.map((r) => `D100=${r.roll}→+${r.gain}`).join('、')}` : ''}
+              </span>
+            ) : <span className="text-red-500">尚未结算</span>}
+          </p>
+          {d.legendary.enabled ? (
+            <p className="mt-1 text-[14px] text-red-500">KP 已开启传奇标记（额外调整值单独一栏）。</p>
+          ) : null}
+        </div>
       </Panel>
 
-      <Panel className="p-5">
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+      <Panel className="p-5 sm:p-6">
+        <div className="grid grid-cols-2 border-y border-line-strong sm:grid-cols-4 lg:grid-cols-7">
           {[['生命值 HP', d.hp], ['魔法点 MP', d.mp], ['理智 SAN', d.san], ['移动力 MOV', d.mov],
             ['伤害加值', d.db], ['体格', d.build], ['信用评级', `${d.creditRating}%`]].map(([l, v]) => (
-            <div key={l} className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-center">
-              <div className="text-[11px] text-slate-500 mb-0.5">{l}</div>
-              <div className="text-xl font-black text-emerald-400 font-mono">{v}</div>
+            <div key={l} className="border-line px-3 py-3 text-center [&:not(:first-child)]:border-l">
+              <div className="text-[14px] tracking-[0.12em] text-slate-500">{l}</div>
+              <div className="mt-1 font-serif text-[22px] font-bold leading-none text-slate-100 tabular">{v}</div>
             </div>
           ))}
         </div>
       </Panel>
 
-      <Panel className="p-5">
-        <h3 className="font-bold text-white mb-4">技能（{used.length}）</h3>
-        <div className="overflow-x-auto rounded-xl border border-slate-800">
-          <table className="w-full text-sm min-w-[560px]">
-            <thead className="bg-slate-950 text-slate-400 text-xs">
+      <Panel className="p-5 sm:p-6">
+        <h2 className="mb-4 font-serif text-[19px] font-bold text-slate-100">技能（{used.length}）</h2>
+        <div className="overflow-x-auto border border-line-strong">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead className="bg-slate-800 text-[14px] tracking-[0.1em] text-slate-500">
               <tr>
-                <th className="p-3 text-left">技能</th>
-                <th className="p-3 w-20 text-center">基础</th>
-                <th className="p-3 w-20 text-center">职业</th>
-                <th className="p-3 w-20 text-center">兴趣</th>
-                <th className="p-3 w-24 text-center">成功率</th>
+                <th className="p-3 text-left font-medium">技能</th>
+                <th className="w-20 p-3 text-center font-medium">基础</th>
+                <th className="w-20 p-3 text-center font-medium">职业</th>
+                <th className="w-20 p-3 text-center font-medium">兴趣</th>
+                <th className="w-24 p-3 text-center font-medium">成功率</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody>
               {used.map((s) => (
-                <tr key={s.id}>
+                <tr key={s.id} className="border-t border-line">
                   <td className="p-3 text-slate-200">
-                    {s.isOccupation ? <span className="text-emerald-500 mr-1.5">★</span> : <span className="text-slate-700 mr-1.5">·</span>}
+                    {s.isOccupation ? <span className="mr-1.5 text-emerald-600">★</span> : <span className="mr-1.5 text-slate-600">·</span>}
                     {s.name}
                   </td>
-                  <td className="p-3 text-center font-mono text-slate-500">{s.base}</td>
-                  <td className="p-3 text-center font-mono text-slate-300">{s.occ || '-'}</td>
-                  <td className="p-3 text-center font-mono text-slate-300">{s.interest || '-'}</td>
-                  <td className="p-3 text-center font-mono font-black text-emerald-400">{s.total}%</td>
+                  <td className="p-3 text-center font-serif text-slate-500 tabular">{s.base}</td>
+                  <td className="p-3 text-center font-serif text-slate-300 tabular">{s.occ || '-'}</td>
+                  <td className="p-3 text-center font-serif text-slate-300 tabular">{s.interest || '-'}</td>
+                  <td className="p-3 text-center font-serif font-bold text-slate-100 tabular">{s.total}%</td>
                 </tr>
               ))}
               {used.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-500">还没有分配技能点</td></tr>}
@@ -749,13 +909,13 @@ function GuestSheetView({ sheet, onBack, onEdit, onPrint, onDelete, onLogin, sho
         </div>
       </Panel>
 
-      <Panel className="p-5">
-        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-          <h3 className="font-bold text-white">备注</h3>
-          <span className="text-[11px] text-slate-500">只做记录，不会出现在骰娘指令与打印件上</span>
+      <Panel className="p-5 sm:p-6">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-serif text-[19px] font-bold text-slate-100">备注</h2>
+          <span className="text-[14px] text-slate-500">只做记录，不会出现在骰娘指令与打印件上</span>
         </div>
-        <p className="text-sm text-slate-300 whitespace-pre-wrap bg-slate-950 border border-slate-800 rounded-xl p-3">
-          {sheet.notes || <span className="text-slate-600">—</span>}
+        <p className="whitespace-pre-wrap border border-line-strong bg-paper-deep p-3 text-[16px] leading-relaxed text-slate-300">
+          {sheet.notes || <span className="text-slate-500">—</span>}
         </p>
       </Panel>
 
@@ -769,19 +929,227 @@ function GuestSheetView({ sheet, onBack, onEdit, onPrint, onDelete, onLogin, sho
   );
 }
 
-/** 顶部导航按钮 */
-function NavButton({ active, onClick, icon: Icon, label, tone = 'emerald' }) {
-  const tones = {
-    emerald: active ? 'bg-slate-800 text-emerald-400' : 'text-emerald-400/80 hover:bg-slate-800',
-    amber: active ? 'bg-slate-800 text-amber-400' : 'text-amber-500/70 hover:bg-slate-800',
-  };
+/** 顶部导航按钮：索书号 + 文字，悬停时一条朱砂底线从左抹开 */
+function NavButton({ active, onClick, label, index }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={cx('flex items-center space-x-2 px-3 py-2 rounded-md font-medium whitespace-nowrap transition', tones[tone])}
+      className={cx(
+        'group relative flex items-center gap-1.5 px-2 text-[14px] font-semibold tracking-[0.05em] whitespace-nowrap transition-colors duration-300 lg:px-2.5 lg:text-[14px]',
+        active ? 'text-[var(--c-masthead-ink)]' : 'text-[var(--c-masthead-ink)]/55 hover:text-[var(--c-masthead-ink)]',
+      )}
     >
-      <Icon className="h-4 w-4" /><span>{label}</span>
+      {index ? (
+        <span className={cx('font-mono text-[14px] tracking-[0.06em] transition-colors duration-300', active ? 'text-vermilion' : 'text-white/30 group-hover:text-vermilion/80')}>
+          {index}
+        </span>
+      ) : null}
+      <span>{label}</span>
+      <span
+        aria-hidden="true"
+        className={cx(
+          'absolute inset-x-2 bottom-0 h-[2px] origin-left bg-vermilion transition-transform duration-500 ease-[var(--ease-swift)]',
+          active ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100',
+        )}
+      />
     </button>
+  );
+}
+
+/**
+ * 昼 / 夜切换：报头上的小仪表开关。
+ * 左侧是滑轨（两端的太阳/月亮是待选目标），右侧一行等宽小字显示当前模式。
+ * 滑钮用回弹曲线滑行，钮内图标翻转淡入；按下时页面会扩散一圈印泥波纹。
+ */
+function ThemeToggle({ theme, onToggle, className }) {
+  const dark = theme === 'dark';
+  return (
+    <button
+      type="button"
+      data-theme-toggle
+      onClick={onToggle}
+      aria-label={dark ? '切换到盐纸模式' : '切换到深海模式'}
+      aria-pressed={dark}
+      title={dark ? '切换到盐纸模式（日间）' : '切换到深海模式（夜间）'}
+      className={cx(
+        'theme-toggle group flex h-[32px] shrink-0 items-center gap-2 rounded-full border border-white/20 bg-black/25 pl-[3px] pr-2',
+        'transition-colors duration-300 hover:border-white/45 hover:bg-black/35 focus-visible:border-vermilion',
+        className,
+      )}
+    >
+      <span aria-hidden="true" className="relative flex h-[26px] w-[50px] items-center rounded-full bg-black/30 shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)]">
+        <span
+          className={cx(
+            'relative z-10 ml-[2px] flex h-[22px] w-[22px] items-center justify-center rounded-full',
+            'bg-[var(--c-masthead-ink)] text-[var(--c-masthead)] shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_2px_6px_rgba(0,0,0,0.45)]',
+            'transition-transform duration-[520ms] ease-[var(--ease-bounce)] group-active:scale-95',
+            dark ? 'translate-x-[26px]' : 'translate-x-0',
+          )}
+        >
+          <ThemeMorph dark={dark} className="h-4 w-4" />
+        </span>
+      </span>
+      <span aria-hidden="true" className="hidden w-[34px] shrink-0 font-mono text-[14px] tracking-[0.16em] text-[var(--c-masthead-ink)]/60 sm:block">
+        {dark ? 'DEEP' : 'SALT'}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * 手机端导航抽屉：纸面从右侧滑入，Esc / 点遮罩关闭，打开时锁定页面滚动。
+ * 桌面端隐藏（渲染也无妨，用 md:hidden 隐藏）。
+ */
+function NavDrawer({ open, onClose, view, currentUser, isAdmin, theme, onToggleTheme, onNavigate, onNewModule, onLogout }) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const items = currentUser
+    ? [
+      { key: 'characters', label: '我的角色卡', icon: Users },
+      ...(isAdmin ? [
+        { key: 'kpDashboard', label: 'KP 控制台', icon: LayoutDashboard },
+        { key: 'kpCharacters', label: '角色卡管理', icon: Shield },
+        { key: 'kpReview', label: '审卡中心', icon: ClipboardCheck },
+      ] : []),
+      { key: 'profile', label: '个人中心', icon: User },
+    ]
+    : [
+      { key: 'characters', label: '免费车卡', icon: Users },
+      { key: 'auth', label: '登录身份', icon: User },
+    ];
+
+  return (
+    <div className="fixed inset-0 z-[80] md:hidden">
+      <div
+        className="scrim absolute inset-0 animate-in fade-in"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label="导航"
+        className="drawer-in absolute right-0 top-0 flex h-full w-[86%] max-w-[340px] flex-col border-l border-line-strong bg-paper shadow-[-24px_0_80px_-30px_rgba(1,4,8,0.8)]"
+      >
+        <div className="relative flex items-center justify-between border-b border-white/10 bg-[var(--c-masthead)] px-5 py-4 text-[var(--c-masthead-ink)]">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center border border-white/25 bg-white/[0.06]">
+              <SealMark size={23} className="text-[var(--c-masthead-ink)]" />
+            </span>
+            <span className="flex flex-col leading-none">
+              <span className="font-serif text-[16px] font-black tracking-[0.12em]">秘密调查档案馆</span>
+              <span className="mt-1 font-mono text-[14px] tracking-[0.22em] text-[var(--c-masthead-ink)]/45">THE DROWNED ARCHIVE</span>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭导航"
+            className="p-1.5 text-[var(--c-masthead-ink)]/70 transition-colors hover:bg-white/10 hover:text-vermilion"
+          >
+            <X className="h-6 w-6" strokeWidth={2} />
+          </button>
+        </div>
+
+        {currentUser ? (
+          <button
+            type="button"
+            onClick={() => onNavigate('profile')}
+            className="flex items-center gap-3 border-b border-line px-5 py-4 text-left"
+          >
+            <span className="flex h-9 w-9 items-center justify-center bg-ink font-serif text-[14px] font-bold text-paper-raised">
+              {String(currentUser.username || '?').slice(0, 1)}
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[14px] font-semibold text-ink">{currentUser.username}</span>
+              <span className="mt-1 block text-[14px] tracking-[0.18em] text-cyan-500">
+                {isAdmin ? '守秘人 · 馆藏管理' : '调查员 · 在册'}
+              </span>
+            </span>
+          </button>
+        ) : null}
+
+        <nav className="flex-1 overflow-y-auto px-4 py-4">
+          {items.map((it) => (
+            <button
+              key={it.key}
+              type="button"
+              onClick={() => onNavigate(it.key)}
+              className={cx(
+                'relative mb-1 flex w-full items-center gap-3 py-3 pl-4 pr-3 text-left font-serif text-[16px] font-semibold transition-colors',
+                view === it.key
+                  ? 'bg-paper-deep text-ink'
+                  : 'text-ink-soft hover:bg-paper-deep/70 hover:text-ink',
+              )}
+            >
+              <span
+                aria-hidden="true"
+                className={cx('absolute inset-y-2 left-0 w-[3px]', view === it.key ? 'bg-gradient-to-b from-cyan-400 to-amber-400' : 'bg-transparent')}
+              />
+              <it.icon className={cx('h-[16px] w-[16px]', view === it.key ? 'text-moon' : 'text-ink-mute')} strokeWidth={1.9} />
+              {it.label}
+            </button>
+          ))}
+
+          {isAdmin ? (
+            <>
+              <div className="my-4 h-px bg-line" />
+              <button
+                type="button"
+                onClick={onNewModule}
+                className="flex w-full items-center gap-3 py-3 pl-4 pr-3 text-left font-serif text-[16px] font-semibold text-ink-soft transition-colors hover:bg-paper-deep/70 hover:text-ink"
+              >
+                <Plus className="h-[16px] w-[16px] text-ink-mute" strokeWidth={1.9} />
+                发布模组
+              </button>
+            </>
+          ) : null}
+        </nav>
+
+        <div className="px-6 pb-5 pt-2">
+          <SealMark size={96} className="mx-auto text-ink/15" />
+        </div>
+
+        <div className="relative border-t border-line px-5 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <span className="block font-mono text-[14px] tracking-[0.22em] text-ink-mute">
+                {theme === 'dark' ? 'DEEP WATER' : 'SALT PAPER'}
+              </span>
+              <span className="mt-1 block font-serif text-[14.5px] font-bold text-ink">
+                {theme === 'dark' ? '深海模式' : '盐纸模式'}
+              </span>
+            </div>
+            <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+          </div>
+        </div>
+
+        {currentUser ? (
+          <div className="border-t border-line p-3">
+            <button
+              type="button"
+              onClick={onLogout}
+              className="flex w-full items-center gap-3 px-3 py-3 text-left text-[14px] text-ink-mute transition-colors hover:bg-red-500/10 hover:text-red-500"
+            >
+              <LogOut className="h-[16px] w-[16px]" strokeWidth={1.9} />
+              登出
+            </button>
+          </div>
+        ) : null}
+      </aside>
+    </div>
   );
 }

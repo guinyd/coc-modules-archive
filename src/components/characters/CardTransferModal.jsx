@@ -89,9 +89,9 @@ export function ExportCardModal({ open, onClose, character, onToast }) {
       <div className="space-y-5">
         <Panel className="p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h4 className="font-bold text-white flex items-center gap-2">
+            <h4 className="font-bold text-slate-100 flex items-center gap-2">
               <FileCode2 className="w-4 h-4 text-cyan-400" />角色卡编码
-              <span className="text-xs font-normal text-slate-500">别人粘贴这段编码即可还原成一张可编辑的卡</span>
+              <span className="text-[14px] font-normal text-slate-500">别人粘贴这段编码即可还原成一张可编辑的卡</span>
             </h4>
             <CopyButton text={code} label="复制编码" onToast={onToast} />
           </div>
@@ -99,10 +99,10 @@ export function ExportCardModal({ open, onClose, character, onToast }) {
             rows={5}
             readOnly
             value={busy ? '正在生成…' : code}
-            className="!font-mono !text-xs break-all"
+            className="!font-mono !text-[16px] break-all"
             onFocus={(e) => e.target.select()}
           />
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[14px] text-slate-500">
             编码里只有「玩家输入」（属性、技能点、背景、备注等），不含归属账号、审核状态与模组经历；
             导入方拿到后可以随意改，不会影响你的原卡。
           </p>
@@ -110,19 +110,19 @@ export function ExportCardModal({ open, onClose, character, onToast }) {
 
         <Panel className="p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h4 className="font-bold text-white flex items-center gap-2">
+            <h4 className="font-bold text-slate-100 flex items-center gap-2">
               <Download className="w-4 h-4 text-emerald-400" />骰娘机器人导入指令
-              <span className="text-xs font-normal text-slate-500">同官方 Excel「简化卡 骰娘导入」</span>
+              <span className="text-[14px] font-normal text-slate-500">同官方 Excel「简化卡 骰娘导入」</span>
             </h4>
             <div className="flex items-center gap-2">
-              <div className="flex rounded-lg border border-slate-700 overflow-hidden">
+              <div className="flex rounded-[3px] border border-line-strong overflow-hidden">
                 {['.', '。'].map((d) => (
                   <button
                     key={d}
                     type="button"
                     onClick={() => setDot(d)}
-                    className={cx('px-2.5 py-1 text-xs font-mono',
-                      dot === d ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-slate-200')}
+                    className={cx('px-2.5 py-1 text-[14px] font-mono',
+                      dot === d ? 'bg-emerald-600 text-paper' : 'bg-paper-raised text-slate-400 hover:text-slate-200')}
                   >
                     {d}st
                   </button>
@@ -138,17 +138,17 @@ export function ExportCardModal({ open, onClose, character, onToast }) {
                 type="button"
                 onClick={() => setBot(f.id)}
                 title={f.hint}
-                className={cx('px-2.5 py-1.5 rounded-md text-xs font-bold border transition',
+                className={cx('px-2.5 py-1.5 rounded-[3px] text-[14px] font-bold border transition',
                   bot === f.id
-                    ? 'bg-emerald-600 border-emerald-500 text-white'
-                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-emerald-500/50')}
+                    ? 'bg-emerald-600 border-emerald-500 text-paper'
+                    : 'bg-paper-raised border-line-strong text-slate-400 hover:border-emerald-500/50')}
               >
                 {f.label}
               </button>
             ))}
           </div>
-          <Textarea rows={5} readOnly value={botText} className="!font-mono !text-xs break-all" onFocus={(e) => e.target.select()} />
-          <p className="text-[11px] text-slate-500">
+          <Textarea rows={5} readOnly value={botText} className="!font-mono !text-[16px] break-all" onFocus={(e) => e.target.select()} />
+          <p className="text-[14px] text-slate-500">
             通用格式没有状态与武器；塔系 / 惠惠会在开头带上角色名；shiki Exp10 会额外带时代、性别、DB、体格、闪避、护甲与武器。
           </p>
         </Panel>
@@ -200,41 +200,41 @@ export function ImportCardModal({ open, onClose, onImport, onToast }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="COC7G1:……"
-            className="!font-mono !text-xs break-all"
+            className="!font-mono !text-[16px] break-all"
           />
         </Field>
         <div className="flex items-center gap-2">
           <Button onClick={doParse} disabled={busy || !text.trim()}>
             <Upload className="w-4 h-4" />{busy ? '解析中…' : '解析'}
           </Button>
-          {error ? <span className="text-xs text-red-400">{error}</span> : null}
+          {error ? <span className="text-[14px] text-red-400">{error}</span> : null}
           {sheet ? <Badge tone="emerald">解析成功</Badge> : null}
         </div>
 
         {sheet && parsed ? (
           <Panel className="p-4 space-y-3">
-            <div className="text-white font-bold flex flex-wrap items-center gap-2">
+            <div className="text-slate-100 font-bold flex flex-wrap items-center gap-2">
               {sheet.name || '未命名调查员'}
               <Badge tone="cyan">{parsed.occupation?.name || '未选择职业'}</Badge>
-              <span className="text-xs text-slate-500 font-normal">
+              <span className="text-[14px] text-slate-500 font-normal">
                 {sheet.age} 岁 · {sheet.era} · 已投点技能 {parsed.skills.filter((s) => s.used).length} 项
               </span>
             </div>
             <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 text-center">
               {CHARS.map((k) => (
-                <div key={k} className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5">
-                  <div className="text-[10px] text-slate-500">{CHAR_LABEL[k]}</div>
+                <div key={k} className="bg-slate-950 border border-line rounded-[3px] px-2 py-1.5">
+                  <div className="text-[14px] text-slate-500">{CHAR_LABEL[k]}</div>
                   <div className="font-mono font-bold text-slate-200">{parsed.eff[k]}</div>
                 </div>
               ))}
             </div>
             {sheet.notes ? (
-              <p className="text-xs text-slate-400 border-t border-slate-800 pt-2 whitespace-pre-wrap">
+              <p className="text-[14px] text-slate-400 border-t border-line pt-2 whitespace-pre-wrap">
                 备注：{sheet.notes.slice(0, 200)}{sheet.notes.length > 200 ? '…' : ''}
               </p>
             ) : null}
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[14px] text-slate-500">
                 导入后是一张新卡（草稿状态、无传奇标记、无审核记录），可以直接编辑再保存。
               </p>
               <Button onClick={() => onImport?.(sheet)}>创建为新角色卡</Button>

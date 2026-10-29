@@ -126,7 +126,7 @@
 │   │   └── errors.js             HttpError + 集中错误出口
 │   ├── routes/                   auth / users / modules / characters
 │   ├── tools/
-│   │   ├── smoke-test.mjs        后端冒烟测试（159 项断言，无框架）
+│   │   ├── smoke-test.mjs        后端冒烟测试（207 项断言，无框架）
 │   │   └── fixtures/             冒烟测试用的合成旧库夹具
 │   └── data/                     运行期数据（database.json / backups / audit）—— 已 gitignore
 │
@@ -404,10 +404,10 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ```bash
 # 本地出包（产物在 ../_release/，VERSION 里记着源码提交号）
-bash tools/make-release.sh ../_release v1.7.4
+bash tools/make-release.sh ../_release v2.0.0
 
 # 服务器上执行（路径换成你自己的站点根与后端目录）
-tar -xzf coc-archive-update-v1.7.4-<日期>.tar.gz && cd coc-archive-update-v1.7.4-<日期>
+tar -xzf coc-archive-update-v2.0.0-<日期>.tar.gz && cd coc-archive-update-v2.0.0-<日期>
 sudo bash apply-update.sh   --web <站点根>/index   --app <后端目录>   --service <服务名> --port 3000
 # 面板/容器方式部署的话，跑完记得把服务重启一次
 ```
@@ -447,10 +447,10 @@ cp backend/data/database.json /path/to/backup/database-$(date +%F).json
 改完代码，这三条命令必须全绿：
 
 ```bash
-npm run lint                                   # 0 error（12 条 warning 是 React Compiler 建议项）
-node backend/tools/smoke-test.mjs              # 后端 159 项断言
+npm run lint                                   # 0 error（18 条 warning 是 React Compiler 建议项）
+node backend/tools/smoke-test.mjs              # 后端 207 项断言
 npm run build                                  # 产物 dist/
-node tools/ui-check.mjs http://localhost:4173  # 界面 54 项断言（需 Chrome + 已启动服务）
+node tools/ui-check.mjs http://localhost:4173  # 界面 95 项断言（需 Chrome + 已启动服务）
 ```
 
 界面测试需要账号：`UI_USER=xxx UI_PASS=yyy node tools/ui-check.mjs …`
@@ -459,10 +459,10 @@ node tools/ui-check.mjs http://localhost:4173  # 界面 54 项断言（需 Chrom
 
 | 项目 | 结果 |
 | --- | --- |
-| `npm run lint` | ✅ 0 error / 12 warning |
-| 后端冒烟 | ✅ 159 / 159 |
-| 界面冒烟（真实 Chrome，跑生产产物） | ✅ 54 / 54 |
-| `npm run build` | ✅ JS 536 KB / gzip 149 KB；CSS 78 KB / gzip 12 KB |
+| `npm run lint` | ✅ 0 error / 18 warning |
+| 后端冒烟 | ✅ 207 / 207 |
+| 界面冒烟（真实 Chrome，跑生产产物） | ✅ 95 / 95 |
+| `npm run build` | ✅ JS 753.8 KB / gzip 203.7 KB；CSS 175.5 KB / gzip 30.2 KB |
 | 打印版面 | ✅ 一页 A4 容纳 57 行技能表，无溢出 |
 
 后端冒烟测试默认使用仓库内的**合成旧库夹具**（`backend/tools/fixtures/legacy-v1-database.json`，
@@ -558,7 +558,6 @@ node tools/screenshots.mjs http://127.0.0.1:4173 http://127.0.0.1:3000 docs/imag
 | 低 | `App.jsx` 仍有约 580 行 | 可把模组筛选/列表状态下沉为自定义 hook |
 | 低 | 无 CI | 建议接 GitHub Actions：lint + smoke + ui-check |
 | 低 | 模组封面只有一种风格 | 备选方案（星图 / 打字机卷宗 / 极简题铭）未实现；可按 `variant` 扩展 `ModuleCover.jsx` |
-| 低 | 页面标题仍是历史遗留的 `coc模组列表` | 与站点名不一致，属于早期版本残留 |
 
 ---
 

@@ -21,8 +21,16 @@ import { ExportCardModal, ImportCardModal } from './CardTransferModal.jsx';
 import LegendaryQuickModal from './LegendaryQuickModal.jsx';
 import EduQuickModal from './EduQuickModal.jsx';
 import {
-  Badge, Button, EmptyState, Input, Modal, Panel, Select, SectionTitle, cx,
+  Badge, Button, EmptyState, Input, Modal, PageHeader, Panel, Select, cx,
 } from '../ui.jsx';
+import { SealMark } from '../Emblem.jsx';
+
+const STATUS_SPINE = {
+  draft: 'bg-line-strong',
+  active: 'bg-cyan-500',
+  retired: 'bg-amber-500',
+  dead: 'bg-red-500',
+};
 
 /** 访客草稿是原始存档，这里就地算出与后端列表一致的摘要字段，卡片组件才能复用 */
 function buildGuestItems() {
@@ -43,155 +51,165 @@ function buildGuestItems() {
 const STATUS_TONE = { draft: 'slate', active: 'emerald', retired: 'amber', dead: 'red' };
 const REVIEW_TONE = { none: 'slate', pending: 'amber', approved: 'emerald', rejected: 'red' };
 
+const ACT = 'inline-flex items-center gap-1.5 rounded-[2px] px-2.5 py-1.5 text-[14px] leading-none text-ink-soft transition-colors duration-150 hover:bg-paper-deep/60 hover:text-ink disabled:opacity-50';
+const KP_ACT = 'inline-flex items-center gap-1.5 rounded-[2px] px-2 py-1.5 text-[14px] leading-none transition-colors duration-150';
+
 function CharacterCard({
   item, onOpen, onEdit, onPrint, onDelete, onDuplicate, showOwner, onPublish, guest,
   onLegendary, onEdu, onExport, onToggleWaiveAge, exporting,
 }) {
+  const kpAct = (on) => cx(
+    KP_ACT,
+    on
+      ? 'bg-ochre/[0.14] text-ochre ring-1 ring-inset ring-ochre/40'
+      : 'text-ink-soft hover:bg-paper-deep/60 hover:text-ink',
+  );
+  const hasKpActions = Boolean(onLegendary || onEdu || onToggleWaiveAge);
   return (
-    <Panel className="overflow-hidden flex flex-col hover:border-emerald-500/40 transition">
-      <div className="p-5 flex-1 space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="text-lg font-black text-white truncate">{item.name}</h3>
-            <p className="text-xs text-slate-500 truncate">
+    <article className="char-card group relative flex flex-col overflow-hidden border border-line-strong bg-paper-raised">
+      <span aria-hidden="true" className={cx('char-spine absolute inset-y-0 left-0 z-10', STATUS_SPINE[item.status] || 'bg-line-strong')} />
+      <div aria-hidden="true" className="char-seal pointer-events-none absolute -right-8 -top-10 text-moon">
+        <SealMark size={150} strokeWidth={0.9} />
+      </div>
+
+      <div className="relative flex flex-1 flex-col gap-4 p-4 pl-5">
+        <div className="flex items-start gap-3">
+          <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center border border-line-strong bg-gradient-to-br from-vermilion/10 via-paper-raised to-moon/10 font-serif text-[20px] font-bold leading-none text-ink">
+            {(item.name || '?').slice(0, 1)}
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="char-name truncate font-serif text-[21px] font-bold leading-[1.3] tracking-[0.01em] text-ink">{item.name}</h3>
+            <p className="mt-1.5 truncate text-[16px] leading-snug text-ink-soft">
               {item.occupationName} · {item.age} 岁 · {item.era}
             </p>
-          </div>
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            <Badge tone={STATUS_TONE[item.status] || 'slate'}>{STATUS_LABEL[item.status] || item.status}</Badge>
-            {guest
-              ? <Badge tone="amber">本机草稿</Badge>
-              : (item.reviewStatus && item.reviewStatus !== 'none'
-                ? <Badge tone={REVIEW_TONE[item.reviewStatus]}>{REVIEW_LABEL[item.reviewStatus]}</Badge>
-                : null)}
-            {item.isPublic ? <Badge tone="cyan">公开</Badge> : null}
-            {item.legendary?.enabled ? <Badge tone="red">传奇 +{item.legendaryBonusTotal || 0}</Badge> : null}
-            {item.agePenaltyWaived ? <Badge tone="emerald">免年龄减益</Badge> : null}
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <Badge tone={STATUS_TONE[item.status] || 'slate'} className="!text-[14px] !tracking-[0.08em]">{STATUS_LABEL[item.status] || item.status}</Badge>
+              {guest
+                ? <Badge tone="amber" className="!text-[14px] !tracking-[0.08em]">本机草稿</Badge>
+                : (item.reviewStatus && item.reviewStatus !== 'none'
+                  ? <Badge tone={REVIEW_TONE[item.reviewStatus]} className="!text-[14px] !tracking-[0.08em]">{REVIEW_LABEL[item.reviewStatus]}</Badge>
+                  : null)}
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="grid grid-cols-3 divide-x divide-line border-y border-line py-3">
           {[['HP', item.hp], ['SAN', item.san], ['MOV', item.mov]].map(([l, v]) => (
-            <div key={l} className="bg-slate-950 border border-slate-800 rounded-lg py-1.5">
-              <div className="text-[10px] text-slate-500">{l}</div>
-              <div className="font-mono font-black text-emerald-400">{v}</div>
+            <div key={l} className="px-1 text-center">
+              <div className="font-mono text-[14px] font-semibold tracking-[0.2em] text-ink-mute">{l}</div>
+              <div className="tabular mt-1.5 font-serif text-[23px] font-bold leading-none text-ink">{v}</div>
             </div>
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          <span className="flex items-center gap-1"><FileText className="w-3.5 h-3.5" />技能 {item.skillCount}</span>
-          {!guest && <span className="flex items-center gap-1"><BookOpen className="w-3.5 h-3.5" />模组 {item.moduleCount}</span>}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[14px] leading-[1.7] text-ink-soft">
+          <span className="flex items-center gap-1.5"><FileText className="h-4 w-4 text-ink-mute" />技能 {item.skillCount}</span>
+          {!guest && <span className="flex items-center gap-1.5"><BookOpen className="h-4 w-4 text-ink-mute" />模组 {item.moduleCount}</span>}
           {item.warningCount > 0
-            ? <span className="flex items-center gap-1 text-amber-400"><AlertTriangle className="w-3.5 h-3.5" />{item.warningCount} 项提示</span>
-            : <span className="flex items-center gap-1 text-emerald-500">规则校验通过</span>}
+            ? <span className="flex items-center gap-1.5 text-ochre"><AlertTriangle className="h-4 w-4" />{item.warningCount} 项提示</span>
+            : <span className="flex items-center gap-1.5 text-forest">规则校验通过</span>}
+          {(item.isPublic || item.legendary?.enabled || item.agePenaltyWaived) ? (
+            <span className="flex flex-wrap items-center gap-1.5">
+              {item.isPublic ? <span className="rounded-[2px] border border-moon/45 px-1.5 py-0.5 font-mono text-[14px] leading-none tracking-[0.08em] text-moon">公开</span> : null}
+              {item.legendary?.enabled ? <span className="rounded-[2px] border border-vermilion/40 px-1.5 py-0.5 font-mono text-[14px] leading-none tracking-[0.08em] text-vermilion">传奇 +{item.legendaryBonusTotal || 0}</span> : null}
+              {item.agePenaltyWaived ? <span className="rounded-[2px] border border-forest/45 px-1.5 py-0.5 font-mono text-[14px] leading-none tracking-[0.08em] text-forest">免年龄减益</span> : null}
+            </span>
+          ) : null}
           {!guest && item.eduGrowth ? (
             item.eduGrowth.settled
-              ? <span className="flex items-center gap-1 text-slate-400">
-                <GraduationCap className="w-3.5 h-3.5" />教育 +{item.eduGrowth.gain}
+              ? <span className="flex items-center gap-1.5 text-ink-soft">
+                <GraduationCap className="h-4 w-4 text-ink-mute" />教育 +{item.eduGrowth.gain}
                 （{eduGrowthLabel(item.eduGrowth)}）
                 {(item.eduGrowth.rerolls || 0) > 0 ? ` · 重掷 ${item.eduGrowth.rerolls} 次` : ''}
               </span>
-              : <span className="flex items-center gap-1 text-amber-400"><GraduationCap className="w-3.5 h-3.5" />教育未结算</span>
+              : <span className="flex items-center gap-1.5 text-ochre"><GraduationCap className="h-4 w-4" />教育未结算</span>
           ) : null}
         </div>
 
         {showOwner && (
-          <div className="flex items-center gap-1.5 text-xs text-slate-400 border-t border-slate-800 pt-3">
-            <UserIcon className="w-3.5 h-3.5" />{item.ownerName}
+          <div className="flex items-center gap-1.5 border-t border-line pt-2.5 text-[14px] text-ink-soft">
+            <UserIcon className="h-4 w-4 text-ink-mute" />{item.ownerName}
           </div>
         )}
       </div>
 
-      <div className="bg-slate-950/60 border-t border-slate-800 divide-y divide-slate-800/70">
-        {/* 第一行：常用操作 */}
-        <div className="flex flex-wrap items-center gap-1.5 p-2.5">
-          <Button variant="ghost" className="!py-1.5 !px-3 text-sm" onClick={() => onOpen(item)}>
-            <Eye className="w-4 h-4" />查看
-          </Button>
-          <Button variant="ghost" className="!py-1.5 !px-3 text-sm" onClick={() => onEdit(item)}>
-            <Edit className="w-4 h-4" />编辑
-          </Button>
-          <Button variant="ghost" className="!py-1.5 !px-3 text-sm" onClick={() => onPrint(item)}>
-            <Printer className="w-4 h-4" />打印
-          </Button>
-          <Button
-            variant="ghost"
-            className="!py-1.5 !px-3 text-sm"
+      <div className="char-actions border-t border-line px-2 py-2">
+        <div className="flex flex-wrap items-center gap-1">
+          <button type="button" className={ACT} onClick={() => onOpen(item)}><Eye className="h-4 w-4" strokeWidth={1.8} />查看</button>
+          <button type="button" className={ACT} onClick={() => onEdit(item)}><Edit className="h-4 w-4" strokeWidth={1.8} />编辑</button>
+          <button type="button" className={ACT} onClick={() => onPrint(item)}><Printer className="h-4 w-4" strokeWidth={1.8} />打印</button>
+          <button
+            type="button"
+            className={ACT}
             disabled={exporting}
             title="导出角色卡编码（给别人导入）或骰娘机器人导入指令"
             onClick={() => onExport(item)}
           >
-            <Share2 className="w-4 h-4" />{exporting ? '导出中…' : '导出'}
-          </Button>
+            <Share2 className="h-4 w-4" strokeWidth={1.8} />{exporting ? '导出中…' : '导出'}
+          </button>
+          <div className="flex-1" />
+          {guest && onPublish ? (
+            <button type="button" title="收录到档案馆" onClick={() => onPublish(item)} className="rounded-[2px] p-2 text-ochre transition-colors hover:bg-ochre/10">
+              <CloudUpload className="h-4 w-4" strokeWidth={1.8} />
+            </button>
+          ) : null}
+          {!guest && (
+            <button type="button" title="复制一张" onClick={() => onDuplicate(item)} className="rounded-[2px] p-2 text-ink-mute transition-colors hover:bg-paper-deep/60 hover:text-ink">
+              <Copy className="h-4 w-4" strokeWidth={1.8} />
+            </button>
+          )}
+          <button type="button" title="删除" onClick={() => onDelete(item)} className="rounded-[2px] p-2 text-ink-mute transition-colors hover:bg-vermilion/10 hover:text-vermilion">
+            <Trash2 className="h-4 w-4" strokeWidth={1.8} />
+          </button>
         </div>
 
-        {/* 第二行：KP 快捷裁定（传奇 / 年龄豁免 / 教育增强）+ 次要图标操作 */}
-        <div className="flex flex-wrap items-center gap-1.5 p-2.5">
-          {onLegendary || onEdu || onToggleWaiveAge ? (
-            <span className="text-[10px] font-bold text-amber-500/80 tracking-wider mr-0.5">KP 快捷</span>
-          ) : null}
-          {onLegendary || onEdu || onToggleWaiveAge ? (
-            <>
+        {hasKpActions ? (
+          <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-line pt-2">
+            <span className="mr-1 pl-1 font-mono text-[14px] font-semibold tracking-[0.18em] text-ink-mute">KP 快捷</span>
             {onLegendary ? (
-              <Button
-                variant={item.legendary?.enabled ? 'amber' : 'ghost'}
-                className="!py-1.5 !px-2.5 text-sm"
+              <button
+                type="button"
+                className={kpAct(Boolean(item.legendary?.enabled))}
                 title={item.legendary?.enabled
                   ? `传奇标记已开启（额外 +${item.legendaryBonusTotal || 0}），点击修改`
                   : '不解锁编辑，直接给这张卡开启传奇标记与额外调整值'}
                 onClick={() => onLegendary(item)}
               >
-                <Crown className="w-4 h-4" />传奇
-              </Button>
+                <Crown className="h-4 w-4" strokeWidth={1.8} />传奇
+                {item.legendary?.enabled ? `+${item.legendaryBonusTotal || 0}` : ''}
+              </button>
             ) : null}
             {onToggleWaiveAge ? (
-              <Button
-                variant={item.agePenaltyWaived ? 'amber' : 'ghost'}
-                className="!py-1.5 !px-2.5 text-sm"
+              <button
+                type="button"
+                className={kpAct(Boolean(item.agePenaltyWaived))}
                 title={item.agePenaltyWaived
                   ? '当前已豁免年龄减益（属性不因年龄下降、只保留教育成长），点击恢复'
                   : '一键豁免这张卡的年龄减益（只享受教育成长）'}
                 onClick={() => onToggleWaiveAge(item)}
               >
                 {item.agePenaltyWaived
-                  ? <><ShieldOff className="w-4 h-4" />恢复年龄</>
-                  : <><Shield className="w-4 h-4" />豁免年龄</>}
-              </Button>
+                  ? <><ShieldOff className="h-4 w-4" strokeWidth={1.8} />恢复年龄</>
+                  : <><Shield className="h-4 w-4" strokeWidth={1.8} />豁免年龄</>}
+              </button>
             ) : null}
             {onEdu ? (
-              <Button
-                variant={(item.eduGrowth?.granted || 0) > 0 ? 'amber' : 'ghost'}
-                className="!py-1.5 !px-2.5 text-sm"
+              <button
+                type="button"
+                className={kpAct((item.eduGrowth?.granted || 0) > 0)}
                 title="不解锁编辑：查看教育增强流水、授权重掷或重置"
                 onClick={() => onEdu(item)}
               >
-                <GraduationCap className="w-4 h-4" />教育
+                <GraduationCap className="h-4 w-4" strokeWidth={1.8} />教育
                 {(item.eduGrowth?.granted || 0) > 0 ? `（已授权 ${item.eduGrowth.granted}）` : ''}
-              </Button>
+              </button>
             ) : null}
-            </>
-          ) : null}
-          <div className="flex-1" />
-          {guest && onPublish ? (
-            <button type="button" title="收录到档案馆" onClick={() => onPublish(item)} className="p-2 text-amber-400 hover:text-amber-300">
-              <CloudUpload className="w-4 h-4" />
-            </button>
-          ) : null}
-          {!guest && (
-            <button type="button" title="复制一张" onClick={() => onDuplicate(item)} className="p-2 text-slate-400 hover:text-emerald-400">
-              <Copy className="w-4 h-4" />
-            </button>
-          )}
-          <button type="button" title="删除" onClick={() => onDelete(item)} className="p-2 text-slate-400 hover:text-red-400">
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
+          </div>
+        ) : null}
       </div>
-    </Panel>
+    </article>
   );
 }
-
 export default function CharacterList({
   mode = 'mine', currentUser, showToast, showConfirm, onOpen, onEdit, onPrint,
 }) {
@@ -349,32 +367,35 @@ export default function CharacterList({
 
   return (
     <div className="space-y-6">
-      <SectionTitle
-        icon={isKp ? Shield : Users}
+      <PageHeader
+        tone={isKp ? 'forest' : 'vermilion'}
+        eyebrow={isKp ? 'INVESTIGATOR DOSSIERS · 全站名册' : 'INVESTIGATOR ROSTER · 调查员名册'}
+        meta={`MCMXX — ${new Date().getFullYear()} · 内部流通`}
         title={title}
+        titleClassName="moon-text !text-[34px] sm:!text-[42px]"
         desc={desc}
-        right={(
-          <div className="flex items-center gap-2">
-            {!isGuest && <Button variant="ghost" onClick={load}><RefreshCw className={cx('w-4 h-4', loading && 'animate-spin')} />刷新</Button>}
+        actions={(
+          <div className="flex flex-wrap items-center gap-2">
+            {!isGuest && <Button variant="ghost" className="!px-3 !py-1.5 !text-[14px]" onClick={load}><RefreshCw className={cx('h-4 w-4', loading && 'animate-spin')} />刷新</Button>}
             {isGuest && guestItems.length > 0 && !currentUser && (
-              <Button variant="ghost" onClick={() => onEdit(null)} disabled><LogIn className="w-4 h-4" />登录后可收录</Button>
+              <Button variant="ghost" className="!px-3 !py-1.5 !text-[14px]" onClick={() => onEdit(null)} disabled><LogIn className="h-4 w-4" />登录后可收录</Button>
             )}
             {isGuest && guestItems.length > 0 && currentUser && (
-              <Button variant="amber" onClick={() => setImportOpen(true)}>
-                <CloudUpload className="w-4 h-4" />一键收录 {guestItems.length} 张
+              <Button variant="amber" className="!px-3 !py-1.5 !text-[14px]" onClick={() => setImportOpen(true)}>
+                <CloudUpload className="h-4 w-4" />一键收录 {guestItems.length} 张
               </Button>
             )}
-            <Button variant="ghost" onClick={() => setCardImportOpen(true)}>
-              <Upload className="w-4 h-4" />导入角色卡
+            <Button variant="ghost" className="!px-3 !py-1.5 !text-[14px]" onClick={() => setCardImportOpen(true)}>
+              <Upload className="h-4 w-4" />导入角色卡
             </Button>
-            <Button onClick={() => onEdit(null)}><Plus className="w-4 h-4" />新建角色卡</Button>
+            <Button className="!px-3.5 !py-1.5 !text-[14px]" onClick={() => onEdit(null)}><Plus className="h-4 w-4" />新建角色卡</Button>
           </div>
         )}
       />
 
       {isGuest && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-200 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+        <div className="flex items-start gap-2.5 border-l-2 border-amber-600/50 bg-amber-500/[0.05] px-4 py-3.5 text-[14px] leading-[1.8] text-ink-soft">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ochre" strokeWidth={1.9} />
           <span>
             访客角色卡只保存在这台设备的浏览器里（当前 {capacity.count} / {capacity.max} 张），换设备或清理浏览器数据会丢失。
             {currentUser ? '你已登录，可以随时把草稿收录进档案馆。' : '登录后可以一键收录，并解锁模组经历关联等功能。'}
@@ -383,39 +404,40 @@ export default function CharacterList({
       )}
 
       {!isGuest && (
-        <Panel className="p-4 space-y-3">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="space-y-3.5">
+          <div className="relative grid gap-3 border border-line-strong bg-paper-raised/60 p-3.5 sm:grid-cols-2 lg:grid-cols-4 sm:p-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索角色名 / 玩家名…" className="!pl-9" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-mute" />
+              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索角色名 / 玩家名…" className="!rounded-full !pl-9 !text-[16px]" />
             </div>
-            <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <Select value={status} onChange={(e) => setStatus(e.target.value)} className="!text-[16px]">
               <option value="">全部状态</option>
               {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </Select>
-            <Select value={reviewStatus} onChange={(e) => setReviewStatus(e.target.value)}>
+            <Select value={reviewStatus} onChange={(e) => setReviewStatus(e.target.value)} className="!text-[16px]">
               <option value="">全部审核状态</option>
               {Object.entries(REVIEW_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </Select>
             {isKp ? (
-              <Select value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+              <Select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className="!text-[16px]">
                 <option value="">全部玩家</option>
                 {meta.owners.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
               </Select>
             ) : (
-              <Select value={moduleId} onChange={(e) => setModuleId(e.target.value)}>
+              <Select value={moduleId} onChange={(e) => setModuleId(e.target.value)} className="!text-[16px]">
                 <option value="">全部模组经历</option>
                 {meta.moduleOptions.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
               </Select>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-            <span className="flex items-center gap-1"><Filter className="w-3.5 h-3.5" />共 {stats.total} 张</span>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[14px] tracking-[0.02em] text-ink-soft">
+            <span className="flex items-center gap-1.5"><Filter className="h-4 w-4" strokeWidth={1.8} />共 {stats.total} 张</span>
+            <span className="h-2.5 w-px bg-white/10" />
             <span>使用中 {stats.active}</span>
-            {isKp && stats.pending > 0 ? <span className="text-amber-400">待审核 {stats.pending}</span> : null}
-            <span className={stats.warned ? 'text-amber-400' : ''}>有规则提示 {stats.warned}</span>
+            {isKp && stats.pending > 0 ? <span className="text-ochre">待审核 {stats.pending}</span> : null}
+            <span className={stats.warned ? 'text-ochre' : ''}>有规则提示 {stats.warned}</span>
           </div>
-        </Panel>
+        </div>
       )}
 
       {loading && displayItems.length === 0 ? (
@@ -508,18 +530,18 @@ export default function CharacterList({
 
       <Modal open={importOpen} onClose={() => setImportOpen(false)} title="收录访客角色卡">
         <div className="space-y-4">
-          <p className="text-sm text-slate-300">
+          <p className="text-[16px] leading-[1.7] text-ink-soft">
             下面的 {guestItems.length} 张角色卡将从本机浏览器转移到你的档案馆账号下：
           </p>
           <ul className="space-y-1 max-h-60 overflow-y-auto">
             {guestItems.map((g) => (
-              <li key={g.id} className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
-                <span className="text-slate-200">{g.name || '未命名调查员'}</span>
-                <span className="text-xs text-slate-500">{g.occupationName || '无职业'}</span>
+              <li key={g.id} className="flex flex-wrap items-center justify-between gap-2 rounded-[2px] border border-line bg-paper-deep px-3 py-2.5 text-[14.5px]">
+                <span className="text-ink">{g.name || '未命名调查员'}</span>
+                <span className="text-[14px] text-ink-mute">{g.occupationName || '无职业'}</span>
               </li>
             ))}
           </ul>
-          <p className="text-xs text-slate-500">收录成功后本机草稿会被清理，避免重复。</p>
+          <p className="text-[14px] text-ink-mute">收录成功后本机草稿会被清理，避免重复。</p>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setImportOpen(false)}>取消</Button>
             <Button onClick={importAllGuest} disabled={importing}>

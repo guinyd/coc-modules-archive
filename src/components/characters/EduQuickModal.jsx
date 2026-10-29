@@ -49,32 +49,32 @@ export default function EduQuickModal({ open, item, onClose, onSaved, showToast 
             {g.settled && (g.granted || 0) <= 0 ? <Badge tone="slate">已锁定</Badge> : null}
             {(g.granted || 0) > 0 ? <Badge tone="cyan">已授权 {g.granted} 次重掷</Badge> : null}
             {(g.rerolls || 0) > 0 ? <Badge tone="amber">已重掷 {g.rerolls} 次</Badge> : null}
-            <span className="text-xs text-slate-400">
+            <span className="text-[14px] text-slate-400">
               当前提升 <b className="font-mono text-cyan-300">+{item.eduGrowth?.gain ?? item.ageAdjust?.eduBonus ?? 0}</b>
               （{eduGrowthLabel(g)}）
             </span>
           </div>
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[14px] text-slate-500">
             年龄：{item.age} 岁 · 该年龄需要 {item.ageAdjust?.eduChecks ?? 0} 次教育增强检定。
             {g.settled ? '玩家已结算，默认锁定；要再掷必须先「授权重掷」。' : '玩家还没结算，可以自己掷第一次或手动补录。'}
           </p>
         </Panel>
 
         <Panel className="p-4">
-          <div className="flex items-center gap-2 mb-2 text-sm font-bold text-white">
+          <div className="flex items-center gap-2 mb-2 text-sm font-bold text-slate-100">
             <History className="w-4 h-4 text-cyan-400" />结算流水（{attempts.length}）
           </div>
           {attempts.length === 0 ? (
-            <p className="text-xs text-slate-500">还没有任何结算记录。</p>
+            <p className="text-[14px] text-slate-500">还没有任何结算记录。</p>
           ) : (
-            <div className="space-y-1 text-xs">
+            <div className="space-y-1 text-[14px]">
               {attempts.map((a, i) => (
-                <div key={i} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-slate-800/60 pb-1 last:border-0">
+                <div key={i} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-line/60 pb-1 last:border-0">
                   <span className="text-slate-500">#{i + 1}</span>
-                  <span className={cx('px-1.5 py-0.5 rounded border text-[10px]',
+                  <span className={cx('px-1.5 py-0.5 rounded border text-[14px]',
                     a.via === 'manual' ? 'border-cyan-600/50 text-cyan-300'
                       : a.via === 'reroll' ? 'border-amber-500/40 text-amber-300'
-                        : 'border-slate-700 text-slate-400')}
+                        : 'border-line-strong text-slate-400')}
                   >
                     {VIA_LABEL[a.via] || a.via}
                   </span>
@@ -91,19 +91,19 @@ export default function EduQuickModal({ open, item, onClose, onSaved, showToast 
             </div>
           )}
           {g.lastGrant?.by ? (
-            <p className="text-[11px] text-slate-500 mt-2">
+            <p className="text-[14px] text-slate-500 mt-2">
               最近授权：{g.lastGrant.by}{g.lastGrant.at ? ` · ${new Date(g.lastGrant.at).toLocaleString('zh-CN')}` : ''}
             </p>
           ) : null}
           {g.lastReset?.by ? (
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[14px] text-slate-500">
               最近重置：{g.lastReset.by}{g.lastReset.at ? ` · ${new Date(g.lastReset.at).toLocaleString('zh-CN')}` : ''}
             </p>
           ) : null}
         </Panel>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
+          <p className="text-[14px] text-slate-500 flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
             只有 KP 能授权/重置；玩家即使绕过界面直接发请求，服务端也会保留存档值。
           </p>

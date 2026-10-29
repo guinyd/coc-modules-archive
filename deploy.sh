@@ -4,7 +4,7 @@
 #
 # 用法：
 #   bash deploy.sh [目标目录] [--dry-run]
-#   例：bash deploy.sh <站点静态根>
+#   例：bash deploy.sh /var/www/coc-index
 #
 # 做的事：
 #   1) 校验工作区干净（有未提交改动时提示，避免把半成品发上去）

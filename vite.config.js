@@ -23,6 +23,11 @@ export default defineConfig({
   ],
   server: {
     proxy: apiProxy,
+    // 有的编辑器（含 DSH 的 edit 工具）用「临时目录 + 改名」原子写文件。
+    // Vite 的 chokidar 偶尔会在改名瞬间锁住临时文件并抛 EBUSY，把 dev server 带崩；
+    // 这类 *.tmpdir 不是源码，直接忽略。
+    // .tmp-build 是构建时给 esbuild/Chrome 用的临时目录（绝不能被 watch，否则 EBUSY）。
+    watch: { ignored: ['**/*.tmpdir/**', '**/.*.tmpdir/**', '**/.tmp-build/**'] },
   },
   preview: {
     port: 4173,

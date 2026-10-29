@@ -16,7 +16,7 @@
 
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
-  AlertCircle, BookOpen, CloudUpload, Crown, Dices, Download, FileText, Info, Plus, Save,
+  AlertCircle, ArrowLeft, BookOpen, CloudUpload, Crown, Dices, Download, FileText, Info, Plus, Save,
   Search, Sword, Trash2, User as UserIcon, Wand2, X,
 } from 'lucide-react';
 import {
@@ -30,8 +30,11 @@ import {
 import { rollCharacteristics, rollLuck, educationCheck } from '../../lib/dice.js';
 import { apiPost, apiPut } from '../../lib/api.js';
 import {
-  Badge, Button, Field, Input, Modal, NumberInput, Panel, Select, Textarea, Toggle, WarningList, cx,
+  Badge, Button, Field, Input, Modal, NumberInput, Panel, Select, Tabs, Textarea, Toggle, WarningList, cx,
 } from '../ui.jsx';
+
+/** 表单字段：label 12.5px、输入框 15px、占位符至少 ink-mute（ui.jsx 的 Field 写死 9.5px，这里用后代选择器覆盖） */
+const FIELD = 'text-[16px] [&>span:first-child>span:first-child]:text-[14px] [&>span:first-child>span:first-child]:tracking-[0.12em] [&>span:first-child>span:first-child]:text-ink-soft [&_input::placeholder]:text-ink-mute [&_textarea::placeholder]:text-ink-mute';
 
 const TABS = [
   { key: 'base', label: '属性与职业', icon: UserIcon },
@@ -105,14 +108,14 @@ function ProgressBar({ used, total, label, hint }) {
   const over = used > total;
   return (
     <div>
-      <div className="flex justify-between text-xs mb-1">
-        <span className="text-slate-400">{label}{hint ? <span className="text-slate-600 ml-1">{hint}</span> : null}</span>
-        <span className={cx('font-mono font-bold', over ? 'text-red-400' : 'text-emerald-400')}>
+      <div className="mb-2 flex items-baseline justify-between gap-3 text-[14px] leading-[1.6]">
+        <span className="text-ink-soft">{label}{hint ? <span className="ml-1 text-ink-mute">{hint}</span> : null}</span>
+        <span className={cx('tabular font-mono font-semibold', over ? 'text-vermilion' : 'text-forest')}>
           {used} / {total}{over ? `（超 ${used - total}）` : `（余 ${total - used}）`}
         </span>
       </div>
-      <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
-        <div className={cx('h-full transition-all', over ? 'bg-red-500' : 'bg-emerald-500')} style={{ width: `${pct}%` }} />
+      <div className="h-[4px] overflow-hidden rounded-full bg-paper-deep">
+        <div className={cx('h-full transition-all duration-300', over ? 'bg-vermilion/90' : 'bg-forest/80')} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -125,11 +128,11 @@ function DerivedGrid({ derived }) {
     ['闪避', derived.dodgeBase], ['母语', derived.ownLanguageBase],
   ];
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 divide-line border-y border-line-strong sm:grid-cols-4 sm:divide-x">
       {items.map(([label, value]) => (
-        <div key={label} className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-center">
-          <div className="text-[11px] text-slate-500 mb-0.5">{label}</div>
-          <div className="text-xl font-black text-emerald-400 font-mono">{value}</div>
+        <div key={label} className="px-3.5 py-4">
+          <div className="mb-1.5 font-mono text-[14px] font-semibold tracking-[0.14em] text-ink-mute">{label}</div>
+          <div className="tabular font-serif text-[24px] font-bold leading-none text-ink">{value}</div>
         </div>
       ))}
     </div>
@@ -148,13 +151,13 @@ function SpecPicker({ skillKey, value, onChange }) {
           onChange={(e) => onChange(e.target.value.slice(0, 24))}
           maxLength={24}
           placeholder="自定义方向"
-          className="w-28 px-2 py-1 bg-slate-950 border border-emerald-700 rounded text-xs text-white"
+          className="w-32 rounded-[2px] border border-line-strong bg-paper-raised px-2 py-1.5 text-[14px] text-ink"
         />
         <button
           type="button"
           title="回到预设列表"
           onClick={() => { setCustomMode(false); onChange(''); }}
-          className="text-slate-500 hover:text-emerald-400"
+          className="text-ink-mute transition-colors hover:text-vermilion"
         >
           <X className="w-3.5 h-3.5" />
         </button>
@@ -167,7 +170,7 @@ function SpecPicker({ skillKey, value, onChange }) {
       onChange={(e) => {
         if (e.target.value === '__custom__') { setCustomMode(true); onChange(''); } else onChange(e.target.value);
       }}
-      className="w-32 px-2 py-1 bg-slate-950 border border-slate-700 rounded text-xs text-white cursor-pointer"
+      className="w-36 cursor-pointer rounded-[2px] border border-line-strong bg-paper-raised px-2 py-1.5 text-[14px] text-ink"
     >
       <option value="">（未选择）</option>
       {options.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -196,17 +199,17 @@ function SpecialtyPicker({ group, onToggle }) {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <p className="text-xs text-slate-500">
-          {group.label} <span className="text-emerald-500 font-bold">{group.picked.length}/{group.limit}</span>
+        <p className="text-[14px] text-ink-soft">
+          {group.label} <span className="font-bold text-ochre">{group.picked.length}/{group.limit}</span>
         </p>
         {searchable ? (
           <div className="flex items-center gap-1.5">
-            <Search className="w-3.5 h-3.5 text-slate-500" />
+            <Search className="h-4 w-4 text-ink-mute" />
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="搜索特长…"
-              className="!py-1.5 !w-40 text-xs"
+              className="!py-1.5 !w-40 text-[14px]"
             />
           </div>
         ) : null}
@@ -219,19 +222,19 @@ function SpecialtyPicker({ group, onToggle }) {
               key={k}
               type="button"
               onClick={() => onToggle(group.type, k)}
-              className={cx('px-2 py-1 rounded-md text-xs font-bold border transition',
-                on ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-emerald-500/50')}
+              className={cx('rounded-[2px] border px-2.5 py-1.5 text-[14px] font-semibold transition',
+                on ? 'border-forest bg-forest text-paper-raised' : 'border-line-strong bg-paper-raised text-ink-soft hover:border-forest/50')}
             >
               {SKILL_BY_KEY[k]?.name || k}
             </button>
           );
         })}
         {searchable && list.length === 0 ? (
-          <p className="text-xs text-slate-500 py-1">没有匹配的本职候选；规则书之外的技能可用下方「自定义技能」并勾选本职。</p>
+          <p className="py-1 text-[14px] leading-[1.7] text-ink-mute">没有匹配的本职候选；规则书之外的技能可用下方「自定义技能」并勾选本职。</p>
         ) : null}
       </div>
       {group.picked.length > 0 ? (
-        <p className="text-[11px] text-slate-500 mt-2">
+        <p className="mt-2 text-[14px] text-ink-mute">
           已选：{group.picked.map((k) => SKILL_BY_KEY[k]?.name || k).join('、')}
         </p>
       ) : null}
@@ -267,12 +270,13 @@ export default function CharacterEditor({
    * ⚠️ 踩坑记录：早先这个 effect 把 loadCharacter / initialSheet / onCancel / showToast 都放进了依赖，
    * 而父组件每次渲染都会新建这些函数 —— 于是 App 一重渲染（比如 toast 消失）effect 就重跑，
    * 把正在编辑的 sheet 重置成空白，表现为「年龄补正还没保存，属性就被清零」。
-   * 现在改用 ref 保存回调，依赖只保留 characterId / guest，并且同一张卡只加载一次。
+   * 现在改用 ref 保存回调，依赖只保留 characterId / guest。
+   * 注意不能再用「已加载过就跳过」的 loadedRef 守卫：React StrictMode 会先挂载再卸载、
+   * 第二次 effect 直接 return，导致首次请求的 alive 已被置 false，页面永远停在载入中。
    */
   const loaderRef = useRef(loadCharacter);
   const toastRef = useRef(showToast);
   const cancelRef = useRef(onCancel);
-  const loadedRef = useRef(null);
   useEffect(() => { loaderRef.current = loadCharacter; }, [loadCharacter]);
   useEffect(() => { toastRef.current = showToast; }, [showToast]);
   useEffect(() => { cancelRef.current = onCancel; }, [onCancel]);
@@ -285,8 +289,6 @@ export default function CharacterEditor({
       setLoading(false);
       return undefined;
     }
-    if (loadedRef.current === characterId) return undefined;
-    loadedRef.current = characterId;
     let alive = true;
     setLoading(true);
     Promise.resolve(loaderRef.current?.())
@@ -298,7 +300,6 @@ export default function CharacterEditor({
         setDirty(false);
       })
       .catch((err) => {
-        loadedRef.current = null;
         if (alive) { toastRef.current?.(err.message, 'error'); cancelRef.current?.(); }
       })
       .finally(() => { if (alive) setLoading(false); });
@@ -695,7 +696,7 @@ export default function CharacterEditor({
   }, [occ]);
 
   if (loading) {
-    return <Panel><div className="p-12 text-center text-slate-400">正在载入角色卡…</div></Panel>;
+    return <Panel><div className="p-12 text-center text-ink-soft">正在载入角色卡…</div></Panel>;
   }
 
   const totalSkills = derived.skills.length;
@@ -704,32 +705,36 @@ export default function CharacterEditor({
   return (
     <div className="space-y-5">
       {/* 顶部操作条 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 border border-slate-800 rounded-2xl p-4">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" onClick={tryClose}>← 返回</Button>
-          <div>
-            <div className="text-white font-black text-lg flex items-center gap-2 flex-wrap">
-              {sheet.name || '未命名调查员'}
-              {guest ? <Badge tone="amber">访客模式 · 仅存本机</Badge> : null}
-              {dirty ? <Badge tone="amber">未保存</Badge> : <Badge tone="emerald">已同步</Badge>}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <Button variant="ghost" className="!px-2.5 !py-1.5 !text-[14px]" onClick={tryClose}>
+            <ArrowLeft className="h-4 w-4" />返回
+          </Button>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate font-serif text-[25px] font-bold leading-[1.2] tracking-[0.01em] text-ink sm:text-[27px]">
+                {sheet.name || '未命名调查员'}
+              </span>
+              {guest ? <Badge tone="amber" className="!text-[14px]">访客模式 · 仅存本机</Badge> : null}
+              {dirty ? <Badge tone="amber" className="!text-[14px]">未保存</Badge> : <Badge tone="emerald" className="!text-[14px]">已同步</Badge>}
             </div>
-            <div className="text-xs text-slate-500">
+            <div className="mt-1.5 text-[14px] text-ink-soft">
               {occ ? occ.name : '未选择职业'} · {sheet.age} 岁 · {STATUS_LABEL[sheet.status]}
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" onClick={() => onCancel?.()} className="!py-2">取消</Button>
-          <Button onClick={handleSave} disabled={saving}>
-            <Save className="w-4 h-4" />
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <Button variant="ghost" className="!px-3 !py-1.5 !text-[14px]" onClick={() => onCancel?.()}>取消</Button>
+          <Button className="!px-3.5 !py-1.5 !text-[14px]" onClick={handleSave} disabled={saving}>
+            <Save className="h-4 w-4" />
             {saving ? '保存中…' : (guest ? '保存到本机' : '保存角色卡')}
           </Button>
         </div>
       </div>
 
       {guest && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm text-amber-200 flex items-start gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-amber-600/50 bg-amber-500/[0.06] px-4 py-3.5">
+          <div className="flex items-start gap-2 text-[14px] leading-[1.8] text-ink-soft">
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
             <span>
               访客模式下可以完整车卡、打印与导出 PDF，数据只保存在<b>本机浏览器</b>，不会收录进档案馆。
@@ -743,8 +748,8 @@ export default function CharacterEditor({
       )}
 
       {!occ ? (
-        <div className="rounded-xl border border-red-500/40 bg-red-500/5 p-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm text-red-200 flex items-start gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-vermilion/45 bg-vermilion/[0.05] px-4 py-3.5">
+          <div className="flex items-start gap-2 text-[14px] leading-[1.8] text-ink-soft">
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
             <span>还没有选择职业。必须先选定职业，系统才能标记本职技能并算出职业技能点。</span>
           </div>
@@ -753,9 +758,9 @@ export default function CharacterEditor({
       ) : null}
 
       {/* 派生值总览 */}
-      <Panel className="p-5 space-y-4">
+      <Panel className="space-y-4 p-5 sm:p-6">
         <DerivedGrid derived={derived} />
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <ProgressBar used={derived.spent.occupation} total={derived.budget.occupation} label="职业技能点" />
           <ProgressBar used={derived.spent.interest} total={derived.budget.interest} label="兴趣技能点" hint="（智力×2）" />
         </div>
@@ -763,42 +768,32 @@ export default function CharacterEditor({
       </Panel>
 
       {/* 分页 */}
-      <div className="flex flex-wrap gap-1 border-b border-slate-800">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={cx('px-4 py-3 font-bold text-sm flex items-center gap-2 transition border-b-2 -mb-px',
-              tab === t.key ? 'text-emerald-400 border-emerald-500' : 'text-slate-500 border-transparent hover:text-slate-300')}
-          >
-            <t.icon className="w-4 h-4" />{t.label}
-          </button>
-        ))}
+      <div className="border-b border-line">
+        <Tabs items={TABS.map((t) => ({ value: t.key, label: t.label, icon: t.icon }))} value={tab} onChange={setTab} className="border-b-0 [&_[data-tab]]:text-[14px]" />
       </div>
 
       {/* ---------------------------------------------------- 属性与职业 */}
       {tab === 'base' && (
         <div className="space-y-5 animate-in fade-in">
           <div className="grid lg:grid-cols-3 gap-5">
-            <Panel className="p-5 lg:col-span-2 space-y-5">
-              <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="角色名" required>
+            <Panel className="space-y-5 p-5 sm:p-6 lg:col-span-2">
+              <div className="grid gap-4 sm:grid-cols-2 sm:gap-5">
+                <Field className={FIELD} label="角色名" required>
                   <Input value={sheet.name} maxLength={40} onChange={(e) => patch({ name: e.target.value })} placeholder="例：约翰·H·沃特雷" />
                 </Field>
-                <Field label="玩家名"><Input value={sheet.playerName} maxLength={40} onChange={(e) => patch({ playerName: e.target.value })} /></Field>
-                <Field label="年龄" hint="15-90 之间；影响属性补正与教育增强">
+                <Field className={FIELD} label="玩家名"><Input value={sheet.playerName} maxLength={40} onChange={(e) => patch({ playerName: e.target.value })} /></Field>
+                <Field className={FIELD} label="年龄" hint="15-90 之间；影响属性补正与教育增强">
                   <NumberInput min={15} max={120} value={sheet.age} onChange={setAge} />
                 </Field>
-                <Field label="性别"><Input value={sheet.gender} maxLength={20} onChange={(e) => patch({ gender: e.target.value })} /></Field>
-                <Field label="住地"><Input value={sheet.residence} maxLength={40} onChange={(e) => patch({ residence: e.target.value })} /></Field>
-                <Field label="故乡 / 出身"><Input value={sheet.birthplace} maxLength={40} onChange={(e) => patch({ birthplace: e.target.value })} /></Field>
-                <Field label="时代">
+                <Field className={FIELD} label="性别"><Input value={sheet.gender} maxLength={20} onChange={(e) => patch({ gender: e.target.value })} /></Field>
+                <Field className={FIELD} label="住地"><Input value={sheet.residence} maxLength={40} onChange={(e) => patch({ residence: e.target.value })} /></Field>
+                <Field className={FIELD} label="故乡 / 出身"><Input value={sheet.birthplace} maxLength={40} onChange={(e) => patch({ birthplace: e.target.value })} /></Field>
+                <Field className={FIELD} label="时代">
                   <Select value={sheet.era} onChange={(e) => patch({ era: e.target.value })}>
                     {ERAS.map((x) => <option key={x} value={x}>{x}</option>)}
                   </Select>
                 </Field>
-                <Field label="状态">
+                <Field className={FIELD} label="状态">
                   <Select value={sheet.status} onChange={(e) => patch({ status: e.target.value })}>
                     {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
                   </Select>
@@ -806,7 +801,7 @@ export default function CharacterEditor({
               </div>
 
               {currentUser?.role === 'admin' && !character?.id && !guest && (
-                <Field label="归属玩家" hint="KP 可代玩家建卡">
+                <Field className={FIELD} label="归属玩家" hint="KP 可代玩家建卡">
                   <Select value={ownerId} onChange={(e) => { setOwnerId(e.target.value); setDirty(true); }}>
                     {owners.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
                   </Select>
@@ -824,34 +819,34 @@ export default function CharacterEditor({
                 </Button>
               </div>
               {rollLog.length > 0 && (
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-400 font-mono space-y-0.5 max-h-32 overflow-y-auto">
+                <div className="max-h-32 space-y-0.5 overflow-y-auto rounded-[2px] border border-line-strong bg-paper-deep/50 p-3 font-mono text-[14px] leading-[1.7] text-ink-soft">
                   {rollLog.map((l, i) => <div key={i}>{l}</div>)}
                 </div>
               )}
             </Panel>
 
-            <Panel className="p-5 space-y-4">
-              <h3 className="font-bold text-white flex items-center"><UserIcon className="w-4 h-4 mr-2 text-emerald-500" />职业</h3>
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
-                <div className="text-white font-bold flex items-center gap-2">
+            <Panel className="space-y-4 p-5 sm:p-6">
+              <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink"><UserIcon className="h-4 w-4 text-ochre" />职业</h3>
+              <div className="rounded-[2px] border border-line-strong bg-paper-deep/50 p-4">
+                <div className="flex flex-wrap items-center gap-2 font-serif text-[14px] font-bold tracking-[0.02em] text-ink">
                   {occ ? occ.name : '未选择'}
                   {occ?.isCustom ? <Badge tone="cyan">KP 模板</Badge> : null}
                 </div>
                 {occ ? (
                   <>
-                    <div className="text-xs text-slate-400 mt-1">
-                      信用评级 <b className="text-amber-400">{occ.cr[0]}-{occ.cr[1]}</b> · 技能点 {occ.attr}
+                    <div className="mt-1.5 text-[14px] leading-[1.7] text-ink-soft">
+                      信用评级 <b className="text-ochre">{occ.cr[0]}-{occ.cr[1]}</b> · 技能点 {occ.attr}
                     </div>
-                    {occ.desc ? <p className="text-xs text-slate-500 mt-2 leading-relaxed">{occ.desc}</p> : null}
-                    {occ.note ? <p className="text-[11px] text-amber-400/90 mt-1.5">官方备注：{occ.note}</p> : null}
+                    {occ.desc ? <p className="mt-2 text-[16px] leading-[1.75] text-ink-soft">{occ.desc}</p> : null}
+                    {occ.note ? <p className="mt-1.5 text-[14px] leading-[1.7] text-ochre">官方备注：{occ.note}</p> : null}
                     {occ.skillText ? (
-                      <p className="text-[11px] text-slate-500 mt-2 leading-relaxed border-t border-slate-800 pt-2">
-                        <span className="text-slate-400">本职技能原文：</span>{occ.skillText}
+                      <p className="mt-2.5 border-t border-line pt-2.5 text-[16px] leading-[1.75] text-ink-soft">
+                        <span className="text-ink-soft">本职技能原文：</span>{occ.skillText}
                       </p>
                     ) : null}
                   </>
                 ) : (
-                  <p className="text-xs text-slate-500 mt-1">选择职业后会自动标记本职技能并算出职业技能点。</p>
+                  <p className="mt-1.5 text-[16px] leading-[1.7] text-ink-soft">选择职业后会自动标记本职技能并算出职业技能点。</p>
                 )}
               </div>
               <Button variant="ghost" className="w-full" onClick={() => setOccOpen(true)}>
@@ -861,23 +856,23 @@ export default function CharacterEditor({
               {occ && (
                 <div className="space-y-3">
                   <div>
-                    <p className="text-xs text-slate-500 mb-2">固定本职技能</p>
+                    <p className="mb-2 text-[14px] font-semibold tracking-[0.04em] text-ink-soft">固定本职技能</p>
                     <div className="flex flex-wrap gap-1.5">
                       {[...new Set(occ.keys)].map((k) => (
-                        <Badge key={k} tone="emerald">★ {SKILL_BY_KEY[k]?.name || k}</Badge>
+                        <Badge key={k} tone="emerald" className="!text-[14px] !tracking-[0.02em]">★ {SKILL_BY_KEY[k]?.name || k}</Badge>
                       ))}
-                      <Badge tone="amber">★ 信用评级</Badge>
+                      <Badge tone="amber" className="!text-[14px] !tracking-[0.02em]">★ 信用评级</Badge>
                     </div>
                   </div>
 
                   {branchHints.size > 0 && (
                     <div>
-                      <p className="text-xs text-slate-500 mb-2">官方指定 / 建议的专攻方向</p>
+                      <p className="mb-2 text-[14px] font-semibold tracking-[0.04em] text-ink-soft">官方指定 / 建议的专攻方向</p>
                       <div className="space-y-1">
                         {[...branchHints.values()].map((h) => (
-                          <div key={h.key} className="text-[11px] text-amber-300">
+                          <div key={h.key} className="text-[14px] leading-[1.7] text-ink-soft">
                             {h.name}：{h.options.join(' / ')}
-                            <span className="text-amber-500/80 ml-1">{h.required ? '（指定）' : '（从中选择）'}</span>
+                            <span className="ml-1 text-ink-mute">{h.required ? '（指定）' : '（从中选择）'}</span>
                           </div>
                         ))}
                       </div>
@@ -886,7 +881,7 @@ export default function CharacterEditor({
 
                   {(occ.choices || []).map((group, i) => (
                     <div key={i}>
-                      <p className="text-xs text-slate-500 mb-2">任选其一（第 {i + 1} 组）</p>
+                      <p className="mb-2 text-[14px] font-semibold tracking-[0.04em] text-ink-soft">任选其一（第 {i + 1} 组）</p>
                       <div className="flex flex-wrap gap-1.5">
                         {group.map((k) => {
                           const on = (sheet.occPicks?.choices || [])[i] === k;
@@ -895,8 +890,8 @@ export default function CharacterEditor({
                               key={k}
                               type="button"
                               onClick={() => setChoice(i, k)}
-                              className={cx('px-2 py-1 rounded-md text-xs font-bold border transition',
-                                on ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-emerald-500/50')}
+                              className={cx('rounded-[2px] border px-2.5 py-1.5 text-[14px] font-semibold transition',
+                                on ? 'border-forest bg-forest text-paper-raised' : 'border-line-strong bg-paper-raised text-ink-soft hover:border-forest/50')}
                             >
                               {SKILL_BY_KEY[k]?.name || k}
                             </button>
@@ -914,21 +909,21 @@ export default function CharacterEditor({
             </Panel>
           </div>
 
-          <Panel className="p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-white flex items-center"><Info className="w-4 h-4 mr-2 text-emerald-500" />属性明细与年龄补正</h3>
-              <span className="text-xs text-slate-500">{derived.ageAdjust.label}</span>
+          <Panel className="p-5 sm:p-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink"><Info className="h-4 w-4 text-ochre" />属性明细与年龄补正</h3>
+              <span className="text-[14px] text-ink-mute">{derived.ageAdjust.label}</span>
             </div>
             {currentUser?.role === 'admin' ? (
-              <div className="mb-4 rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/[0.05] p-4 space-y-3">
+              <div className="mb-4 space-y-3 rounded-[2px] border border-amber-600/40 bg-amber-500/[0.06] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-sm text-fuchsia-200 flex items-center gap-2">
+                  <div className="flex items-center gap-2 text-[14px] leading-[1.75] text-ink-soft">
                     <Crown className="w-4 h-4" />
                     <b>KP 专属设置</b>
-                    <span className="text-fuchsia-300/70 text-xs">（玩家无法自行修改，保存时会由服务端强制保留）</span>
+                    <span className="text-[14px] text-ink-mute">（玩家无法自行修改，保存时会由服务端强制保留）</span>
                   </div>
                   {derived.legendary.by ? (
-                    <span className="text-[11px] text-slate-500">
+                    <span className="text-[14px] text-ink-mute">
                       传奇标记由 {derived.legendary.by} 于
                       {derived.legendary.at ? new Date(derived.legendary.at).toLocaleString('zh-CN') : '未知时间'} 开启
                     </span>
@@ -949,7 +944,7 @@ export default function CharacterEditor({
                   />
                 </div>
                 {sheet.legendary?.enabled ? (
-                  <Field label="传奇备注（选填）" hint="例如：完成《××》战役，KP 奖励突破上限">
+                  <Field className={FIELD} label="传奇备注（选填）" hint="例如：完成《××》战役，KP 奖励突破上限">
                     <Input
                       value={sheet.legendary?.note || ''}
                       maxLength={200}
@@ -959,42 +954,42 @@ export default function CharacterEditor({
                 ) : null}
               </div>
             ) : derived.legendary.enabled ? (
-              <div className="mb-4 rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/[0.05] p-3 text-xs text-fuchsia-200 flex items-center gap-2">
+              <div className="mb-4 flex items-center gap-2 rounded-[2px] border border-amber-600/40 bg-amber-500/[0.06] p-3.5 text-[14px] leading-[1.75] text-ink-soft">
                 <Crown className="w-4 h-4" />
                 KP 已为这张卡开启<b>传奇标记</b>：允许突破属性 99 上限，额外调整值单独成栏。
-                {derived.legendary.note ? <span className="text-fuchsia-300/80">（{derived.legendary.note}）</span> : null}
+                {derived.legendary.note ? <span className="text-ochre/80">（{derived.legendary.note}）</span> : null}
               </div>
             ) : null}
 
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {ALL_CHARS.map((k) => (
-                <div key={k} className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                <div key={k} className="rounded-[2px] border border-line-strong bg-paper-deep/50 p-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-slate-300 font-bold">
-                      {CHAR_LABEL[k]} <span className="text-slate-600 font-mono text-xs">{k}</span>
+                    <span className="text-[14px] font-bold text-ink">
+                      {CHAR_LABEL[k]} <span className="font-mono text-[14px] text-ink-mute">{k}</span>
                     </span>
-                    <span className="text-xs text-slate-500 font-mono">半 {derived.half[k]} / 五 {derived.fifth[k]}</span>
+                    <span className="font-mono text-[14px] text-ink-mute">半 {derived.half[k]} / 五 {derived.fifth[k]}</span>
                   </div>
                   <div className="flex items-end gap-2">
                     <div className="flex-1">
-                      <div className="text-[10px] text-slate-500 mb-0.5">掷骰值</div>
+                      <div className="mb-1 font-mono text-[14px] font-semibold tracking-[0.06em] text-ink-mute">掷骰值</div>
                       <NumberInput value={sheet.chars[k]} onChange={(v) => setChar(k, v)} className="!py-2" />
                     </div>
                     {derived.legendary.enabled ? (
                       <div className="w-20">
-                        <div className="text-[10px] text-fuchsia-400 mb-0.5">传奇 +</div>
+                        <div className="mb-1 font-mono text-[14px] font-semibold tracking-[0.06em] text-ochre">传奇 +</div>
                         <NumberInput
                           min={0}
                           max={999}
                           value={sheet.legendaryBonus?.[k] || 0}
                           onChange={(v) => setLegendaryBonus(k, v)}
-                          className="!py-2 !border-fuchsia-700/60"
+                          className="!py-2 !border-amber-700/60"
                         />
                       </div>
                     ) : null}
                     <div className="text-right shrink-0 w-16">
-                      <div className="text-[10px] text-slate-500">有效值</div>
-                      <div className={cx('font-mono font-black', derived.eff[k] !== derived.raw[k] ? 'text-amber-400' : 'text-emerald-400')}>
+                      <div className="font-mono text-[14px] font-semibold tracking-[0.06em] text-ink-mute">有效值</div>
+                      <div className={cx('font-mono text-[17px] font-bold', derived.eff[k] !== derived.raw[k] ? 'text-ochre' : 'text-forest')}>
                         {derived.eff[k]}
                       </div>
                     </div>
@@ -1002,34 +997,34 @@ export default function CharacterEditor({
                 </div>
               ))}
             </div>
-            <div className="grid sm:grid-cols-2 gap-4 mt-4">
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Toggle
                 checked={sheet.applyAgeAdjust}
                 onChange={(v) => patch({ applyAgeAdjust: v })}
                 label="自动套用年龄补正"
                 hint="外貌为固定减值；力量/体型/体质/敏捷为合计减 N 点，由玩家自行分配"
               />
-              <Field label="护甲减值（可选）" hint="穿戴重型护甲时移动力下降">
+              <Field className={FIELD} label="护甲减值（可选）" hint="穿戴重型护甲时移动力下降">
                 <NumberInput min={0} max={10} value={sheet.armorPenalty} onChange={(v) => patch({ armorPenalty: v === '' ? 0 : v })} />
               </Field>
             </div>
 
             {/* 年龄补正分配：除外貌外都是「合计 −N，自行分配」*/}
             {sheet.applyAgeAdjust && derived.ageAdjust.poolPoints > 0 && (
-              <div className={cx('mt-4 p-4 rounded-xl border',
-                derived.ageAdjust.allocComplete ? 'border-slate-700 bg-slate-950' : 'border-amber-500/40 bg-amber-500/5')}>
+              <div className={cx('mt-4 p-4 rounded-[3px] border',
+                derived.ageAdjust.allocComplete ? 'border-line-strong bg-paper-deep' : 'border-amber-600/45 bg-amber-500/[0.06]')}>
                 <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                  <div className="text-sm text-slate-200">
-                    <b className="text-amber-300">年龄补正分配</b>
-                    <span className="text-slate-400 ml-2">
+                  <div className="text-[14px] leading-[1.8] text-ink">
+                    <b className="text-ochre">年龄补正分配</b>
+                    <span className="ml-2 text-ink-soft">
                       {derived.ageAdjust.poolKeys.map((k) => CHAR_LABEL[k]).join(' / ')} 合计需减少
-                      <b className="text-amber-300 font-mono mx-1">{derived.ageAdjust.poolPoints}</b>点
+                      <b className="text-ochre font-mono mx-1">{derived.ageAdjust.poolPoints}</b>点
                       {derived.ageAdjust.app !== 0 ? `（外貌固定 ${derived.ageAdjust.app}）` : ''}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={cx('text-xs font-mono font-bold',
-                      derived.ageAdjust.allocComplete ? 'text-emerald-400' : 'text-amber-400')}>
+                    <span className={cx('font-mono text-[14px] font-bold',
+                      derived.ageAdjust.allocComplete ? 'text-forest' : 'text-ochre')}>
                       已分配 {derived.ageAdjust.allocSum} / {derived.ageAdjust.poolPoints}
                     </span>
                     <Button variant="subtle" onClick={() => resetAgeAlloc('even')}>平均分配</Button>
@@ -1038,21 +1033,21 @@ export default function CharacterEditor({
                 </div>
                 <div className="flex flex-wrap gap-3">
                   {derived.ageAdjust.poolKeys.map((k) => (
-                    <label key={k} className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
-                      <span className="text-xs text-slate-300 font-bold">{CHAR_LABEL[k]}</span>
-                      <span className="text-xs text-slate-500">−</span>
+                    <label key={k} className="flex items-center gap-2 rounded-[2px] border border-line-strong bg-paper-raised px-3 py-2">
+                      <span className="text-[14px] font-bold text-ink-soft">{CHAR_LABEL[k]}</span>
+                      <span className="text-[14px] text-ink-mute">−</span>
                       <NumberInput
                         min={0}
                         max={derived.ageAdjust.poolPoints}
                         value={derived.ageAdjust.alloc[k] || 0}
                         onChange={(v) => setAgeAlloc(k, v)}
-                        className="!py-1 !w-16 text-sm"
+                        className="!py-1.5 !w-16 text-[14px]"
                       />
                     </label>
                   ))}
                 </div>
                 {!derived.ageAdjust.allocComplete && (
-                  <p className="text-[11px] text-amber-400 mt-2">
+                  <p className="mt-2 text-[14px] leading-[1.7] text-ochre">
                     {derived.ageAdjust.poolPoints - derived.ageAdjust.allocSum > 0
                       ? `还有 ${derived.ageAdjust.poolPoints - derived.ageAdjust.allocSum} 点没有分配；`
                       : `已经多分配了 ${derived.ageAdjust.allocSum - derived.ageAdjust.poolPoints} 点；`}
@@ -1063,33 +1058,33 @@ export default function CharacterEditor({
             )}
 
             {derived.ageAdjust.luckRolls > 1 && (
-              <div className="mt-4 p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm text-amber-200">
-                  15-19 岁：幸运可以掷两次取较高值（当前幸运 <b className="font-mono">{sheet.chars.Luck || 0}</b>）。
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[2px] border border-amber-600/40 bg-amber-500/[0.06] p-4">
+                <div className="text-[14px] leading-[1.8] text-ink-soft">
+                  15-19 岁：幸运可以掷两次取较高值（当前幸运 <b className="font-mono text-ink">{sheet.chars.Luck || 0}</b>）。
                 </div>
                 <Button variant="ghost" onClick={doRollLuck}><Dices className="w-4 h-4" />幸运掷两次取高</Button>
               </div>
             )}
 
             {sheet.applyAgeAdjust && (
-              <div className="mt-4 p-4 rounded-xl border border-cyan-500/30 bg-cyan-500/5 space-y-3">
+              <div className="mt-4 space-y-3 rounded-[2px] border border-moon/35 bg-moon/[0.05] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-sm text-cyan-200">
+                  <div className="text-[14px] leading-[1.8] text-ink-soft">
                     教育增强（年龄成长）
                     {derived.ageAdjust.eduChecks > 0 ? (
                       <>
-                        ：该年龄需要进行 <b className="text-cyan-300">{derived.ageAdjust.eduChecks}</b> 次检定
+                        ：该年龄需要进行 <b className="text-moon">{derived.ageAdjust.eduChecks}</b> 次检定
                         （D100 &gt; 当前教育则教育 +1D10）
                       </>
-                    ) : <span className="text-slate-400">：该年龄不需要检定，也可手动录入（面团补录）</span>}
+                    ) : <span className="text-ink-soft">：该年龄不需要检定，也可手动录入（面团补录）</span>}
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     {derived.eduGrowth.settled
-                      ? <Badge tone="emerald">已结算</Badge>
-                      : <Badge tone="amber">未结算</Badge>}
-                    {eduLocked ? <Badge tone="slate">已锁定</Badge> : null}
-                    {eduGranted > 0 ? <Badge tone="cyan">KP 已授权 {eduGranted} 次重掷</Badge> : null}
-                    {derived.eduGrowth.rerolls > 0 ? <Badge tone="amber">已重掷 {derived.eduGrowth.rerolls} 次</Badge> : null}
+                      ? <Badge tone="emerald" className="!text-[14px]">已结算</Badge>
+                      : <Badge tone="amber" className="!text-[14px]">未结算</Badge>}
+                    {eduLocked ? <Badge tone="slate" className="!text-[14px]">已锁定</Badge> : null}
+                    {eduGranted > 0 ? <Badge tone="cyan" className="!text-[14px]">KP 已授权 {eduGranted} 次重掷</Badge> : null}
+                    {derived.eduGrowth.rerolls > 0 ? <Badge tone="amber" className="!text-[14px]">已重掷 {derived.eduGrowth.rerolls} 次</Badge> : null}
                     {derived.ageAdjust.eduChecks > 0 && (
                       <Button variant="ghost" onClick={doEduChecks} disabled={eduLocked}>
                         <Dices className="w-4 h-4" />{derived.eduGrowth.settled ? '重掷并结算' : '自动检定并结算'}
@@ -1099,7 +1094,7 @@ export default function CharacterEditor({
                 </div>
 
                 <div className="flex flex-wrap items-end gap-3">
-                  <Field label={eduLocked ? '提升总值（已锁定）' : '提升总值（可手动录入）'} className="!w-52">
+                  <Field label={eduLocked ? '提升总值（已锁定）' : '提升总值（可手动录入）'} className={cx('!w-52', FIELD)}>
                     <NumberInput min={0} max={999} value={sheet.eduBonus} onChange={setEduBonusManual} disabled={eduLocked} />
                   </Field>
                   {isKp ? (
@@ -1110,66 +1105,66 @@ export default function CharacterEditor({
                   ) : (
                     <Button variant="subtle" onClick={clearEduBonus} disabled={eduLocked}>清零教育补正</Button>
                   )}
-                  <span className="text-xs text-slate-500 pb-2">
+                  <span className="pb-2 text-[14px] text-ink-mute">
                     有效教育 = 掷骰教育 + 提升总值，改动即时生效
                   </span>
                 </div>
 
                 {eduLocked ? (
-                  <p className="text-[11px] text-amber-400">
+                  <p className="text-[14px] leading-[1.7] text-ochre">
                     教育增强已结算并锁定：玩家不能自助重掷或清零（服务端同样会拦）。需要重掷请在
                     「角色卡管理 / 审卡中心」或本页点「授权重掷一次」，或直接「重置教育增强」。
                   </p>
                 ) : eduGranted > 0 ? (
-                  <p className="text-[11px] text-cyan-300">
+                  <p className="text-[14px] leading-[1.7] text-moon">
                     KP 已授权 {eduGranted} 次重掷：玩家点「重掷并结算」时会自动用掉一次，并记入流水。
                   </p>
                 ) : null}
 
                 {derived.eduGrowth.attempts?.length ? (
-                  <div className="text-xs text-slate-400 bg-slate-950/60 border border-slate-800 rounded-lg p-3 space-y-1">
-                    <div className="text-slate-300 font-bold">
+                  <div className="space-y-1.5 rounded-[2px] border border-line-strong bg-paper-deep/40 p-3 text-[14px] leading-[1.7] text-ink-soft">
+                    <div className="text-[14px] font-bold text-ink">
                       结算流水（共 {derived.eduGrowth.attempts.length} 次
                       {derived.eduGrowth.rerolls > 0 ? `，其中重掷 ${derived.eduGrowth.rerolls} 次` : ''}）
                     </div>
                     {derived.eduGrowth.attempts.map((a, i) => (
                       <div key={i} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                        <span className="text-slate-500">#{i + 1}</span>
-                        <span className={cx('px-1.5 py-0.5 rounded border text-[10px]',
-                          a.via === 'manual' ? 'border-cyan-600/50 text-cyan-300'
-                            : a.via === 'reroll' ? 'border-amber-500/40 text-amber-300'
-                              : 'border-slate-700 text-slate-400')}
+                        <span className="text-ink-mute">#{i + 1}</span>
+                        <span className={cx('rounded-[2px] border px-1.5 py-0.5 text-[14px]',
+                          a.via === 'manual' ? 'border-moon/50 text-moon'
+                            : a.via === 'reroll' ? 'border-amber-600/45 text-ochre'
+                              : 'border-line-strong text-ink-soft')}
                         >
                           {a.via === 'manual' ? '手动录入' : a.via === 'reroll' ? '授权重掷' : '自动检定'}
                         </span>
                         <span>{a.manual ? '' : `检定 ${a.count} 次`}</span>
-                        <span>提升 <b className="text-cyan-300 font-mono">+{a.gain}</b></span>
-                        <span className="text-slate-500">累计 {a.totalAfter}</span>
-                        {a.by ? <span className="text-slate-500">by {a.by}</span> : null}
-                        {a.at ? <span className="text-slate-600">{new Date(a.at).toLocaleString('zh-CN')}</span> : null}
+                        <span>提升 <b className="text-moon font-mono">+{a.gain}</b></span>
+                        <span className="text-ink-mute">累计 {a.totalAfter}</span>
+                        {a.by ? <span className="text-ink-mute">by {a.by}</span> : null}
+                        {a.at ? <span className="text-ink-mute">{new Date(a.at).toLocaleString('zh-CN')}</span> : null}
                         {a.rolls?.length ? (
-                          <span className="font-mono text-slate-500">
+                          <span className="font-mono text-ink-mute">
                             {a.rolls.map((r) => `D100=${r.roll}→+${r.gain}`).join('、')}
                           </span>
                         ) : null}
                       </div>
                     ))}
                     {derived.eduGrowth.lastGrant?.by ? (
-                      <div className="text-slate-500">
+                      <div className="text-ink-mute">
                         最近授权：{derived.eduGrowth.lastGrant.by}
                         {derived.eduGrowth.lastGrant.at ? ` · ${new Date(derived.eduGrowth.lastGrant.at).toLocaleString('zh-CN')}` : ''}
                       </div>
                     ) : null}
                     {derived.eduGrowth.lastReset?.by ? (
-                      <div className="text-slate-500">
+                      <div className="text-ink-mute">
                         最近重置：{derived.eduGrowth.lastReset.by}
                         {derived.eduGrowth.lastReset.at ? ` · ${new Date(derived.eduGrowth.lastReset.at).toLocaleString('zh-CN')}` : ''}
                       </div>
                     ) : null}
-                    <div className="text-slate-600">流水随角色卡保存，KP 在管理列表、审卡中心与详情页都能看到。</div>
+                    <div className="text-ink-mute">流水随角色卡保存，KP 在管理列表、审卡中心与详情页都能看到。</div>
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-500">
+                  <p className="text-[16px] leading-[1.7] text-ink-soft">
                     还没有结算过。KP 会在审卡时看到「教育增强未结算」；掷过骰或用面团补录后，提示会自动消失。
                   </p>
                 )}
@@ -1181,20 +1176,20 @@ export default function CharacterEditor({
 
       {/* ---------------------------------------------------- 技能 */}
       {tab === 'skills' && (
-        <Panel className="p-5 space-y-4">
+        <Panel className="space-y-4 p-5 sm:p-6">
           <div className="flex flex-wrap items-center gap-3 justify-between">
-            <h3 className="font-bold text-white flex items-center">
-              <Wand2 className="w-4 h-4 mr-2 text-emerald-500" />技能分配
-              <span className="ml-2 text-xs font-normal text-slate-500">已投点 {usedCount} / {totalSkills} 项</span>
+            <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink">
+              <Wand2 className="h-4 w-4 text-ochre" />技能分配
+              <span className="ml-2 text-[14px] font-normal text-ink-mute">已投点 {usedCount} / {totalSkills} 项</span>
             </h3>
-            <div className="flex items-center gap-2">
-              <Select value={skillFilter} onChange={(e) => setSkillFilter(e.target.value)} className="!py-2 !w-auto text-sm">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Select value={skillFilter} onChange={(e) => setSkillFilter(e.target.value)} className="!py-2 !w-auto text-[16px]">
                 <option value="all">显示全部技能</option>
                 <option value="used">仅显示已投点</option>
                 <option value="occ">仅显示本职技能</option>
                 <option value="spec">仅显示专攻技能</option>
               </Select>
-              <Input value={skillQuery} onChange={(e) => setSkillQuery(e.target.value)} placeholder="搜索技能…" className="!py-2 !w-40" />
+              <Input value={skillQuery} onChange={(e) => setSkillQuery(e.target.value)} placeholder="搜索技能…" className="!py-2 !w-40 text-[16px]" />
             </div>
           </div>
 
@@ -1204,21 +1199,21 @@ export default function CharacterEditor({
           </div>
 
           {occ && (
-            <div className="text-xs text-slate-400 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[14px] leading-[1.7] text-ink-soft">
               <span>
                 当前职业信用评级要求：
-                <b className={cx('font-mono ml-1', derived.creditInRange ? 'text-emerald-400' : 'text-red-400')}>
+                <b className={cx('font-mono ml-1', derived.creditInRange ? 'text-forest' : 'text-vermilion')}>
                   {occ.cr[0]}-{occ.cr[1]}%
                 </b>
-                <span className="ml-1 text-slate-500">（当前 {derived.creditRating}%）</span>
+                <span className="ml-1 text-ink-mute">（当前 {derived.creditRating}%）</span>
               </span>
-              <span className="text-slate-500">★ = 本职技能，可用职业点提升</span>
+              <span className="text-ink-mute">★ = 本职技能，可用职业点提升</span>
             </div>
           )}
 
-          <div className="overflow-x-auto rounded-xl border border-slate-800">
-            <table className="w-full text-sm min-w-[820px]">
-              <thead className="bg-slate-950 text-slate-400 text-xs uppercase">
+          <div className="overflow-x-auto rounded-[2px] border border-line-strong">
+            <table className="w-full min-w-[820px] text-[14.5px] leading-[1.6]">
+              <thead className="bg-paper-deep/70 text-[14px] text-ink-mute uppercase">
                 <tr>
                   <th className="p-2 w-10 text-center" title="本局游戏内大成功过就打个勾（会打印在角色卡上）">成功</th>
                   <th className="p-3 text-left">技能</th>
@@ -1231,7 +1226,7 @@ export default function CharacterEditor({
                   <th className="p-3 w-16 text-center">五值</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-line-strong">
                 {visibleSkills.map((s) => {
                   const isCredit = s.special === 'credit';
                   const isMythos = s.special === 'cthulhu';
@@ -1240,10 +1235,10 @@ export default function CharacterEditor({
                     <tr
                       key={s.id}
                       className={cx(
-                        'hover:bg-slate-800/30',
-                        s.isOccupation && 'bg-emerald-500/[0.04]',
-                        isCredit && (creditBad ? 'bg-red-500/[0.08]' : 'bg-amber-500/[0.06]'),
-                        isMythos && 'bg-fuchsia-500/[0.06]',
+                        'hover:bg-paper-deep/50',
+                        s.isOccupation && 'bg-forest/[0.04]',
+                        isCredit && (creditBad ? 'bg-vermilion/[0.06]' : 'bg-amber-500/[0.06]'),
+                        isMythos && 'bg-moon/[0.06]',
                       )}
                     >
                       <td className="p-2 text-center">
@@ -1258,11 +1253,11 @@ export default function CharacterEditor({
                       <td className="p-2">
                         <div className="flex items-center gap-2 flex-wrap">
                           {s.kind === 'custom'
-                            ? <span className="text-cyan-400 font-bold" title="自定义技能">✎</span>
+                            ? <span className="text-moon font-bold" title="自定义技能">✎</span>
                             : (s.isOccupation
-                              ? <span className="text-emerald-500 font-bold" title="本职技能">★</span>
-                              : <span className="text-slate-700">·</span>)}
-                          <span className={cx('text-slate-200', (isCredit || isMythos) && 'font-bold text-white')}>
+                              ? <span className="text-ochre font-bold" title="本职技能">★</span>
+                              : <span className="text-ink-mute/60">·</span>)}
+                          <span className={cx('text-ink-soft', (isCredit || isMythos) && 'font-bold text-ink')}>
                             {SKILL_BY_KEY[s.key]?.name || s.name}
                           </span>
                           {s.spec ? (
@@ -1274,10 +1269,10 @@ export default function CharacterEditor({
                                 const ok = Boolean(s.custom) && hint.options.includes(s.custom);
                                 return (
                                   <span
-                                    className={cx('text-[11px] px-1.5 py-0.5 rounded border whitespace-nowrap',
+                                    className={cx('whitespace-nowrap rounded-[2px] border px-1.5 py-0.5 text-[14px]',
                                       ok
-                                        ? 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10'
-                                        : 'border-amber-500/40 text-amber-300 bg-amber-500/10')}
+                                        ? 'border-forest/40 text-forest bg-forest/10'
+                                        : 'border-amber-600/45 text-ochre bg-ochre/10')}
                                     title={`官方本职技能原文要求该专攻方向${hint.required ? '（指定）' : '（建议从中选择）'}，请 KP 留意`}
                                   >
                                     本职{hint.required ? '指定' : '建议'}：{hint.options.join(' / ')}
@@ -1294,68 +1289,68 @@ export default function CharacterEditor({
                                 onChange={(e) => setSkillCustom(s.id, e.target.value.slice(0, 24))}
                                 maxLength={24}
                                 placeholder={NAMED_SKILL_HINT[s.key]?.placeholder || '请填写'}
-                                className={cx('w-40 px-2 py-1 bg-slate-950 border rounded text-xs text-white',
-                                  s.custom ? 'border-slate-700' : 'border-amber-600/60')}
+                                className={cx('w-44 rounded-[2px] border border-line-strong bg-paper-raised px-2 py-1.5 text-[14px] text-ink',
+                                  s.custom ? 'border-line-strong' : 'border-amber-600/60')}
                               />
                               {!s.custom ? (
-                                <span className="text-[11px] text-amber-400 whitespace-nowrap">
+                                <span className="whitespace-nowrap text-[14px] text-ochre">
                                   未选择{NAMED_SKILL_HINT[s.key]?.label || '名称'}
                                 </span>
                               ) : null}
                             </span>
                           ) : null}
                           {isCredit ? (
-                            <span className={cx('text-[11px] px-1.5 py-0.5 rounded border font-mono',
+                            <span className={cx('rounded-[2px] border px-1.5 py-0.5 font-mono text-[14px]',
                               occ
                                 ? (creditBad
-                                  ? 'border-red-500/50 text-red-300 bg-red-500/10'
-                                  : 'border-amber-500/40 text-amber-300 bg-amber-500/10')
-                                : 'border-slate-700 text-slate-400')}
+                                  ? 'border-vermilion/50 text-vermilion bg-vermilion/10'
+                                  : 'border-amber-600/45 text-ochre bg-ochre/10')
+                                : 'border-line-strong text-ink-soft')}
                             >
                               {occ ? `职业要求 ${occ.cr[0]}-${occ.cr[1]}%` : '选择职业后可校验区间'}
                             </span>
                           ) : null}
                           {isMythos ? (
-                            <span className="text-[11px] px-1.5 py-0.5 rounded border border-fuchsia-500/40 text-fuchsia-300 bg-fuchsia-500/10">
+                            <span className="rounded-[2px] border border-amber-600/45 bg-amber-500/[0.08] px-1.5 py-0.5 text-[14px] text-ochre">
                               神话知识 · 不可用点数提升
                             </span>
                           ) : null}
                         </div>
                       </td>
-                      <td className="p-2 text-center font-mono text-slate-500">{s.base}</td>
+                      <td className="p-2 text-center font-mono text-[14px] text-ink-mute">{s.base}</td>
                       <td className="p-2">
                         {isMythos
-                          ? <div className="text-center text-slate-600">—</div>
-                          : <NumberInput value={s.occ} onChange={(v) => setSkill(s.id, 'occ', v)} className="!py-1.5 text-sm" />}
+                          ? <div className="text-center text-ink-mute">—</div>
+                          : <NumberInput value={s.occ} onChange={(v) => setSkill(s.id, 'occ', v)} className="!py-1.5 text-[14.5px]" />}
                       </td>
                       <td className="p-2">
                         {isMythos
-                          ? <div className="text-center text-slate-600">—</div>
-                          : <NumberInput value={s.interest} onChange={(v) => setSkill(s.id, 'interest', v)} className="!py-1.5 text-sm" />}
+                          ? <div className="text-center text-ink-mute">—</div>
+                          : <NumberInput value={s.interest} onChange={(v) => setSkill(s.id, 'interest', v)} className="!py-1.5 text-[14.5px]" />}
                       </td>
-                      <td className="p-2"><NumberInput value={s.growth} onChange={(v) => setSkill(s.id, 'growth', v)} className="!py-1.5 text-sm" /></td>
-                      <td className="p-2 text-center font-mono font-black text-emerald-400">{s.total}%</td>
-                      <td className="p-2 text-center font-mono text-slate-400">{s.half}</td>
-                      <td className="p-2 text-center font-mono text-slate-500">{s.fifth}</td>
+                      <td className="p-2"><NumberInput value={s.growth} onChange={(v) => setSkill(s.id, 'growth', v)} className="!py-1.5 text-[14.5px]" /></td>
+                      <td className="p-2 text-center font-mono text-[14px] font-bold text-forest">{s.total}%</td>
+                      <td className="p-2 text-center font-mono text-[14px] text-ink-soft">{s.half}</td>
+                      <td className="p-2 text-center font-mono text-[14px] text-ink-mute">{s.fifth}</td>
                     </tr>
                   );
                 })}
                 {visibleSkills.length === 0 && (
-                  <tr><td colSpan={9} className="p-8 text-center text-slate-500">没有符合条件的技能</td></tr>
+                  <tr><td colSpan={9} className="p-8 text-center text-[14.5px] text-ink-mute">没有符合条件的技能</td></tr>
                 )}
               </tbody>
             </table>
           </div>
 
           {/* 自定义技能 */}
-          <div className="border-t border-slate-800 pt-4">
+          <div className="border-t border-line pt-4">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
               <div>
-                <h4 className="font-bold text-white text-sm flex items-center gap-2">
-                  <Plus className="w-4 h-4 text-cyan-400" />自定义技能
-                  <span className="text-xs font-normal text-slate-500">{sheet.customSkills.length} / {CUSTOM_SKILL_MAX}</span>
+                <h4 className="flex items-center gap-2 text-[16px] font-bold text-ink">
+                  <Plus className="w-4 h-4 text-moon" />自定义技能
+                  <span className="text-[14px] font-normal text-ink-mute">{sheet.customSkills.length} / {CUSTOM_SKILL_MAX}</span>
                 </h4>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="mt-1 text-[16px] leading-[1.75] text-ink-soft">
                   规则书没写、或 KP 房规新增的技能可以自己加：填名称与基础值，勾选「本职」后也能用职业点提升。
                 </p>
               </div>
@@ -1363,9 +1358,9 @@ export default function CharacterEditor({
             </div>
 
             {sheet.customSkills.length > 0 && (
-              <div className="overflow-x-auto rounded-xl border border-slate-800">
-                <table className="w-full text-sm min-w-[820px]">
-                  <thead className="bg-slate-950 text-slate-400 text-xs">
+              <div className="overflow-x-auto rounded-[2px] border border-line-strong">
+                <table className="w-full min-w-[820px] text-[14.5px] leading-[1.6]">
+                  <thead className="bg-paper-deep/70 text-[14px] text-ink-mute">
                     <tr>
                       <th className="p-2 w-10 text-center" title="本局大成功标记">成功</th>
                       <th className="p-2 text-left w-56">技能名称</th>
@@ -1378,11 +1373,11 @@ export default function CharacterEditor({
                       <th className="p-2 w-12" />
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60">
+                  <tbody className="divide-y divide-line-strong">
                     {sheet.customSkills.map((cs) => {
                       const d = derived.skills.find((x) => x.id === cs.id);
                       return (
-                        <tr key={cs.id} className="bg-cyan-500/[0.04]">
+                        <tr key={cs.id} className="bg-moon/[0.04]">
                           <td className="p-2 text-center">
                             <input
                               type="checkbox"
@@ -1397,7 +1392,7 @@ export default function CharacterEditor({
                               maxLength={24}
                               placeholder="例：驾驶（坦克）"
                               onChange={(e) => setCustomSkill(cs.id, 'name', e.target.value)}
-                              className="w-full px-2 py-1.5 bg-slate-950 border border-slate-700 rounded text-white text-sm"
+                              className="w-full rounded-[2px] border border-line-strong bg-paper-raised px-2 py-1.5 text-[14.5px] text-ink"
                             />
                           </td>
                           <td className="p-2 text-center">
@@ -1409,13 +1404,13 @@ export default function CharacterEditor({
                               title="勾选后可用职业点提升"
                             />
                           </td>
-                          <td className="p-2"><NumberInput value={cs.base} onChange={(v) => setCustomSkill(cs.id, 'base', v)} className="!py-1.5 text-sm" /></td>
-                          <td className="p-2"><NumberInput value={cs.occ} onChange={(v) => setCustomSkill(cs.id, 'occ', v)} className="!py-1.5 text-sm" /></td>
-                          <td className="p-2"><NumberInput value={cs.interest} onChange={(v) => setCustomSkill(cs.id, 'interest', v)} className="!py-1.5 text-sm" /></td>
-                          <td className="p-2"><NumberInput value={cs.growth} onChange={(v) => setCustomSkill(cs.id, 'growth', v)} className="!py-1.5 text-sm" /></td>
-                          <td className="p-2 text-center font-mono font-black text-cyan-400">{d ? `${d.total}%` : '—'}</td>
+                          <td className="p-2"><NumberInput value={cs.base} onChange={(v) => setCustomSkill(cs.id, 'base', v)} className="!py-1.5 text-[14.5px]" /></td>
+                          <td className="p-2"><NumberInput value={cs.occ} onChange={(v) => setCustomSkill(cs.id, 'occ', v)} className="!py-1.5 text-[14.5px]" /></td>
+                          <td className="p-2"><NumberInput value={cs.interest} onChange={(v) => setCustomSkill(cs.id, 'interest', v)} className="!py-1.5 text-[14.5px]" /></td>
+                          <td className="p-2"><NumberInput value={cs.growth} onChange={(v) => setCustomSkill(cs.id, 'growth', v)} className="!py-1.5 text-[14.5px]" /></td>
+                          <td className="p-2 text-center font-mono text-[14px] font-bold text-moon">{d ? `${d.total}%` : '—'}</td>
                           <td className="p-2 text-center">
-                            <button type="button" onClick={() => removeCustomSkill(cs.id)} className="p-1.5 text-slate-500 hover:text-red-400">
+                            <button type="button" onClick={() => removeCustomSkill(cs.id)} className="p-1.5 text-ink-mute transition-colors hover:text-vermilion">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </td>
@@ -1432,9 +1427,9 @@ export default function CharacterEditor({
 
       {/* ---------------------------------------------------- 战斗 */}
       {tab === 'combat' && (
-        <Panel className="p-5 space-y-4">
+        <Panel className="space-y-4 p-5 sm:p-6">
           <div className="flex items-center justify-between">
-            <h3 className="font-bold text-white flex items-center"><Sword className="w-4 h-4 mr-2 text-emerald-500" />武器与战斗</h3>
+            <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink"><Sword className="h-4 w-4 text-ochre" />武器与战斗</h3>
             <div className="flex items-center gap-2">
               <select
                 value={weaponPick}
@@ -1451,7 +1446,7 @@ export default function CharacterEditor({
                     }],
                   });
                 }}
-                className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 text-sm cursor-pointer"
+                className="cursor-pointer rounded-[2px] border border-line-strong bg-paper-raised px-3 py-2 text-[14px] text-ink"
               >
                 <option value="">从武器表选择…</option>
                 {WEAPONS.filter((w) => w.name !== BUILTIN_WEAPON
@@ -1466,21 +1461,21 @@ export default function CharacterEditor({
               </Button>
             </div>
           </div>
-          <p className="text-xs text-slate-500">
+          <p className="text-[16px] leading-[1.75] text-ink-soft">
             「{BUILTIN_WEAPON}」是规则书里的常驻攻击方式，固定保留在第一条且不可删除；其余武器可从官方武器表直接选。
           </p>
-          <div className="overflow-x-auto rounded-xl border border-slate-800">
-            <table className="w-full text-sm min-w-[820px]">
-              <thead className="bg-slate-950 text-slate-400 text-xs">
+          <div className="overflow-x-auto rounded-[2px] border border-line-strong">
+            <table className="w-full min-w-[820px] text-[14.5px] leading-[1.6]">
+              <thead className="bg-paper-deep/70 text-[14px] text-ink-mute">
                 <tr>{['武器名称', '使用技能', '伤害', '射程', '每轮攻击', '装弹量', '故障值', ''].map((h) => <th key={h} className="p-2 text-left">{h}</th>)}</tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-line-strong">
                 {sheet.weapons.map((w, i) => {
                   const isBare = w.name === BUILTIN_WEAPON;
                   return (
                     // ⚠️ key 必须稳定：早先用 `${w.name}-${i}`，改名时 key 变了 → 整行重挂载 →
                     // 输入框失焦，表现为「只能输入第一个字母，必须再点一次」，中文输入法也被打断。
-                    <tr key={`weapon-${i}`} className={isBare ? 'bg-slate-900/40' : undefined}>
+                    <tr key={`weapon-${i}`} className={isBare ? 'bg-paper-raised' : undefined}>
                       {['name', 'skill', 'damage', 'range', 'attacks', 'ammo', 'malfunction'].map((f) => (
                         <td key={f} className="p-1.5">
                           <input
@@ -1488,16 +1483,16 @@ export default function CharacterEditor({
                             maxLength={40}
                             readOnly={isBare}
                             onChange={(e) => patch({ weapons: sheet.weapons.map((x, j) => (j === i ? { ...x, [f]: e.target.value } : x)) })}
-                            className={cx('w-full p-2 bg-slate-950 border border-slate-700 rounded text-white text-sm',
+                            className={cx('w-full rounded-[2px] border border-line-strong bg-paper-raised p-2 text-[14.5px] text-ink',
                               isBare && 'opacity-80 cursor-not-allowed')}
                           />
                         </td>
                       ))}
                       <td className="p-1.5 text-center">
                         {isBare ? (
-                          <span className="text-[11px] text-slate-500">常驻</span>
+                          <span className="text-[14px] text-ink-mute">常驻</span>
                         ) : (
-                          <button type="button" onClick={() => patch({ weapons: sheet.weapons.filter((_, j) => j !== i) })} className="p-2 text-red-400 hover:text-red-300">
+                          <button type="button" onClick={() => patch({ weapons: sheet.weapons.filter((_, j) => j !== i) })} className="p-2 text-vermilion transition-colors hover:text-vermilion-deep">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         )}
@@ -1505,15 +1500,15 @@ export default function CharacterEditor({
                     </tr>
                   );
                 })}
-                {sheet.weapons.length === 0 && <tr><td colSpan={8} className="p-6 text-center text-slate-500">还没有武器，点击右上角添加</td></tr>}
+                {sheet.weapons.length === 0 && <tr><td colSpan={8} className="p-6 text-center text-[14.5px] text-ink-mute">还没有武器，点击右上角添加</td></tr>}
               </tbody>
             </table>
           </div>
-          <div className="grid sm:grid-cols-4 gap-3">
+          <div className="grid gap-3 sm:grid-cols-4">
             {[['伤害加值', derived.db], ['体格', derived.build], ['闪避', derived.dodgeBase], ['移动力', derived.mov]].map(([l, v]) => (
-              <div key={l} className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-center">
-                <div className="text-xs text-slate-500">{l}</div>
-                <div className="text-xl font-black text-amber-400 font-mono">{v}</div>
+              <div key={l} className="rounded-[2px] border border-line-strong bg-paper-deep/50 p-3.5 text-center">
+                <div className="font-mono text-[14px] font-semibold tracking-[0.1em] text-ink-mute">{l}</div>
+                <div className="tabular mt-1.5 font-serif text-[22px] font-bold leading-none text-ink">{v}</div>
               </div>
             ))}
           </div>
@@ -1522,11 +1517,11 @@ export default function CharacterEditor({
 
       {/* ---------------------------------------------------- 背景故事 */}
       {tab === 'story' && (
-        <Panel className="p-5 space-y-4">
-          <h3 className="font-bold text-white flex items-center"><BookOpen className="w-4 h-4 mr-2 text-emerald-500" />背景故事</h3>
-          <div className="grid md:grid-cols-2 gap-4">
+        <Panel className="space-y-4 p-5 sm:p-6">
+          <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink"><BookOpen className="h-4 w-4 text-ochre" />背景故事</h3>
+          <div className="grid gap-4 md:grid-cols-2 md:gap-5">
             {BACKGROUND_FIELDS.map(([key, label]) => (
-              <Field key={key} label={label}>
+              <Field className={FIELD} key={key} label={label}>
                 <Textarea
                   rows={3}
                   maxLength={600}
@@ -1542,13 +1537,13 @@ export default function CharacterEditor({
       {/* ---------------------------------------------------- 装备与经历 */}
       {tab === 'journal' && (
         <div className="space-y-5">
-          <Panel className="p-5 space-y-4">
-            <h3 className="font-bold text-white flex items-center"><FileText className="w-4 h-4 mr-2 text-emerald-500" />装备与资产</h3>
-            <Field label="装备和物品">
+          <Panel className="space-y-4 p-5 sm:p-6">
+            <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink"><FileText className="h-4 w-4 text-ochre" />装备与资产</h3>
+            <Field className={FIELD} label="装备和物品">
               <Textarea rows={5} maxLength={4000} value={sheet.equipment} onChange={(e) => patch({ equipment: e.target.value })} />
             </Field>
             <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="时代" hint="影响生活水平与物价表">
+              <Field className={FIELD} label="时代" hint="影响生活水平与物价表">
                 <Select value={sheet.era} onChange={(e) => {
                   const era = e.target.value;
                   patch({ era, currency: DEFAULT_CURRENCY[era] || 'USD' });
@@ -1556,7 +1551,7 @@ export default function CharacterEditor({
                   {ERAS.map((x) => <option key={x} value={x}>{x}</option>)}
                 </Select>
               </Field>
-              <Field label="货币" hint="换算倍率为叙事参考">
+              <Field className={FIELD} label="货币" hint="换算倍率为叙事参考">
                 <Select value={sheet.currency} onChange={(e) => patch({ currency: e.target.value })}>
                   {currenciesFor(sheet.era).map((c) => (
                     <option key={c.code} value={c.code}>{c.label}{c.mult !== 1 ? `（×${c.mult}）` : ''}</option>
@@ -1565,12 +1560,12 @@ export default function CharacterEditor({
               </Field>
             </div>
 
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.04] p-4 space-y-3">
+            <div className="space-y-3 rounded-[2px] border border-amber-600/40 bg-amber-500/[0.05] p-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <span className="text-sm font-bold text-amber-200 flex items-center gap-1.5">
+                <span className="flex items-center gap-1.5 text-[14px] font-bold text-ochre">
                   <LockIcon />由信用评级自动计算 · 不可修改
                 </span>
-                <span className="text-xs text-amber-300/80">
+                <span className="text-[14px] text-ink-mute">
                   生活水平：<b>{derived.wealth.level}</b> · 信用评级 {derived.creditRating}%
                 </span>
               </div>
@@ -1580,43 +1575,43 @@ export default function CharacterEditor({
                   ['现金', derived.wealth.cashText],
                   ['资产', derived.wealth.assetsText],
                 ].map(([label, value]) => (
-                  <div key={label} className="bg-slate-950/70 border border-slate-800 rounded-lg px-3 py-2">
-                    <div className="text-[11px] text-slate-500">{label}</div>
-                    <div className="text-slate-100 font-mono font-bold">{value}</div>
+                  <div key={label} className="rounded-[2px] border border-line-strong bg-paper-deep/40 px-3 py-2.5">
+                    <div className="text-[14px] text-ink-mute">{label}</div>
+                    <div className="font-mono text-[16px] font-bold text-ink">{value}</div>
                   </div>
                 ))}
               </div>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <p className="text-[14px] leading-[1.75] text-ink-soft">
                 数据取自官方「资产及物价参考」表：{sheet.era} 的 {derived.wealth.currencyLabel}，信用评级 {derived.creditRating} 落在「{derived.wealth.level}」档。
                 想提高现金与资产，只能通过提升信用评级（把职业点投进信用评级）。
               </p>
             </div>
 
-            <Field label="额外资产（选填）" hint="规则表之外的房产、遗产、藏品等，自由填写，会打印在角色卡上">
+            <Field className={FIELD} label="额外资产（选填）" hint="规则表之外的房产、遗产、藏品等，自由填写，会打印在角色卡上">
               <Textarea rows={2} maxLength={400} value={sheet.extraAssets} onChange={(e) => patch({ extraAssets: e.target.value })} />
             </Field>
           </Panel>
 
-          <Panel className="p-5 space-y-4">
-            <h3 className="font-bold text-white flex items-center"><FileText className="w-4 h-4 mr-2 text-emerald-500" />跑团经历</h3>
-            <Field label="经历记录" hint="自由记述，会打印在角色卡的「经历」栏">
+          <Panel className="space-y-4 p-5 sm:p-6">
+            <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink"><FileText className="h-4 w-4 text-ochre" />跑团经历</h3>
+            <Field className={FIELD} label="经历记录" hint="自由记述，会打印在角色卡的「经历」栏">
               <Textarea rows={4} maxLength={4000} value={sheet.experience} onChange={(e) => patch({ experience: e.target.value })} />
             </Field>
-            <div className="text-xs text-slate-500 flex items-center gap-1.5 flex-wrap">
+            <div className="flex flex-wrap items-center gap-1.5 text-[14px] leading-[1.7] text-ink-soft">
               <Download className="w-3.5 h-3.5" />
               {guest ? '访客角色卡保存在本机，登录收录后才能在详情页关联模组。' : '关联模组请到「角色卡详情」页操作（玩家与 KP 均可添加）。'}
               {!guest && sheet.moduleLinks?.length > 0 ? (
-                <span className="text-emerald-400/90">当前已关联 {sheet.moduleLinks.length} 个模组，保存时会原样保留。</span>
+                <span className="text-forest/90">当前已关联 {sheet.moduleLinks.length} 个模组，保存时会原样保留。</span>
               ) : null}
             </div>
           </Panel>
 
-          <Panel className="p-5 space-y-3">
-            <h3 className="font-bold text-white flex items-center">
-              <FileText className="w-4 h-4 mr-2 text-cyan-400" />备注
-              <span className="ml-2 text-xs font-normal text-slate-500">只做记录，不会打印在角色卡上</span>
+          <Panel className="space-y-3 p-5 sm:p-6">
+            <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink">
+              <FileText className="h-4 w-4 text-moon" />备注
+              <span className="ml-2 text-[14px] font-normal text-ink-mute">只做记录，不会打印在角色卡上</span>
             </h3>
-            <Field label="备注内容" hint="KP 与本人都能在详情页看到；导出编码时会一起带上，骰娘指令与打印版面不含它">
+            <Field className={FIELD} label="备注内容" hint="KP 与本人都能在详情页看到；导出编码时会一起带上，骰娘指令与打印版面不含它">
               <Textarea
                 rows={5}
                 maxLength={4000}
@@ -1656,7 +1651,7 @@ function OccupationPicker({ open, onClose, onPick, current, derived, occupations
     <Modal open={open} onClose={onClose} title="选择职业" wide>
       <div className="space-y-4">
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索职业名、简介或本职技能…" autoFocus />
-        <div className="text-xs text-slate-500">共 {list.length} 个职业（含 KP 自定义模板）</div>
+        <div className="text-[14px] text-ink-mute">共 {list.length} 个职业（含 KP 自定义模板）</div>
         <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
           {list.map((o) => {
             const budget = o.pts
@@ -1668,42 +1663,42 @@ function OccupationPicker({ open, onClose, onPick, current, derived, occupations
                 key={o.id}
                 type="button"
                 onClick={() => onPick(o.id)}
-                className={cx('w-full text-left p-4 rounded-xl border transition',
-                  String(current) === String(o.id) ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-800 bg-slate-950 hover:border-emerald-500/40')}
+                className={cx('w-full rounded-[2px] border p-4 text-left transition',
+                  String(current) === String(o.id) ? 'border-forest bg-forest/[0.06]' : 'border-line-strong bg-paper-raised hover:border-forest/45')}
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-white font-bold flex items-center gap-2">
+                  <span className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink">
                     {o.name}
                     {o.isCustom ? <Badge tone="cyan">KP 模板</Badge> : null}
                   </span>
-                  <span className="text-xs text-slate-400">
-                    信用评级 {o.cr[0]}-{o.cr[1]} · 技能点 {o.attr} = <b className="text-emerald-400">{budget}</b>
+                  <span className="text-[14px] text-ink-soft">
+                    信用评级 {o.cr[0]}-{o.cr[1]} · 技能点 {o.attr} = <b className="text-forest">{budget}</b>
                   </span>
                 </div>
-                {o.desc ? <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">{o.desc}</p> : null}
+                {o.desc ? <p className="mt-1.5 text-[16px] leading-[1.75] text-ink-soft">{o.desc}</p> : null}
                 <div className="flex flex-wrap gap-1 mt-2">
                   {[...new Set(o.keys)].slice(0, 10).map((k) => (
-                    <span key={k} className="text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                    <span key={k} className="rounded-[2px] bg-paper-deep px-1.5 py-0.5 text-[14px] text-ink-soft">
                       {SKILL_BY_KEY[k]?.name || k}
                     </span>
                   ))}
-                  {o.choices?.length ? <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">任选其一 ×{o.choices.length}</span> : null}
-                  {o.social ? <span className="text-[11px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300">社交 ×{o.social}</span> : null}
-                  {o.free ? <span className="text-[11px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300">任意 ×{o.free}</span> : null}
+                  {o.choices?.length ? <span className="rounded-[2px] bg-ochre/10 px-1.5 py-0.5 text-[14px] text-ochre">任选其一 ×{o.choices.length}</span> : null}
+                  {o.social ? <span className="rounded-[2px] bg-moon/10 px-1.5 py-0.5 text-[14px] text-moon">社交 ×{o.social}</span> : null}
+                  {o.free ? <span className="rounded-[2px] bg-moon/10 px-1.5 py-0.5 text-[14px] text-moon">任意 ×{o.free}</span> : null}
                 </div>
                 {o.skillText ? (
-                  <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                    <span className="text-slate-400">官方本职技能：</span>{o.skillText}
+                  <p className="mt-1.5 text-[14px] leading-[1.7] text-ink-soft">
+                    <span className="text-ink-soft">官方本职技能：</span>{o.skillText}
                   </p>
                 ) : null}
-                {o.note ? <p className="text-[11px] text-amber-400/90 mt-1">官方备注：{o.note}</p> : null}
+                {o.note ? <p className="mt-1 text-[14px] leading-[1.7] text-ochre">官方备注：{o.note}</p> : null}
               </button>
             );
           })}
-          {list.length === 0 && <p className="text-center text-slate-500 py-8">没有匹配的职业</p>}
+          {list.length === 0 && <p className="py-8 text-center text-[16px] text-ink-mute">没有匹配的职业</p>}
         </div>
         <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-slate-500">必须从列表中选一个职业；规则书没有的职业请让 KP 在「审卡中心 → 职业模板」里添加。</p>
+          <p className="text-[16px] leading-[1.7] text-ink-soft">必须从列表中选一个职业；规则书没有的职业请让 KP 在「审卡中心 → 职业模板」里添加。</p>
           <Button variant="ghost" onClick={onClose}>关闭</Button>
         </div>
       </div>

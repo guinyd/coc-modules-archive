@@ -18,7 +18,7 @@ server {
     # 生产环境请务必启用 HTTPS（例如用 certbot 申请证书），并 301 跳转
     # return 301 https://$host$request_uri;
 
-    root  /var/www/coc;   # ← 换成你的站点静态根
+    root  /var/www/coc-index;
     index index.html;
 
     # 上传体积上限（后端自身限制为 256KB，这里给一点余量）
