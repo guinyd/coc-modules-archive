@@ -403,12 +403,12 @@ sudo nginx -t && sudo systemctl reload nginx
 **更新线上（推荐用发布包，历史数据一个字节都不动）**
 
 ```bash
-# 本地出包（产物在 ../_release/，VERSION 里记着源码提交号）
-bash tools/make-release.sh ../_release v2.0.0
+# 本地出包（产物在 ../_release/，zip 根直接是 index/ backend/ shared/ deploy/）
+bash tools/make-release.sh ../_release v2.0.1
 
-# 服务器上执行（路径换成你自己的站点根与后端目录）
-tar -xzf coc-archive-update-v2.0.0-<日期>.tar.gz && cd coc-archive-update-v2.0.0-<日期>
-sudo bash apply-update.sh   --web <站点根>/index   --app <后端目录>   --service <服务名> --port 3000
+# 服务器上执行（路径换成你自己的站点根与后端目录；用 -d 指定解压落点）
+unzip coc-archive-update-v2.0.1-<日期>.zip -d coc-update && cd coc-update
+sudo bash deploy/apply-update.sh   --web <站点根>/index   --app <后端目录>   --service <服务名> --port 3000
 # 面板/容器方式部署的话，跑完记得把服务重启一次
 ```
 

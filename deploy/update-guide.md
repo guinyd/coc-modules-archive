@@ -8,26 +8,28 @@
 ## 一、这个包里有什么
 
 ```
-coc-archive-update-<版本>-<日期>/
+coc-archive-update-<版本>-<日期>.zip
 ├── index/     ← 前端静态产物（目录名与站点静态根一致，直接覆盖 index/）
 ├── backend/   ← 后端源码（server.js / lib / routes / tools / package*.json）
 ├── shared/    ← COC 7e 规则引擎（后端运行时需要）
 └── deploy/    ← 本说明、一键更新脚本 apply-update.sh、Nginx 配置样例
 ```
 
-> 更新包**只发布 zip**，且只有上面这四个目录。
+> 更新包**只发布 zip**，且只有上面这四个目录。**zip 根就是这四个目录，不再套一层父目录**（2026-10-30 起），解压时用 `-d` 指定落点即可。
 
 **不含**：`backend/data/`（历史数据）、`backend/node_modules/`（依赖）、任何审计日志。
 包生成时脚本会显式检查这一点，发现数据文件会直接报错终止。
 
 ---
 
-## 本包改动（v1.7.5，简版）
+## 本包改动（v2.0.1，简版）
 
-- 教育成长记录 + 结算后锁定（重掷需 KP 授权）、传奇标记、年龄豁免、角色卡备注。
-- 角色卡编码导入导出、骰娘导入指令（同官方 Excel 格式）。
-- 审卡混点规则严格化；打印版面每项技能固定一行。
-- 更新包只发 zip，包内只有 `index/ backend/ deploy/ shared/` 四个目录。
+- 手机端报头不再溢出，登录入口完整可见；360/377/390 宽均不出横向滚动条。
+- 详情页合集标回到左上原位；手机端档案编号移到封面底部、与条码同行。
+- 守秘人「角色卡管理」新建角色卡可正常跳转；查看玩家角色卡后返回角色卡管理，从「我的角色卡」进入则回我的角色卡。
+- 手机端新增「回到顶部」悬浮按钮。
+- 首页「最新收录」按真实新增时间排序并自动刷新；技能分配表移除「成功」列（打印方框保留）。
+- 更新包只发 zip，包内只有 `index/ backend/ deploy/ shared/` 四个目录，zip 根不再套父目录。
 
 --- | --- |
 | 数据结构 | 自动从 v4 升到 **v5**：给老角色卡补一个 `ageAlloc`（年龄补正分配）字段，其它字段不动；空分配 = 按规则默认平均分配结算 |
@@ -52,8 +54,8 @@ coc-archive-update-<版本>-<日期>/
 先看一眼要更新的目标对不对（不会做任何改动）：
 
 ```bash
-unzip coc-archive-update-*.zip
-cd coc-archive-update-*
+unzip coc-archive-update-*.zip -d coc-update
+cd coc-update
 sudo bash deploy/apply-update.sh --web <站点根> --app <后端目录> --dry-run
 ```
 
