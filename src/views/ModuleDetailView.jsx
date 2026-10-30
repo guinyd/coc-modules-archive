@@ -13,7 +13,7 @@
 import React from 'react';
 import {
   AlertCircle, ArrowLeft, ArrowRight, BadgeCheck, BookMarked, Copy, Edit,
-  FolderArchive, Search, Users,
+  FolderArchive, Search, Trash2, Users,
 } from 'lucide-react';
 import { Button, SectionHeading, cx } from '../components/ui.jsx';
 import CoverPlate, { fileNumberOf } from '../components/ModuleCover.jsx';
@@ -45,7 +45,7 @@ function ReaderRow({ label, value }) {
 }
 
 export default function ModuleDetailView({
-  module, isAdmin, played, currentUser, onBack, onCopy, onEdit, onTogglePlayed, onGoCharacters,
+  module, isAdmin, played, currentUser, onBack, onCopy, onEdit, onDelete, onTogglePlayed, onGoCharacters,
 }) {
   const hasExtra = Boolean(module.charInfo || module.occupations || module.skills || module.notes);
   const minted = jitter(`${module.id}seal`, -5, 3, 1);
@@ -109,10 +109,16 @@ export default function ModuleDetailView({
             </span>
             <div className="ml-auto flex w-full flex-wrap items-center gap-2 sm:w-auto">
               {isAdmin ? (
-                <button type="button" onClick={(e) => onEdit(module, e)} className="record-act record-act--edit group w-full justify-center sm:w-auto">
-                  <Edit className="h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:rotate-6" strokeWidth={1.9} />
-                  编辑
-                </button>
+                <>
+                  <button type="button" onClick={(e) => onEdit(module, e)} className="record-act record-act--edit group w-full justify-center sm:w-auto">
+                    <Edit className="h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:rotate-6" strokeWidth={1.9} />
+                    编辑
+                  </button>
+                  <button type="button" onClick={(e) => onDelete(module.id, e)} className="record-act record-act--delete group w-full justify-center sm:w-auto">
+                    <Trash2 className="h-4 w-4 transition-transform duration-300 group-hover:-rotate-6" strokeWidth={1.9} />
+                    删除
+                  </button>
+                </>
               ) : null}
               <button
                 type="button"
@@ -187,7 +193,7 @@ export default function ModuleDetailView({
             </div>
 
             {/* 阅览便笺：滚动时固定在右侧；鼠标移入时会像一张纸被轻轻掀起 */}
-            <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
+            <aside className="order-first min-w-0 lg:order-none lg:sticky lg:top-24 lg:self-start">
               <div
                 className="reader-note reader-note--live"
                 onMouseMove={tiltNote}

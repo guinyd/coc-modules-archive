@@ -780,8 +780,8 @@ html.theme-anim .sheet {
 
 /* 移动端：去掉过重的斜切/折角阴影，留出可读性 */
 @media (max-width: 640px) {
-  .sheet::before { left: 18px; }
-  .sheet-margin { padding-left: 30px; }
+  .sheet::before { display: none; }
+  .sheet-margin { padding-left: 16px; }
   .folder { box-shadow: 3px 4px 0 -1px var(--color-paper-shadow); }
   .folder:hover { box-shadow: 4px 6px 0 -1px var(--color-paper-shadow); }
 }
@@ -1992,6 +1992,17 @@ button.press, a.press, .press {
   background: var(--color-forest);
   filter: brightness(1.05);
 }
+.record-act--delete {
+  border-color: color-mix(in srgb, var(--color-vermilion) 38%, transparent);
+  background: transparent;
+  color: color-mix(in srgb, var(--color-vermilion) 82%, var(--color-ink));
+}
+.record-act--delete:hover {
+  border-color: var(--color-vermilion);
+  background: color-mix(in srgb, var(--color-vermilion) 12%, transparent);
+  color: var(--color-vermilion);
+  box-shadow: 0 12px 20px -18px rgba(90, 20, 12, 0.65);
+}
 
 /* -- 封面上的一体化标签：书签压在左上、状态与置顶退到右上 */
 .cover-chip {
@@ -2084,19 +2095,6 @@ button.press, a.press, .press {
 .cover-tag > svg { flex: none; color: rgba(246, 235, 205, 0.72); }
 .cover-tag > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cover-tag--single { font-weight: 600; color: rgba(246, 235, 205, 0.82); }
-
-@media (max-width: 639px) {
-  .cover-tag {
-    left: 16px;
-    top: 16px;
-    height: 40px;
-    max-width: 52%;
-    padding: 0 16px 0 14px;
-    font-size: 16px;
-    gap: 0.4rem;
-  }
-  .cover-tag > svg { width: 14px; height: 14px; }
-}
 
 /* -- 首页封面内的标签：合集与状态同一族，全部收在封面边缘以内 */
 .cover-chip { max-width: 100%; min-width: 0; }

@@ -32,3 +32,6 @@ tools/_unmapped.txt
 
 # 本地演示数据（tools/seed-demo.mjs 的默认落点之外的自定义目录）
 .demo-data/
+
+# 构建临时目录（esbuild/Chrome 的 TEMP）
+.tmp-build/

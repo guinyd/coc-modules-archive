@@ -154,13 +154,22 @@ function CharacterCard({
             </button>
           ) : null}
           {!guest && (
+          <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
             <button type="button" title="复制一张" onClick={() => onDuplicate(item)} className="rounded-[2px] p-2 text-ink-mute transition-colors hover:bg-paper-deep/60 hover:text-ink">
               <Copy className="h-4 w-4" strokeWidth={1.8} />
             </button>
+            <button type="button" title="删除" onClick={() => onDelete(item)} className="rounded-[2px] p-2 text-ink-mute transition-colors hover:bg-vermilion/10 hover:text-vermilion">
+              <Trash2 className="h-4 w-4" strokeWidth={1.8} />
+            </button>
+          </div>
           )}
-          <button type="button" title="删除" onClick={() => onDelete(item)} className="rounded-[2px] p-2 text-ink-mute transition-colors hover:bg-vermilion/10 hover:text-vermilion">
-            <Trash2 className="h-4 w-4" strokeWidth={1.8} />
-          </button>
+          {guest ? (
+            <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
+              <button type="button" title="删除" onClick={() => onDelete(item)} className="rounded-[2px] p-2 text-ink-mute transition-colors hover:bg-vermilion/10 hover:text-vermilion">
+                <Trash2 className="h-4 w-4" strokeWidth={1.8} />
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {hasKpActions ? (

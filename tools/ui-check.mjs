@@ -154,7 +154,7 @@ try {
   ok('React 应用挂载成功', bootstrapped === true);
 
   const title = await page.eval('document.title');
-  ok('页面标题正确', title === 'coc模组列表', `实际 ${title}`);
+  ok('页面标题正确', title === '秘密调查档案馆', `实际 ${title}`);
 
   const homeText = await page.eval('document.body.innerText');
   ok('首页渲染出档案馆标题', homeText.includes('收录世界上不可名状的超自然案件'));
@@ -356,9 +356,11 @@ try {
       const cs = getComputedStyle(first);
       const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
       const contentH = Math.round((first.firstElementChild?.getBoundingClientRect().height || 0) + pad);
-      return { a4: Math.round(a4), rows: rows.length, wrapped, clipped, lineBlocks, contentH };
+      return { a4: Math.round(a4), rows: rows.length, wrapped, clipped, lineBlocks, contentH,
+        boxes: ([...document.querySelectorAll('.print-page')].map((p) => p.innerText).join('').match(/[☐☑]/g) || []).length };
     })()`);
     ok('打印技能行数正常（三列铺满一页）', printCheck.rows >= 40 && printCheck.rows <= 60, JSON.stringify(printCheck));
+    ok('打印技能前仍有大成功方块', printCheck.boxes >= 40, `方块 ${printCheck.boxes} 个`);
     ok('每个技能都只占一行（无折行）', printCheck.wrapped === 0, `折行 ${printCheck.wrapped} 行`);
     ok('技能名没有被裁切', printCheck.clipped.length === 0, JSON.stringify(printCheck.clipped));
     ok('基础信息格子全部单行', printCheck.lineBlocks === 0, `折行 ${printCheck.lineBlocks} 个`);
@@ -567,8 +569,9 @@ try {
       return Boolean(b);
     })()`);
     await sleep(800);
-    const markBoxes = await page.eval(`document.querySelectorAll('input[type=checkbox].accent-amber-500').length`);
-    ok('每个技能前有大成功方块', markBoxes > 40, `方块 ${markBoxes} 个`);
+    const skillHeads = await page.eval(`JSON.stringify([...document.querySelectorAll('table')].find(t => t.querySelector('th')?.textContent.trim() === '技能')?.querySelectorAll('th').length || 0)`);
+    const headNames = await page.eval(`JSON.stringify([...document.querySelectorAll('table')].find(t => t.querySelector('th')?.textContent.trim() === '技能') ? [...[...document.querySelectorAll('table')].find(t => t.querySelector('th')?.textContent.trim() === '技能').querySelectorAll('th')].map(th => th.textContent.trim()) : [])`);
+    ok('技能分配已移除「成功」列', Number(skillHeads) === 8 && !String(headNames).includes('成功'), `${skillHeads} 列 ${headNames}`);
     const specDefaults = await page.eval(`(() => {
       const sels=[...document.querySelectorAll('select')].filter(s=>s.value==='斗殴'||s.value==='手枪');
       return sels.map(s=>s.value).join(',');

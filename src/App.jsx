@@ -12,6 +12,7 @@ import { SealMark } from './components/Emblem.jsx';
 import { TentacleBackdrop, TentacleRule } from './components/Ornaments.jsx';
 import { MenuMorph, ThemeMorph } from './components/MorphIcon.jsx';
 import { DepthGauge, RouteSweep } from './components/Motion.jsx';
+import BackToTop from './components/BackToTop.jsx';
 import AdminUsersPanel from './components/AdminUsersPanel.jsx';
 import KpDashboardPanel from './components/KpDashboardPanel.jsx';
 import CertificatePreview from './components/CertificatePreview.jsx';
@@ -86,7 +87,7 @@ export default function App() {
   const [characterRefresh, setCharacterRefresh] = useState(0);
   const [customOccupations, setCustomOccupations] = useState([]);
   const [guestSheet, setGuestSheet] = useState(null);
-  const [viewFrom, setViewFrom] = useState(null);
+  const [characterOrigin, setCharacterOrigin] = useState('characters');
   const [theme, setTheme] = useState(() => {
     if (typeof document === 'undefined') return 'light';
     return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
@@ -131,7 +132,7 @@ export default function App() {
 
   const go = useCallback((nextView, arg = null) => {
     resetScroll();
-    setView((prev) => { setViewFrom(prev); return nextView; });
+    setView(nextView);
     setViewArg(arg);
   }, [resetScroll]);
 
@@ -187,6 +188,20 @@ export default function App() {
     };
     init();
   }, [fetchModules]);
+
+  // 首页「最新收录」自动刷新：停留首页时每 60 秒静默拉取一次；回到前台立即刷新
+  useEffect(() => {
+    if (view !== 'home') return undefined;
+    const refresh = () => {
+      if (document.visibilityState === 'visible') fetchModules();
+    };
+    const timer = window.setInterval(refresh, 60000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [view, fetchModules]);
 
   useEffect(() => {
     if (currentUser) fetchPlayedRecords();
@@ -380,8 +395,8 @@ export default function App() {
             currentUser={null}
             showToast={showToast}
             showConfirm={showConfirm}
-            onOpen={(item) => go('characterView', item.id)}
-            onEdit={(item) => { setGuestSheet(item ? getGuestSheet(item.id) : null); go('characterEdit', null); }}
+            onOpen={(item) => { setCharacterOrigin('characters'); go('characterView', item.id); }}
+            onEdit={(item) => { setGuestSheet(item ? getGuestSheet(item.id) : null); setCharacterOrigin('characters'); go('characterEdit', null); }}
             onPrint={(item) => go('characterPrint', item.id)}
           />
         );
@@ -393,8 +408,8 @@ export default function App() {
           currentUser={currentUser}
           showToast={showToast}
           showConfirm={showConfirm}
-          onOpen={(item) => go('characterView', item.id)}
-          onEdit={(item) => go('characterEdit', item ? item.id : null)}
+          onOpen={(item) => { setCharacterOrigin('characters'); go('characterView', item.id); }}
+          onEdit={(item) => { setCharacterOrigin('characters'); go('characterEdit', item ? item.id : null); }}
           onPrint={(item) => go('characterPrint', item.id)}
         />
       );
@@ -407,8 +422,8 @@ export default function App() {
           currentUser={currentUser}
           showToast={showToast}
           showConfirm={showConfirm}
-          onOpen={(item) => go('characterView', item.id)}
-          onEdit={(item) => go('characterEdit', item.id)}
+          onOpen={(item) => { setCharacterOrigin('kpCharacters'); go('characterView', item.id); }}
+          onEdit={(item) => { setCharacterOrigin('kpCharacters'); go('characterEdit', item ? item.id : null); }}
           onPrint={(item) => go('characterPrint', item.id)}
         />
       );
@@ -436,7 +451,7 @@ export default function App() {
             } catch (err) { showToast(err.message, 'error'); }
           }}
           onSaved={(saved) => { setCharacterRefresh((n) => n + 1); go('characterView', saved.id); }}
-          onCancel={() => go('characters')}
+          onCancel={() => go(characterOrigin === 'kpCharacters' ? 'kpCharacters' : 'characters')}
         />
       );
     }
@@ -477,7 +492,7 @@ export default function App() {
           currentUser={currentUser}
           showToast={showToast}
           showConfirm={showConfirm}
-          onBack={() => go(viewFrom === 'kpReview' ? 'kpReview' : 'characters')}
+          onBack={() => go(characterOrigin)}
           onEdit={(c) => go('characterEdit', c.id)}
           onPrint={(c) => go('characterPrint', c.id)}
           onChanged={() => setCharacterRefresh((n) => n + 1)}
@@ -524,6 +539,7 @@ export default function App() {
       <ConfirmDialog dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />
 
       <DepthGauge />
+      <BackToTop />
 
       <nav className="no-print glass-bar sticky top-0 z-50 border-b border-black/50 shadow-[0_18px_40px_-34px_rgba(0,0,0,0.95)]">
         <div className="mx-auto max-w-[1240px] px-4 sm:px-6 lg:px-8">
@@ -538,18 +554,18 @@ export default function App() {
             </span>
           </div>
 
-          <div className="flex h-[64px] items-center gap-3 sm:gap-4">
+          <div className="flex h-[64px] items-center gap-2 sm:gap-3 lg:gap-4">
             {/* 报头：铅字社徽 + 衬线站名 */}
             <button
               type="button"
-              className="group flex min-w-0 shrink-0 items-center gap-2.5 text-left"
+              className="group flex min-w-0 shrink items-center gap-2 text-left sm:gap-2.5"
               onClick={() => { go('home'); setHomeTab('grid'); setSelectedCollection(null); }}
             >
               <span className="relative flex h-9 w-9 shrink-0 items-center justify-center border border-white/25 bg-white/[0.06] transition-colors duration-300 group-hover:border-vermilion/70">
                 <SealMark size={27} className="text-[var(--c-masthead-ink)] transition-transform duration-700 ease-[var(--ease-bounce)] group-hover:-rotate-12" />
               </span>
               <span className="flex min-w-0 flex-col leading-none">
-                <span className="truncate font-serif text-[16px] font-black tracking-[0.14em] text-[var(--c-masthead-ink)] sm:text-[17px]">秘密调查档案馆</span>
+                <span className="truncate font-serif text-[16px] font-black tracking-[0.1em] text-[var(--c-masthead-ink)] sm:text-[17px] sm:tracking-[0.14em]">秘密调查档案馆</span>
               </span>
             </button>
 
@@ -575,12 +591,12 @@ export default function App() {
             </div>
 
             {/* 右侧：主题 / 身份 / 登录 / 手机菜单 */}
-            <div className="ml-auto flex shrink-0 items-center gap-1.5 md:ml-0">
-              <span className="hidden sm:inline-flex">
+            <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5 md:ml-0">
+              <span className={currentUser ? 'hidden sm:inline-flex' : 'inline-flex'}>
                 <ThemeToggle theme={theme} onToggle={toggleTheme} />
               </span>
               {!currentUser ? (
-                <Button onClick={() => go('auth')} className="!px-3.5 !py-2 !text-[14px]">
+                <Button onClick={() => go('auth')} className="!gap-1.5 !px-2 !py-1.5 !text-[13px] sm:!gap-2 sm:!px-3.5 sm:!py-2 sm:!text-[14px]">
                   <User className="h-4 w-4" />
                   登录身份
                 </Button>
@@ -695,7 +711,7 @@ export default function App() {
               currentUser={currentUser}
               showToast={showToast}
               showConfirm={showConfirm}
-              onOpenCharacter={(id) => go('characterView', id)}
+              onOpenCharacter={(id) => { setCharacterOrigin('kpReview'); go('characterView', id); }}
             />
           )}
 
@@ -744,6 +760,7 @@ export default function App() {
               onBack={() => go('home')}
               onCopy={handleCopy}
               onEdit={openEditMode}
+              onDelete={handleDeleteModule}
               onTogglePlayed={togglePlayed}
               onGoCharacters={() => go('characters')}
             />
@@ -1042,7 +1059,7 @@ function NavDrawer({ open, onClose, view, currentUser, isAdmin, theme, onToggleT
         role="dialog"
         aria-modal="true"
         aria-label="导航"
-        className="drawer-in absolute right-0 top-0 flex h-full w-[86%] max-w-[340px] flex-col border-l border-line-strong bg-paper shadow-[-24px_0_80px_-30px_rgba(1,4,8,0.8)]"
+        className="drawer-in absolute right-0 top-0 flex h-full w-[86%] max-w-[340px] flex-col overflow-hidden border-l border-line-strong bg-paper shadow-[-24px_0_80px_-30px_rgba(1,4,8,0.8)]"
       >
         <div className="relative flex items-center justify-between border-b border-white/10 bg-[var(--c-masthead)] px-5 py-4 text-[var(--c-masthead-ink)]">
           <div className="flex items-center gap-2.5">
@@ -1064,25 +1081,29 @@ function NavDrawer({ open, onClose, view, currentUser, isAdmin, theme, onToggleT
           </button>
         </div>
 
+        <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-4 z-0 flex justify-center">
+          <SealMark size={210} className="text-ink/[0.055]" />
+        </div>
+
         {currentUser ? (
           <button
             type="button"
             onClick={() => onNavigate('profile')}
-            className="flex items-center gap-3 border-b border-line px-5 py-4 text-left"
+            className="relative z-10 flex items-center gap-3 border-b border-line px-5 py-4 text-left"
           >
             <span className="flex h-9 w-9 items-center justify-center bg-ink font-serif text-[14px] font-bold text-paper-raised">
               {String(currentUser.username || '?').slice(0, 1)}
             </span>
             <span className="min-w-0">
               <span className="block truncate text-[14px] font-semibold text-ink">{currentUser.username}</span>
-              <span className="mt-1 block text-[14px] tracking-[0.18em] text-cyan-500">
+              <span className="mt-1 block text-[14px] tracking-[0.18em] text-moon">
                 {isAdmin ? '守秘人 · 馆藏管理' : '调查员 · 在册'}
               </span>
             </span>
           </button>
         ) : null}
 
-        <nav className="flex-1 overflow-y-auto px-4 py-4">
+        <nav className="relative z-10 flex-1 overflow-y-auto px-4 py-4">
           {items.map((it) => (
             <button
               key={it.key}
@@ -1097,7 +1118,7 @@ function NavDrawer({ open, onClose, view, currentUser, isAdmin, theme, onToggleT
             >
               <span
                 aria-hidden="true"
-                className={cx('absolute inset-y-2 left-0 w-[3px]', view === it.key ? 'bg-gradient-to-b from-cyan-400 to-amber-400' : 'bg-transparent')}
+                className={cx('absolute inset-y-2 left-0 w-[3px]', view === it.key ? 'bg-gradient-to-b from-moon to-ochre' : 'bg-transparent')}
               />
               <it.icon className={cx('h-[16px] w-[16px]', view === it.key ? 'text-moon' : 'text-ink-mute')} strokeWidth={1.9} />
               {it.label}
@@ -1119,11 +1140,7 @@ function NavDrawer({ open, onClose, view, currentUser, isAdmin, theme, onToggleT
           ) : null}
         </nav>
 
-        <div className="px-6 pb-5 pt-2">
-          <SealMark size={96} className="mx-auto text-ink/15" />
-        </div>
-
-        <div className="relative border-t border-line px-5 py-3">
+        <div className="relative z-10 border-t border-line px-5 py-3">
           <div className="flex items-center justify-between gap-3">
             <div>
               <span className="block font-mono text-[14px] tracking-[0.22em] text-ink-mute">
@@ -1138,7 +1155,7 @@ function NavDrawer({ open, onClose, view, currentUser, isAdmin, theme, onToggleT
         </div>
 
         {currentUser ? (
-          <div className="border-t border-line p-3">
+          <div className="relative z-10 border-t border-line p-3">
             <button
               type="button"
               onClick={onLogout}

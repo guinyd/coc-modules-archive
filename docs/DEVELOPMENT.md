@@ -132,7 +132,7 @@
 │
 ├── tools/
 │   ├── gen-coc7e-data.py         ★从官方 Excel 生成 shared/coc7e-reference.js
-│   ├── ui-check.mjs              无头 Chrome 界面冒烟测试（54 项断言）
+│   ├── ui-check.mjs              无头 Chrome 界面冒烟测试（96 项断言）
 │   ├── seed-demo.mjs             演示数据生成器（截图 / 试玩用）
 │   └── screenshots.mjs           README 配图采集脚本
 │
@@ -450,7 +450,7 @@ cp backend/data/database.json /path/to/backup/database-$(date +%F).json
 npm run lint                                   # 0 error（18 条 warning 是 React Compiler 建议项）
 node backend/tools/smoke-test.mjs              # 后端 207 项断言
 npm run build                                  # 产物 dist/
-node tools/ui-check.mjs http://localhost:4173  # 界面 95 项断言（需 Chrome + 已启动服务）
+node tools/ui-check.mjs http://localhost:4173  # 界面 96 项断言（需 Chrome + 已启动服务）
 ```
 
 界面测试需要账号：`UI_USER=xxx UI_PASS=yyy node tools/ui-check.mjs …`
@@ -461,7 +461,7 @@ node tools/ui-check.mjs http://localhost:4173  # 界面 95 项断言（需 Chrom
 | --- | --- |
 | `npm run lint` | ✅ 0 error / 18 warning |
 | 后端冒烟 | ✅ 207 / 207 |
-| 界面冒烟（真实 Chrome，跑生产产物） | ✅ 95 / 95 |
+| 界面冒烟（真实 Chrome，跑生产产物） | ✅ 96 / 96 |
 | `npm run build` | ✅ JS 753.8 KB / gzip 203.7 KB；CSS 175.5 KB / gzip 30.2 KB |
 | 打印版面 | ✅ 一页 A4 容纳 57 行技能表，无溢出 |
 

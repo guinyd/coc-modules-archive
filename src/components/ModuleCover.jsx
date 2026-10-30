@@ -90,8 +90,6 @@ export default function CoverPlate({ module, variant = 'card', className = '' })
         backgroundImage: `radial-gradient(68% 92% at ${glowX}% ${glowY}%, ${ink.glow}, transparent 62%), radial-gradient(56% 66% at ${glowBX}% 112%, ${ink.glow2}, transparent 70%), linear-gradient(${angle}deg, ${ink.from} 0%, ${ink.to} 66%, ${ink.to} 100%)`,
       }}
     >
-      {hero ? <span className="sr-only">档案编号 {fileNumberOf(module)}</span> : null}
-
       {/* 印刷斜纹：很轻的一层，给平涂色版一点纸的呼吸 */}
       <div
         aria-hidden="true"
@@ -146,10 +144,10 @@ export default function CoverPlate({ module, variant = 'card', className = '' })
         ))}
       </div>
 
-      {/* 顶部只留档案编号；card 的编号改为 sr-only，避免与叠签、状态章抢位 */}
+      {/* 顶部只留档案编号；手机端下移到题名下的空位，card 的编号改为 sr-only */}
       <div className="relative z-10 flex items-start justify-end">
         {hero ? (
-          <span className="shrink-0 border border-[#f6ebcd]/12 bg-[#0b0d0a]/45 px-1.5 py-0.5 font-mono text-[11.5px] tracking-[0.1em] tabular text-[#f6ebcd]/78 backdrop-blur-[1px] sm:px-2 sm:py-1 sm:text-[14px] sm:tracking-[0.16em]">
+          <span className="hidden shrink-0 border border-[#f6ebcd]/12 bg-[#0b0d0a]/45 px-1.5 py-0.5 font-mono text-[11.5px] tracking-[0.1em] tabular text-[#f6ebcd]/78 backdrop-blur-[1px] sm:inline-flex sm:px-2 sm:py-1 sm:text-[14px] sm:tracking-[0.16em]">
             档案编号 {fileNumberOf(module)}
           </span>
         ) : (
@@ -158,7 +156,7 @@ export default function CoverPlate({ module, variant = 'card', className = '' })
       </div>
 
       {/* 题名：卡片带地区/时代/人数/时长，hero 只留题名与条码，信息交给下方夹页 */}
-      <div className={`relative z-10 mt-auto ${hero ? 'pt-16' : 'pt-6'}`}>
+      <div className={`relative z-20 mt-auto ${hero ? 'pt-16' : 'pt-6'}`}>
         <h3
           title={module.title}
           className={`cover-title font-serif font-black leading-[1.18] tracking-[-0.01em] ${
@@ -170,7 +168,9 @@ export default function CoverPlate({ module, variant = 'card', className = '' })
 
         <div className={`flex items-center justify-between gap-3 border-t border-[#f6ebcd]/15 pt-2 ${hero ? 'mt-4 pt-3' : 'mt-2.5'}`}>
           {hero ? (
-            <span aria-hidden="true" />
+            <span className="inline-flex items-center border border-[#f6ebcd]/12 bg-[#0b0d0a]/45 px-1.5 py-0.5 font-mono text-[11.5px] tracking-[0.1em] tabular text-[#f6ebcd]/78 backdrop-blur-[1px] sm:hidden">
+              档案编号 {fileNumberOf(module)}
+            </span>
           ) : (
             <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[14px] text-[#f6ebcd]/82">
               <span>{module.region || '未标注地区'}</span>

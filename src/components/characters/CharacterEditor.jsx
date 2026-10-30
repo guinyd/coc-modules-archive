@@ -373,15 +373,6 @@ export default function CharacterEditor({
     }));
     setDirty(true);
   };
-  const setSkillMark = (id, on) => {
-    setSheet((prev) => {
-      const marks = { ...(prev.skillMarks || {}) };
-      if (on) marks[id] = true; else delete marks[id];
-      return { ...prev, skillMarks: marks };
-    });
-    setDirty(true);
-  };
-
   const setSkillCustom = (id, value) => {
     setSheet((prev) => ({ ...prev, skills: prev.skills.map((s) => (s.id === id ? { ...s, custom: value } : s)) }));
     setDirty(true);
@@ -770,6 +761,7 @@ export default function CharacterEditor({
       {/* 分页 */}
       <div className="border-b border-line">
         <Tabs items={TABS.map((t) => ({ value: t.key, label: t.label, icon: t.icon }))} value={tab} onChange={setTab} className="border-b-0 [&_[data-tab]]:text-[14px]" />
+        <p className="pb-2 text-[14px] leading-relaxed text-ink-mute sm:hidden">← 左右滑动切换栏目 →</p>
       </div>
 
       {/* ---------------------------------------------------- 属性与职业 */}
@@ -1211,11 +1203,11 @@ export default function CharacterEditor({
             </div>
           )}
 
+          <p className="text-[14px] leading-relaxed text-ink-mute sm:hidden">← 左右滑动表格查看「职业点 / 兴趣点 / 成长」→</p>
           <div className="overflow-x-auto rounded-[2px] border border-line-strong">
             <table className="w-full min-w-[820px] text-[14.5px] leading-[1.6]">
               <thead className="bg-paper-deep/70 text-[14px] text-ink-mute uppercase">
                 <tr>
-                  <th className="p-2 w-10 text-center" title="本局游戏内大成功过就打个勾（会打印在角色卡上）">成功</th>
                   <th className="p-3 text-left">技能</th>
                   <th className="p-3 w-16 text-center">基础</th>
                   <th className="p-3 w-24 text-center">职业点</th>
@@ -1241,15 +1233,6 @@ export default function CharacterEditor({
                         isMythos && 'bg-moon/[0.06]',
                       )}
                     >
-                      <td className="p-2 text-center">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(sheet.skillMarks?.[s.id])}
-                          onChange={(e) => setSkillMark(s.id, e.target.checked)}
-                          className="w-4 h-4 accent-amber-500 cursor-pointer align-middle"
-                          title="标记本局大成功"
-                        />
-                      </td>
                       <td className="p-2">
                         <div className="flex items-center gap-2 flex-wrap">
                           {s.kind === 'custom'
@@ -1336,7 +1319,7 @@ export default function CharacterEditor({
                   );
                 })}
                 {visibleSkills.length === 0 && (
-                  <tr><td colSpan={9} className="p-8 text-center text-[14.5px] text-ink-mute">没有符合条件的技能</td></tr>
+                  <tr><td colSpan={8} className="p-8 text-center text-[14.5px] text-ink-mute">没有符合条件的技能</td></tr>
                 )}
               </tbody>
             </table>
@@ -1362,7 +1345,6 @@ export default function CharacterEditor({
                 <table className="w-full min-w-[820px] text-[14.5px] leading-[1.6]">
                   <thead className="bg-paper-deep/70 text-[14px] text-ink-mute">
                     <tr>
-                      <th className="p-2 w-10 text-center" title="本局大成功标记">成功</th>
                       <th className="p-2 text-left w-56">技能名称</th>
                       <th className="p-2 w-20 text-center">本职</th>
                       <th className="p-2 w-20 text-center">基础</th>
@@ -1378,14 +1360,6 @@ export default function CharacterEditor({
                       const d = derived.skills.find((x) => x.id === cs.id);
                       return (
                         <tr key={cs.id} className="bg-moon/[0.04]">
-                          <td className="p-2 text-center">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(sheet.skillMarks?.[cs.id])}
-                              onChange={(e) => setSkillMark(cs.id, e.target.checked)}
-                              className="w-4 h-4 accent-amber-500 cursor-pointer"
-                            />
-                          </td>
                           <td className="p-2">
                             <input
                               value={cs.name}
@@ -1428,9 +1402,9 @@ export default function CharacterEditor({
       {/* ---------------------------------------------------- 战斗 */}
       {tab === 'combat' && (
         <Panel className="space-y-4 p-5 sm:p-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink"><Sword className="h-4 w-4 text-ochre" />武器与战斗</h3>
-            <div className="flex items-center gap-2">
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
               <select
                 value={weaponPick}
                 onChange={(e) => {
@@ -1446,7 +1420,7 @@ export default function CharacterEditor({
                     }],
                   });
                 }}
-                className="cursor-pointer rounded-[2px] border border-line-strong bg-paper-raised px-3 py-2 text-[14px] text-ink"
+                className="max-w-full cursor-pointer rounded-[2px] border border-line-strong bg-paper-raised px-3 py-2 text-[14px] text-ink"
               >
                 <option value="">从武器表选择…</option>
                 {WEAPONS.filter((w) => w.name !== BUILTIN_WEAPON
@@ -1464,6 +1438,7 @@ export default function CharacterEditor({
           <p className="text-[16px] leading-[1.75] text-ink-soft">
             「{BUILTIN_WEAPON}」是规则书里的常驻攻击方式，固定保留在第一条且不可删除；其余武器可从官方武器表直接选。
           </p>
+          <p className="text-[14px] leading-relaxed text-ink-mute sm:hidden">← 左右滑动表格可查看完整武器信息 →</p>
           <div className="overflow-x-auto rounded-[2px] border border-line-strong">
             <table className="w-full min-w-[820px] text-[14.5px] leading-[1.6]">
               <thead className="bg-paper-deep/70 text-[14px] text-ink-mute">

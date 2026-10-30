@@ -27,7 +27,7 @@ import CoverPlate, { fileNumberOf } from '../components/ModuleCover.jsx';
 import { SealMark, SealWatermark } from '../components/Emblem.jsx';
 import { IndexTicks, TentacleCorner, TentacleRule } from '../components/Ornaments.jsx';
 import { CountUp, Magnetic, ReadingLamp } from '../components/Motion.jsx';
-import { hashString } from '../lib/random.js';
+
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
@@ -168,30 +168,30 @@ function DossierCard({ module, played, isAdmin, onOpen, onEdit, onDelete, onSeri
                 <span aria-hidden="true" className={cx('h-1.5 w-1.5 rounded-full', played ? 'bg-[#b7d8ac]' : 'bg-[#f3e7cd]/55')} />
                 {played ? '已调查' : '未调查'}
               </span>
+              {isAdmin ? (
+                <div className="pointer-events-none hidden gap-1 pt-0.5 opacity-0 transition-opacity duration-300 group-hover/card:pointer-events-auto group-hover/card:opacity-100 group-focus-within/card:pointer-events-auto group-focus-within/card:opacity-100 sm:flex">
+                  <button
+                    type="button"
+                    onClick={(e) => onEdit(module, e)}
+                    className="flex h-7 w-7 items-center justify-center border border-[#f3e7cd]/25 bg-[#0b1714]/88 text-[#f3e7cd] shadow-[0_8px_18px_-10px_rgba(0,0,0,.95)] backdrop-blur-[2px] transition-colors hover:border-[#f3e7cd]/60 hover:bg-[#c2542f] hover:text-[#fbf4e2]"
+                    aria-label="编辑模组"
+                  >
+                    <Edit className="h-3.5 w-3.5" strokeWidth={2} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => onDelete(module.id, e)}
+                    className="flex h-7 w-7 items-center justify-center border border-[#f3e7cd]/25 bg-[#0b1714]/88 text-[#e8a08c] shadow-[0_8px_18px_-10px_rgba(0,0,0,.95)] backdrop-blur-[2px] transition-colors hover:border-[#8f2a1c] hover:bg-[#8f2a1c] hover:text-[#fbf4e2]"
+                    aria-label="删除模组"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
 
           <CoverPlate module={module} variant="card" />
-          {isAdmin ? (
-            <div className="pointer-events-none absolute left-1/2 top-1/2 z-30 hidden -translate-x-1/2 -translate-y-1/2 gap-2 opacity-0 transition-all duration-300 group-hover/card:pointer-events-auto group-hover/card:opacity-100 group-focus-within/card:pointer-events-auto group-focus-within/card:opacity-100 sm:flex">
-              <button
-                type="button"
-                onClick={(e) => onEdit(module, e)}
-                className="flex h-8 w-8 items-center justify-center border border-[#f3e7cd]/25 bg-[#0b1714]/88 text-[#f3e7cd] shadow-[0_8px_18px_-10px_rgba(0,0,0,.95)] backdrop-blur-[2px] transition-colors hover:border-[#f3e7cd]/60 hover:bg-[#c2542f] hover:text-[#fbf4e2]"
-                aria-label="编辑模组"
-              >
-                <Edit className="h-4 w-4" strokeWidth={2} />
-              </button>
-              <button
-                type="button"
-                onClick={(e) => onDelete(module.id, e)}
-                className="flex h-8 w-8 items-center justify-center border border-[#f3e7cd]/25 bg-[#0b1714]/88 text-[#e8a08c] shadow-[0_8px_18px_-10px_rgba(0,0,0,.95)] backdrop-blur-[2px] transition-colors hover:border-[#8f2a1c] hover:bg-[#8f2a1c] hover:text-[#fbf4e2]"
-                aria-label="删除模组"
-              >
-                <Trash2 className="h-4 w-4" strokeWidth={2} />
-              </button>
-            </div>
-          ) : null}
         </div>
 
         {/* 编目文字：不套白卡，直接落在纸面上 */}
@@ -242,7 +242,7 @@ export default function HomeView({
   ];
 
   const latest = [...modules]
-    .sort((a, b) => hashString(`recent-${a.id}`) - hashString(`recent-${b.id}`))
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
     .slice(0, 3);
 
   const openRandom = () => {
@@ -646,22 +646,7 @@ export default function HomeView({
               </p>
             </div>
 
-            <div className="border border-line-strong bg-paper-raised/70 p-4">
-              <div className="flex items-center justify-between border-b border-line pb-2">
-                <span className="font-serif text-[14.5px] font-bold tracking-[0.06em] text-ink">最近收录</span>
-                <CalendarDays className="h-4 w-4 text-vermilion/70" strokeWidth={1.8} />
-              </div>
-              <ul className="mt-2 divide-y divide-line/70">
-                {latest.map((m, i) => (
-                  <li key={m.id}>
-                    <button type="button" onClick={() => onOpenModule(m)} className="group flex min-h-11 w-full items-center gap-2 py-2 text-left">
-                      <span className="font-mono text-[14px] text-vermilion/60">{pad2(i + 1)}</span>
-                      <span className="min-w-0 flex-1 truncate font-serif text-[14px] font-semibold text-ink-soft transition-colors group-hover:text-vermilion">{m.title}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            
 
             <div className="border border-line-strong bg-paper-raised/70 p-4">
               <div className="flex items-center justify-between border-b border-line pb-2">
