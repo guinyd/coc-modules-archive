@@ -102,15 +102,15 @@ export default function EduQuickModal({ open, item, onClose, onSaved, showToast 
           ) : null}
         </Panel>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-[14px] text-slate-500 flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
             只有 KP 能授权/重置；玩家即使绕过界面直接发请求，服务端也会保留存档值。
           </p>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={onClose}>关闭</Button>
-            <Button variant="subtle" onClick={reset}><RotateCcw className="w-4 h-4" />重置教育增强</Button>
-            <Button onClick={grant}><Dices className="w-4 h-4" />授权重掷一次</Button>
+          <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <Button variant="ghost" onClick={onClose} className="w-full sm:w-auto">关闭</Button>
+            <Button variant="subtle" onClick={reset} className="w-full sm:w-auto"><RotateCcw className="w-4 h-4" />重置教育增强</Button>
+            <Button onClick={grant} className="w-full sm:w-auto"><Dices className="w-4 h-4" />授权重掷一次</Button>
           </div>
         </div>
       </div>

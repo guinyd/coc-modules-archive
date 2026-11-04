@@ -59,8 +59,8 @@ else
 fi
 
 echo
-echo "✅ 完成。请确认 Nginx 配置指向 $TARGET，然后执行："
-echo "     sudo nginx -t && sudo systemctl reload nginx"
+echo "✅ 完成。静态文件已同步到 $TARGET。"
+echo "   生产环境的反代与 TLS 由 面板 / WAF 或自建 HTTPS 反代承担。"
 echo
-echo "后端进程建议以 COCOC_HOST=127.0.0.1 启动（见 deploy/nginx.conf.sample）："
+echo "后端进程建议以 COCOC_HOST=127.0.0.1 启动："
 echo "     COCOC_HOST=127.0.0.1 PORT=3000 npm --prefix backend start"

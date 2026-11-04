@@ -21,7 +21,8 @@ import { badRequest, notFound } from '../lib/errors.js';
 import { checkPasswordStrength, hashPassword } from '../lib/security.js';
 import { requireAdmin } from '../lib/auth.js';
 import {
-  parseNewUser, parseTitle, parseOccupationTemplate, parseAuditRules, parseUsernameChange, vId,
+  parseNewUser, parseTitle, parseOccupationTemplate, parseAuditRules, parseUsernameChange,
+  parseCharacterLimit, vId,
 } from '../lib/validate.js';
 import { audit, readAudit } from '../lib/audit.js';
 import { DEFAULT_AUDIT_RULES, AUDIT_RULE_META } from '../../shared/coc7e.js';
@@ -38,14 +39,14 @@ router.get('/users', (req, res) => {
   })));
 });
 
-router.post('/users', (req, res) => {
-  const { username, password, role } = parseNewUser(req.body);
+router.post('/users', async (req, res) => {
+  const { username, password, role, maxCharacters } = parseNewUser(req.body);
   const database = db();
   if (database.users.some((u) => u.username === username)) throw badRequest('该用户名已存在');
   const problem = checkPasswordStrength(password);
   if (problem) throw badRequest(problem);
 
-  const rec = hashPassword(password);
+  const rec = await hashPassword(password);
   const now = Date.now();
   const user = {
     id: `u_${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`,
@@ -56,6 +57,7 @@ router.post('/users', (req, res) => {
     passwordParams: { N: rec.N, r: rec.r, p: rec.p },
     role,
     title: role === 'admin' ? '首席守秘人' : '见习调查员',
+    maxCharacters,
     tokenHash: null,
     tokenExpiresAt: 0,
     createdAt: now,
@@ -63,17 +65,34 @@ router.post('/users', (req, res) => {
   };
   database.users.push(user);
   save();
-  audit(req, 'admin.user_create', { userId: user.id, username, role });
+  audit(req, 'admin.user_create', { userId: user.id, username, role, maxCharacters });
   res.json({ success: true, user: publicUser(user) });
 });
 
-router.put('/users/:id/password', (req, res) => {
+/** 调整账号的建卡上限；不允许低于该账号当前已持有的角色卡数 */
+router.patch('/users/:id', (req, res) => {
+  const id = vId(req.params.id, '用户');
+  const { maxCharacters } = parseCharacterLimit(req.body);
+  const user = findUserById(id);
+  if (!user) throw notFound('找不到该用户');
+  const used = db().characters.filter((c) => c.ownerId === id).length;
+  if (maxCharacters < used) {
+    throw badRequest(`该账号已有 ${used} 张角色卡，建卡上限不能低于现有数量`);
+  }
+  user.maxCharacters = maxCharacters;
+  user.updatedAt = Date.now();
+  save();
+  audit(req, 'admin.user_limit', { userId: id, username: user.username, maxCharacters });
+  res.json({ success: true, user: publicUser(user) });
+});
+
+router.put('/users/:id/password', async (req, res) => {
   const id = vId(req.params.id, '用户');
   const user = findUserById(id);
   if (!user) throw notFound('找不到该用户');
   // 服务端生成随机口令：不再使用 123456 这类固定弱口令
   const plain = `coc-${crypto.randomBytes(6).toString('base64url')}`;
-  const rec = hashPassword(plain);
+  const rec = await hashPassword(plain);
   user.passwordHash = rec.hash;
   user.passwordSalt = rec.salt;
   user.passwordAlgo = 'scrypt';

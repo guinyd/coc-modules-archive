@@ -30,13 +30,15 @@ const router = Router();
 /** 登录失败限流：同一 IP 15 分钟 10 次；同一用户名 15 分钟 8 次 */
 const ipFail = new FailLimiter({ windowMs: 15 * 60_000, max: 10 });
 const userFail = new FailLimiter({ windowMs: 15 * 60_000, max: 8 });
+/** 改密失败限流：同一账号 15 分钟 5 次，挡住拿泄漏令牌反复试原密码。 */
+const pwdFail = new FailLimiter({ windowMs: 15 * 60_000, max: 5 });
 
 router.get('/kp-name', (req, res) => {
   const admin = db().users.find((u) => u.role === 'admin');
   res.json({ kpName: admin ? admin.username : '档案馆首席 KP' });
 });
 
-router.post('/register', (req, res) => {
+router.post('/register', async (req, res) => {
   const { username, password } = parseRegister(req.body);
   const database = db();
   if (database.users.length > 0) {
@@ -46,7 +48,7 @@ router.post('/register', (req, res) => {
   const problem = checkPasswordStrength(password);
   if (problem) throw badRequest(problem);
 
-  const rec = hashPassword(password);
+  const rec = await hashPassword(password);
   const now = Date.now();
   const user = {
     id: `u_${now.toString(36)}`,
@@ -69,7 +71,7 @@ router.post('/register', (req, res) => {
   res.json(loginResponse(user, raw));
 });
 
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
   const ip = clientIp(req);
   const { username, password } = parseLogin(req.body);
 
@@ -90,10 +92,10 @@ router.post('/login', (req, res) => {
   // 无论用户是否存在都执行一次哈希校验，避免通过响应时间枚举用户名
   const dummy = { salt: 'x'.repeat(32), hash: 'y'.repeat(128), N: 16384, r: 8, p: 1 };
   const ok = user && user.passwordHash
-    ? verifyPassword(password, {
+    ? await verifyPassword(password, {
       salt: user.passwordSalt, hash: user.passwordHash, ...(user.passwordParams || {}),
     })
-    : verifyPassword(password, dummy);
+    : await verifyPassword(password, dummy);
 
   if (!user || !ok) {
     ipFail.fail(ip);
@@ -142,14 +144,21 @@ router.put('/user/username', requireAuth, (req, res) => {
   res.json({ success: true, user: publicUser(user), syncedCharacters: synced });
 });
 
-router.put('/user/password', requireAuth, (req, res) => {
+router.put('/user/password', requireAuth, async (req, res) => {
   const { oldPassword, newPassword } = parsePasswordChange(req.body);
   const user = findUserById(req.user.id);
   if (!user) throw unauthorized('账号不存在');
-  const ok = verifyPassword(oldPassword, {
+  const failKey = `pwd:${user.id}`;
+  const state = pwdFail.blocked(failKey);
+  if (!state.ok) {
+    audit(req, 'user.password_change_rate_limited', { userId: user.id });
+    throw tooMany(`密码尝试过于频繁，请 ${state.retryAfter} 秒后再试`);
+  }
+  const ok = await verifyPassword(oldPassword, {
     salt: user.passwordSalt, hash: user.passwordHash, ...(user.passwordParams || {}),
   });
   if (!ok) {
+    pwdFail.fail(failKey);
     audit(req, 'user.password_change_failed', { userId: user.id });
     throw badRequest('原密码错误');
   }
@@ -157,12 +166,13 @@ router.put('/user/password', requireAuth, (req, res) => {
   if (problem) throw badRequest(problem);
   if (newPassword === oldPassword) throw badRequest('新密码不能与原密码相同');
 
-  const rec = hashPassword(newPassword);
+  const rec = await hashPassword(newPassword);
   user.passwordHash = rec.hash;
   user.passwordSalt = rec.salt;
   user.passwordAlgo = 'scrypt';
   user.passwordParams = { N: rec.N, r: rec.r, p: rec.p };
   user.mustChangePassword = false;
+  pwdFail.reset(failKey);
   revokeToken(user); // 改密后强制所有会话失效
   save();
   audit(req, 'user.password_changed', { userId: user.id });

@@ -1,0 +1,368 @@
+/* ============================================================================
+   v10 · 启封 / 深潜档案
+   本层只叠加交互动效与响应式修补，不改 index.css 的排版与色彩契约。
+   规则：只动 transform / opacity / clip-path；时长与缓动复用既有令牌；
+         prefers-reduced-motion 下全部退回静态。
+   ========================================================================== */
+
+:root {
+  --focus-ring: #163f45;
+  --ink-drop: rgba(165, 42, 29, 0.2);
+  --ink-drop-soft: rgba(165, 42, 29, 0.08);
+}
+:root[data-theme="dark"] {
+  --focus-ring: #86cfc8;
+  --ink-drop: rgba(134, 207, 200, 0.2);
+  --ink-drop-soft: rgba(134, 207, 200, 0.07);
+}
+
+/* ---------------------------------------------------------------- 1. 换页
+   只让内容层入场，背景触手与报头保持静止；不使用整页快照，避免背景被一起位移。 */
+@media (prefers-reduced-motion: no-preference) {
+  .page-in {
+    animation: route-enter 420ms var(--ease-swift) both;
+  }
+}
+@keyframes route-enter {
+  from { opacity: 0; transform: translate3d(0, 10px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------------------------------------------------------------- 2. 深浅
+   颜色由 App 的印泥 wipe 覆盖切换；拨钮留在真实 DOM 中走完弹性位移。 */
+
+/* 拨钮：位移用 transform 驱动，按下时横向压扁，松开由回弹曲线送回；
+   两态标签叠放，切换时字从下方浮起、旧字向上退场。 */
+.theme-toggle { position: relative; }
+.theme-toggle .theme-knob {
+  transform: translateX(var(--knob-x, 0px));
+  transition: transform 520ms var(--ease-bounce), box-shadow 320ms var(--ease-soft);
+  will-change: transform;
+}
+.theme-toggle:active .theme-knob {
+  transform: translateX(var(--knob-x, 0px)) scaleX(1.14) scaleY(0.93);
+}
+.theme-toggle .theme-mode {
+  position: relative;
+  transition: color 260ms var(--ease-soft), opacity 180ms linear;
+}
+.theme-toggle:active .theme-mode { opacity: 0.55; }
+.theme-toggle .theme-mode__label {
+  position: absolute;
+  inset: 0;
+  transition: opacity 300ms var(--ease-soft), transform 460ms var(--ease-bounce);
+}
+.theme-toggle .theme-mode__label[data-on="false"] {
+  opacity: 0;
+  transform: translateY(7px);
+}
+.theme-toggle .theme-mode__label[data-on="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---------------------------------------------------------------- 3. 按钮
+   按下时墨点从指针处渗开；这是唯一按点击坐标生成的覆盖层，不参与布局。 */
+.ink-drop {
+  position: fixed;
+  z-index: 90;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--ink-drop) 0%, var(--ink-drop-soft) 42%, transparent 70%);
+  mix-blend-mode: multiply;
+  animation: ink-drop 620ms var(--ease-swift) forwards;
+  will-change: transform, opacity;
+}
+:root[data-theme="dark"] .ink-drop { mix-blend-mode: screen; }
+@keyframes ink-drop {
+  0% { opacity: 0.85; transform: scale(0.35); }
+  55% { opacity: 0.6; }
+  100% { opacity: 0; transform: scale(9); }
+}
+
+/* 按压手感：先沉 1px，再回弹；disabled 不响应。 */
+.press:active:not(:disabled),
+.btn-stamp:active:not(:disabled),
+.record-act:active:not(:disabled),
+.tab-stamp:active:not(:disabled),
+.filter-chip:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
+  transition-duration: 80ms !important;
+}
+@media (hover: none) {
+  .press:hover,
+  .btn-stamp:hover,
+  .record-act:hover,
+  .dossier:hover,
+  .char-card:hover,
+  .folder:hover {
+    transform: none;
+  }
+}
+
+:where(button, [role="button"], a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  :where(button, [role="button"], a):focus-visible {
+    animation: focus-ring-in 420ms var(--ease-swift);
+  }
+}
+@keyframes focus-ring-in {
+  from { outline-offset: 8px; outline-color: transparent; }
+  to { outline-offset: 2px; outline-color: var(--focus-ring); }
+}
+
+/* 主按钮：盖章瞬间有一道极窄的高光扫过（不新增布局）。 */
+@media (prefers-reduced-motion: no-preference) {
+  .btn-stamp:active::after { animation: stamp-press 420ms var(--ease-swift); }
+}
+@keyframes stamp-press {
+  0% { transform: translateX(-120%) skewX(-18deg); opacity: 0; }
+  40% { opacity: 0.55; }
+  100% { transform: translateX(140%) skewX(-18deg); opacity: 0; }
+}
+
+/* ---------------------------------------------------------------- 4. 开关
+   Toggle 的滑块改由 transform 驱动，避免 left 触发布局。 */
+.toggle-thumb {
+  transform: translateX(2px);
+  transition: transform 380ms var(--ease-bounce), background-color 260ms var(--ease-soft);
+  will-change: transform;
+}
+[data-checked="true"] .toggle-thumb { transform: translateX(18px); }
+.toggle-host:active .toggle-thumb { transform: translateX(2px) scaleX(1.18); }
+[data-checked="true"].toggle-host:active .toggle-thumb { transform: translateX(18px) scaleX(1.18); }
+.toggle-host .toggle-thumb { transform-origin: center; }
+
+/* Tabs 指示块由 transform 驱动（JSX 内联 transform）；这里只补一层落定回弹。 */
+.tab-indicator {
+  will-change: transform;
+  transform-origin: left center;
+}
+
+/* ---------------------------------------------------------------- 5. 导航 */
+.nav-progress {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, var(--color-vermilion) 0%, var(--color-ochre) 62%, var(--color-moon) 100%);
+  opacity: 0.9;
+  pointer-events: none;
+  will-change: transform;
+}
+.glass-bar[data-scrolled="true"] {
+  box-shadow: 0 24px 46px -34px rgba(0, 0, 0, 0.95);
+}
+.glass-bar[data-scrolled="true"] .masthead-strip { opacity: 0.55; }
+.masthead-strip { transition: opacity 320ms var(--ease-soft); }
+
+/* 路由顶部扫描线：请求 >140ms 才出现，避免短请求闪一下。 */
+.route-progress {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 130;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 220ms var(--ease-soft);
+}
+.route-progress.is-active { opacity: 1; }
+.route-progress__bar {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--color-vermilion), var(--color-ochre), transparent);
+}
+.route-progress.is-active .route-progress__bar {
+  animation: route-scan 1.05s var(--ease-soft) infinite;
+}
+@keyframes route-scan {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+/* 回到顶端：入场时像一枚被按下的图钉。 */
+.back-top { animation: back-top-in 380ms var(--ease-bounce) both; }
+@keyframes back-top-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.86); }
+}
+
+/* ---------------------------------------------------------------- 6. 加载 */
+.skeleton-block {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-paper-deep);
+}
+.skeleton-block::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  animation: skeleton-sweep 1.45s var(--ease-soft) infinite;
+}
+:root[data-theme="dark"] .skeleton-block::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+}
+@keyframes skeleton-sweep {
+  to { transform: translateX(100%); }
+}
+.skeleton-card { animation: skeleton-in 420ms var(--ease-swift) both; }
+@keyframes skeleton-in {
+  from { opacity: 0; transform: translateY(8px); }
+}
+
+/* ---------------------------------------------------------------- 7. 反馈 */
+.toast-sheet { animation: toast-in 440ms var(--ease-bounce) both; }
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, -18px) scale(0.96); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+.toast-timer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  transform-origin: 0 50%;
+  background: currentColor;
+  opacity: 0.35;
+  animation: toast-timer 3.2s linear forwards;
+}
+@keyframes toast-timer {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+.dialog-panel { animation: dialog-in 420ms var(--ease-bounce) both; }
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.965); }
+}
+@media (max-width: 640px) {
+  .dialog-shell {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+  .dialog-panel {
+    width: 100%;
+    max-width: none !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    animation: sheet-rise 480ms var(--ease-swift) both;
+  }
+}
+@keyframes sheet-rise {
+  from { opacity: 0; transform: translateY(100%); }
+}
+
+/* ---------------------------------------------------------------- 8. 档案夹
+   详情页：封面先抬起，夹页随后从下面抽出。 */
+@media (prefers-reduced-motion: no-preference) {
+  .page-in .folder-front {
+    transform-origin: 50% 12%;
+    animation: folder-open 720ms var(--ease-swift) both;
+  }
+  .page-in .folder-inner {
+    animation: folder-sheet 680ms var(--ease-swift) both 70ms;
+  }
+}
+@keyframes folder-open {
+  from { opacity: 0; transform: translateY(-16px) rotateX(5deg); }
+}
+@keyframes folder-sheet {
+  from { opacity: 0; transform: translateY(20px); }
+}
+
+/* 详情操作条：手机上两列，主操作独占一行。 */
+.detail-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  width: 100%;
+}
+.detail-actions > :last-child { grid-column: 1 / -1; }
+@media (min-width: 640px) {
+  .detail-actions {
+    display: flex;
+    width: auto;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .detail-actions > :last-child { grid-column: auto; }
+}
+
+/* ---------------------------------------------------------------- 9. 证件
+   登录页：读者证从窗口下方递进来，证头随后落定；馆章保持静态压在骑缝上
+   （动画化的馆章会被父级合成层盖住，这里不做位移动画）。 */
+.permit-seal { transform: rotate(-4deg); transform-origin: 50% 50%; }
+@media (prefers-reduced-motion: no-preference) {
+  .permit-card { animation: permit-drop 760ms var(--ease-swift) both 60ms; }
+  .permit-card .permit-head { animation: permit-head 640ms var(--ease-soft) both 180ms; }
+}
+@keyframes permit-drop {
+  from { opacity: 0; transform: translateY(26px) rotate(0.7deg); }
+}
+@keyframes permit-head {
+  from { opacity: 0; transform: translateY(8px); }
+}
+
+/* ---------------------------------------------------------------- 10. 手机
+   桌面构图按高度裁切后只剩中央竖条，触手落在两侧被裁掉；
+   小屏改用 390×844 的竖向构图，触手从上下纸边探入。 */
+.tentacle-mobile { display: none; }
+@media (max-width: 767px) {
+  .tentacle-desktop { display: none; }
+  .tentacle-mobile { display: block; }
+}
+
+/* 手机上的紧凑主题拨钮：给 44px 热区，但不撑大 32px 的视觉尺寸。 */
+@media (max-width: 767px) and (pointer: coarse) {
+  .theme-toggle::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero-actions { gap: 0.5rem; }
+  .archive-ambient { opacity: 0.9; }
+}
+
+/* ---------------------------------------------------------------- 11. 兜底 */
+@media (prefers-reduced-motion: reduce) {
+  .ink-drop,
+  .route-progress,
+  .skeleton-block::after,
+  .toast-timer,
+  .nav-progress {
+    display: none !important;
+  }
+  .page-in,
+  .permit-card,
+  .permit-card .permit-head,
+  .permit-seal,
+  .page-in .folder-front,
+  .page-in .folder-inner,
+  .skeleton-card,
+  .dialog-panel,
+  .back-top {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    clip-path: none !important;
+  }
+  .toggle-thumb { transition: none !important; }
+}

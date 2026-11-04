@@ -12,18 +12,51 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Copy, Crown, RefreshCw, Search, Shield, User as UserIcon, UserPlus } from 'lucide-react';
-import { apiDelete, apiGet, apiPost, apiPut } from '../lib/api.js';
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../lib/api.js';
 import {
-  Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Panel, Select, StatStrip, cx,
+  Badge, Button, EmptyState, Field, Input, Modal, NumberInput, PageHeader, Panel, Select, StatStrip, cx,
 } from './ui.jsx';
 import { usernameHint } from './AccountRenameCard.jsx';
 
 const TITLES = ['见习调查员', '资深调查员', '精英调查员', '传奇调查员', '神话调查员'];
 
+/** 账号行内的建卡上限编辑器：失焦或回车时提交，0 表示暂停建卡 */
+function LimitInput({ value, used, onCommit }) {
+  const [draft, setDraft] = useState(String(value ?? 30));
+
+  const commit = () => {
+    const n = Math.trunc(Number(draft));
+    if (!Number.isFinite(n)) { setDraft(String(value ?? 30)); return; }
+    const next = Math.max(0, Math.min(200, n));
+    setDraft(String(next));
+    if (next !== value) onCommit(next);
+  };
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <input
+        type="number"
+        min={0}
+        max={200}
+        inputMode="numeric"
+        aria-label="建卡上限"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+        onWheel={(e) => e.currentTarget.blur()}
+        className="w-14 border border-line-strong bg-paper px-1.5 py-1 text-center font-mono text-[14px] text-slate-100 outline-none focus:border-indigo"
+      />
+      <span className="whitespace-nowrap text-[13px] text-slate-500">张 · 已用 {used}</span>
+    </span>
+  );
+}
+
 export default function AdminUsersPanel({ setView, showToast, showConfirm }) {
   const [users, setUsers] = useState([]);
   const [newUsername, setNewUsername] = useState('');
   const [newPwd, setNewPwd] = useState('');
+  const [newLimit, setNewLimit] = useState(30);
   const [busy, setBusy] = useState(false);
   const [issued, setIssued] = useState(null);
   const [renaming, setRenaming] = useState(null);   // { id, username, chars }
@@ -42,9 +75,9 @@ export default function AdminUsersPanel({ setView, showToast, showConfirm }) {
     e.preventDefault();
     setBusy(true);
     try {
-      await apiPost('/api/admin/users', { username: newUsername, password: newPwd });
+      await apiPost('/api/admin/users', { username: newUsername, password: newPwd, maxCharacters: newLimit });
       showToast('用户创建成功');
-      setNewUsername(''); setNewPwd('');
+      setNewUsername(''); setNewPwd(''); setNewLimit(30);
       loadUsers();
     } catch (err) {
       showToast(err.message, 'error');
@@ -105,6 +138,18 @@ export default function AdminUsersPanel({ setView, showToast, showConfirm }) {
     } catch (err) { showToast(err.message, 'error'); }
   };
 
+  /** 调整单个账号的建卡上限；0 = 暂停建卡 */
+  const handleUpdateLimit = async (userId, maxCharacters) => {
+    try {
+      await apiPatch(`/api/admin/users/${userId}`, { maxCharacters });
+      showToast(`建卡上限已改为 ${maxCharacters} 张`);
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      loadUsers();
+    }
+  };
+
   const admins = users.filter((u) => u.role === 'admin').length;
   const stats = [
     { label: '在册馆员', value: users.length, unit: '人' },
@@ -152,7 +197,7 @@ export default function AdminUsersPanel({ setView, showToast, showConfirm }) {
           <span className="caption">NEW ACCOUNT</span>
         </div>
 
-        <form onSubmit={handleCreateUser} className="grid gap-5 p-5 sm:grid-cols-[1fr_1fr_auto] sm:items-end sm:p-6">
+        <form onSubmit={handleCreateUser} className="grid gap-5 p-5 sm:grid-cols-[1fr_1fr_8.5rem_auto] sm:items-end sm:p-6">
           <Field label="新用户名">
             <Input
               required
@@ -170,6 +215,15 @@ export default function AdminUsersPanel({ setView, showToast, showConfirm }) {
               onChange={(e) => setNewPwd(e.target.value)}
               maxLength={128}
               className="!rounded-none !border-x-0 !border-t-0 !border-b !border-line-strong !bg-transparent !px-0 focus:!border-indigo focus:!ring-0"
+            />
+          </Field>
+          <Field label="建卡上限" hint="0 = 暂停建卡">
+            <NumberInput
+              min={0}
+              max={200}
+              value={newLimit}
+              onChange={(v) => setNewLimit(v === '' ? 0 : v)}
+              className="!rounded-none !border-x-0 !border-t-0 !border-b !border-line-strong !bg-transparent !px-0 !text-left focus:!border-indigo focus:!ring-0"
             />
           </Field>
           <div className="flex items-end">
@@ -232,7 +286,7 @@ export default function AdminUsersPanel({ setView, showToast, showConfirm }) {
         </div>
 
         <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[880px] border-collapse text-left">
+          <table className="w-full min-w-[1000px] border-collapse text-left">
             <thead>
               <tr className="bg-ink text-paper-raised">
                 <th className="w-12 px-3 py-3 font-mono text-[14px] font-medium tracking-[0.14em] text-paper-deep/70">NO.</th>
@@ -240,6 +294,7 @@ export default function AdminUsersPanel({ setView, showToast, showConfirm }) {
                 <th className="px-4 py-3 text-[14px] font-semibold tracking-[0.16em]">权限角色</th>
                 <th className="px-4 py-3 text-[14px] font-semibold tracking-[0.16em]">荣誉头衔（显示在证书）</th>
                 <th className="px-4 py-3 text-center text-[14px] font-semibold tracking-[0.16em]">角色卡</th>
+                <th className="px-4 py-3 text-center text-[14px] font-semibold tracking-[0.16em]">建卡额度</th>
                 <th className="px-4 py-3 text-right text-[14px] font-semibold tracking-[0.16em]">操作</th>
               </tr>
             </thead>
@@ -298,6 +353,14 @@ export default function AdminUsersPanel({ setView, showToast, showConfirm }) {
                     </span>
                     <span className="ml-1 text-[14px] text-slate-500">张</span>
                   </td>
+                  <td className="px-4 py-[13px] text-center">
+                    <LimitInput
+                      key={`${u.id}-${u.characterLimit}`}
+                      value={u.characterLimit}
+                      used={u.characterCount || 0}
+                      onCommit={(next) => handleUpdateLimit(u.id, next)}
+                    />
+                  </td>
                   <td className="px-4 py-[13px]">
                     <div className="flex justify-end gap-3.5">
                       <button
@@ -329,7 +392,7 @@ export default function AdminUsersPanel({ setView, showToast, showConfirm }) {
               ))}
               {filteredUsers.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="px-4 py-10">
+                  <td colSpan="7" className="px-4 py-10">
                     <EmptyState title="没有匹配的账号" desc="换一个用户名关键词再试。" />
                   </td>
                 </tr>
@@ -376,7 +439,7 @@ export default function AdminUsersPanel({ setView, showToast, showConfirm }) {
                 <div>
                   <dt className="font-mono text-[14px] tracking-[0.14em] text-slate-500">角色卡数</dt>
                   <dd className={cx('mt-0.5 font-mono text-[14px] font-semibold tabular', u.characterCount ? 'text-emerald-700' : 'text-slate-500')}>
-                    {u.characterCount || 0} <span className="text-[14px] font-normal text-slate-500">张</span>
+                    {u.characterCount || 0} / {u.characterLimit ?? 30} <span className="text-[14px] font-normal text-slate-500">张</span>
                   </dd>
                 </div>
                 <div>
@@ -384,6 +447,16 @@ export default function AdminUsersPanel({ setView, showToast, showConfirm }) {
                   <dd className="mt-0.5 font-mono text-[14.5px] text-slate-300 tabular">{formatRegistered(u.createdAt)}</dd>
                 </div>
               </dl>
+
+              <div className="mt-2.5 flex items-center justify-between gap-3">
+                <span className="font-mono text-[14px] tracking-[0.14em] text-slate-500">建卡上限</span>
+                <LimitInput
+                  key={`${u.id}-${u.characterLimit}`}
+                  value={u.characterLimit}
+                  used={u.characterCount || 0}
+                  onCommit={(next) => handleUpdateLimit(u.id, next)}
+                />
+              </div>
 
               {u.role === 'admin' ? (
                 <p className="mt-2.5 font-kai text-[16px] tracking-[0.12em] text-amber-500">【 首席守秘人 】</p>

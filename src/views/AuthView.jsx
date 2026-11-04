@@ -107,7 +107,7 @@ export default function AuthView({
       </section>
 
       {/* ------------------------------------------------------ 右：读者证 */}
-      <section className="relative animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: '120ms' }}>
+      <section className="relative">
         {/* 挂绳孔 */}
         <div
           aria-hidden="true"
@@ -115,10 +115,10 @@ export default function AuthView({
         />
 
           <div className="relative">
-            <div className="relative z-10 border-2 border-ink/80 bg-paper-raised shadow-[10px_10px_0_-1px_rgba(23,17,9,0.14)]">
+            <div className="permit-card relative z-10 border-2 border-ink/80 bg-paper-raised shadow-[10px_10px_0_-1px_rgba(23,17,9,0.14)]">
           {/* 证头 */}
           <div
-            className="relative overflow-hidden px-5 py-5 text-[var(--c-masthead-ink)] sm:px-6"
+            className="permit-head relative overflow-hidden px-5 py-5 text-[var(--c-masthead-ink)] sm:px-6"
             style={{ backgroundColor: 'var(--c-masthead)' }}
           >
             <div aria-hidden="true" className="absolute -right-10 -top-10 text-[var(--c-masthead-ink)] opacity-[0.12]">
@@ -204,15 +204,15 @@ export default function AuthView({
             </span>
             <span className="font-mono text-[14px] tracking-[0.22em] text-ink-mute">MCMXX</span>
           </div>
+
+            {/* 馆印：压在证件卡右下角，盖住骑缝编号，才有“盖棺定论”的落印感 */}
+            <span
+              aria-hidden="true"
+              className="permit-seal pointer-events-none absolute -bottom-5 -right-5 z-20 hidden text-vermilion/45 sm:block"
+            >
+              <SealMark size={132} strokeWidth={1.2} />
+            </span>
           </div>
-          {/* 馆印：压在证件卡右下角，盖住骑缝编号，才有“盖棺定论”的落印感 */}
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute -bottom-6 -right-6 z-20 hidden text-vermilion/55 sm:block"
-            style={{ transform: 'rotate(-12deg)' }}
-          >
-            <SealMark size={150} strokeWidth={1.2} />
-          </span>
         </div>
 
         <p className="relative z-10 mt-4 text-center font-kai text-[14px] tracking-[0.18em] text-ink-mute">

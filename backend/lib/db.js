@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { isVeryWeak, hashPassword, hashToken, tokenExpiry } from './security.js';
+import { isVeryWeak, hashPasswordSync, hashToken, tokenExpiry } from './security.js';
 import { blankEduGrowth, blankLegendary, blankLegendaryBonus } from '../../shared/coc7e.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -26,9 +26,15 @@ export const DB_FILE = process.env.COCOC_DB_FILE
 
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const BACKUP_KEEP = 14;
-export const SCHEMA_VERSION = 6;
+/** 写合并窗口：角色卡连续保存时只落一次盘；进程退出用 saveNow() 兜底。 */
+const SAVE_DEBOUNCE_MS = 120;
+export const SCHEMA_VERSION = 7;
+/** 每个账号默认的角色卡上限；管理员可在账号管理里逐个调整（0 表示暂停建卡）。 */
+export const DEFAULT_MAX_CHARACTERS = 30;
 
 let data = null;
+let saveTimer = null;
+let backedUpDay = '';
 
 // ------------------------------------------------------------------ 结构
 function emptyDB() {
@@ -70,7 +76,7 @@ function migrate(d) {
 
   for (const u of d.users) {
     if (typeof u.password === 'string' && u.password && !u.passwordHash) {
-      const rec = hashPassword(u.password);
+      const rec = hashPasswordSync(u.password);
       u.passwordHash = rec.hash;
       u.passwordSalt = rec.salt;
       u.passwordAlgo = 'scrypt';
@@ -138,6 +144,15 @@ function migrate(d) {
     if (typeof c.notes !== 'string') { c.notes = ''; changed = true; }
   }
 
+  // v6 -> v7：每个账号的角色卡上限（默认 30，管理员可调；0 表示暂停建卡）
+  for (const u of d.users) {
+    if (!Number.isInteger(u.maxCharacters) || u.maxCharacters < 0 || u.maxCharacters > 200) {
+      u.maxCharacters = DEFAULT_MAX_CHARACTERS;
+      changed = true;
+    }
+  }
+  if (changed && d.schemaVersion < 7) notes.push('账号增加角色卡上限（默认 30）');
+
   if (!d.schemaVersion || d.schemaVersion < SCHEMA_VERSION) {
     d.schemaVersion = SCHEMA_VERSION;
     changed = true;
@@ -180,17 +195,37 @@ export function db() {
   return data;
 }
 
-/** 落盘（原子替换） */
+/**
+ * 落盘（写合并 + 原子替换）。
+ * 一次请求内的多次修改只排一个 120ms 定时器；定时器到点写最新内存态。
+ * 进程退出必须调用 saveNow()，否则窗口内的修改会丢。
+ */
 export function save() {
+  if (!data) return;
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    if (!data) return;
+    try { writeAtomic(data); } catch (err) { console.error('[db] 落盘失败:', err.message); }
+  }, SAVE_DEBOUNCE_MS);
+  if (typeof saveTimer.unref === 'function') saveTimer.unref();
+}
+
+/** 立即落盘：退出、迁移、以及不能容忍 120ms 丢失的关键写。 */
+export function saveNow() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
   if (!data) return;
   writeAtomic(data);
 }
 
 function writeAtomic(obj) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  backup('daily');
+  backupDailyOnce();
   const tmp = `${DB_FILE}.${process.pid}.tmp`;
-  const payload = JSON.stringify(obj, null, 2);
+  const payload = JSON.stringify(obj);
   const fd = fs.openSync(tmp, 'w');
   try {
     fs.writeFileSync(fd, payload, 'utf-8');
@@ -199,6 +234,14 @@ function writeAtomic(obj) {
     fs.closeSync(fd);
   }
   fs.renameSync(tmp, DB_FILE);
+}
+
+/** 每天只做一次 daily 备份：避免每次落盘都 readdir + 压缩。 */
+function backupDailyOnce() {
+  const day = new Date().toISOString().slice(0, 10);
+  if (backedUpDay === day) return;
+  backup('daily');
+  backedUpDay = day;
 }
 
 /** 备份策略：每天最多一份（daily）、迁移前一份（pre-migration），只保留最近 N 份 */
@@ -261,6 +304,7 @@ export function publicUser(u) {
     role: u.role,
     title: u.title || '见习调查员',
     mustChangePassword: Boolean(u.mustChangePassword),
+    characterLimit: Number.isInteger(u.maxCharacters) ? u.maxCharacters : DEFAULT_MAX_CHARACTERS,
   };
 }
 

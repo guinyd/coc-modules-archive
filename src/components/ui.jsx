@@ -204,14 +204,19 @@ export function StatStrip({ items, className }) {
  */
 export function Tabs({ items, value, onChange, className, stretch, size = 'md' }) {
   const wrapRef = useRef(null);
-  const [ind, setInd] = useState({ left: 0, width: 0, ready: false });
+  const [ind, setInd] = useState({ left: 0, width: 0, base: 0, ready: false });
 
   const measure = useCallback(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
     const el = wrap.querySelector(`[data-tab="${value}"]`);
     if (!el) return;
-    setInd({ left: el.offsetLeft, width: el.offsetWidth, ready: true });
+    setInd((prev) => ({
+      left: el.offsetLeft,
+      width: el.offsetWidth,
+      base: prev.base || el.offsetWidth,
+      ready: true,
+    }));
   }, [value]);
 
   useEffect(() => { measure(); }, [measure]);
@@ -235,13 +240,15 @@ export function Tabs({ items, value, onChange, className, stretch, size = 'md' }
     >
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute top-[2px] bottom-[2px] -skew-x-2 bg-vermilion shadow-[2px_2px_0_0_rgba(23,17,9,0.16)]"
+        className="tab-indicator pointer-events-none absolute top-[2px] bottom-[2px] bg-vermilion shadow-[2px_2px_0_0_rgba(23,17,9,0.16)]"
         style={{
-          left: ind.left,
-          width: ind.width,
+          left: 0,
+          width: ind.base,
           opacity: ind.ready ? 1 : 0,
+          transform: `translate3d(${ind.left}px, 0, 0) scaleX(${ind.base ? ind.width / ind.base : 1}) skewX(-2deg)`,
+          transformOrigin: 'left center',
           transition: ind.ready
-            ? 'left 460ms cubic-bezier(0.34,1.28,0.64,1), width 460ms cubic-bezier(0.34,1.28,0.64,1), opacity 180ms'
+            ? 'transform 460ms cubic-bezier(0.34,1.28,0.64,1), opacity 180ms'
             : 'none',
         }}
       />
@@ -336,6 +343,8 @@ export function Toggle({ checked, onChange, label, hint }) {
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={cx(
         'group flex w-full items-center gap-3 rounded-[2px] border p-3 text-left transition-all duration-300 ease-[var(--ease-soft)]',
@@ -348,10 +357,10 @@ export function Toggle({ checked, onChange, label, hint }) {
         'relative h-[20px] w-[36px] shrink-0 rounded-[2px] border transition-colors duration-300',
         checked ? 'border-vermilion-deep bg-vermilion' : 'border-line-strong bg-paper-deep',
       )}>
-        <span className={cx(
-          'absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-[1px] bg-paper-raised shadow-[0_1px_2px_rgba(23,17,9,0.35)] transition-[left,background-color] duration-300 ease-[var(--ease-bounce)]',
-          checked ? 'left-[18px]' : 'left-[2px] group-hover:left-[3px]',
-        )} />
+        <span
+          className="toggle-thumb absolute left-[2px] top-1/2 h-4 w-4 rounded-[1px] bg-paper-raised shadow-[0_1px_2px_rgba(23,17,9,0.35)] transition-transform duration-300 ease-[var(--ease-bounce)]"
+          style={{ transform: `translate3d(${checked ? 16 : 0}px, -50%, 0)` }}
+        />
       </span>
       <span className="min-w-0">
         <span className="block text-[14px] font-semibold text-ink">{label}</span>
@@ -470,13 +479,14 @@ export function Toast({ toast }) {
   const isError = toast.type === 'error';
   return (
     <div className={cx(
-      'fixed left-1/2 top-5 z-[100] flex max-w-[92vw] -translate-x-1/2 items-center gap-2.5 rounded-[2px] border px-4 py-2.5 text-[14px] font-medium animate-in drop-in',
+      'toast-sheet fixed left-1/2 top-5 z-[100] flex max-w-[92vw] -translate-x-1/2 items-center gap-2.5 overflow-hidden rounded-[2px] border px-4 py-2.5 text-[14px] font-medium',
       isError
         ? 'border-red-500 bg-[#2a0e0a] text-red-100 shadow-[0_18px_40px_-24px_rgba(23,18,12,0.9)]'
         : 'border-ink bg-ink text-paper-raised shadow-[0_18px_40px_-24px_rgba(23,18,12,0.9)]',
     )}>
       {isError ? <AlertCircle className="h-4 w-4 shrink-0 text-red-300" /> : <CheckCircle className="h-4 w-4 shrink-0 text-emerald-200" />}
       <span className="truncate">{toast.msg}</span>
+      <span aria-hidden="true" className="toast-timer" />
     </div>
   );
 }
@@ -484,8 +494,8 @@ export function Toast({ toast }) {
 export function ConfirmDialog({ dialog, onClose }) {
   if (!dialog) return null;
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#17120c]/50 p-4 animate-in fade-in">
-      <div className="surface w-full max-w-sm animate-in zoom-in-95">
+    <div className="dialog-shell fixed inset-0 z-[100] flex items-center justify-center bg-[#17120c]/50 p-4">
+      <div role="dialog" aria-modal="true" className="dialog-panel surface w-full max-w-sm">
         <div className="rule-double mx-6 mt-6" />
         <div className="p-6">
           <p className="font-serif text-[19px] font-bold leading-snug text-slate-100">{dialog.msg}</p>
@@ -511,9 +521,9 @@ export function ConfirmDialog({ dialog, onClose }) {
 export function Modal({ open, onClose, title, children, wide }) {
   if (!open) return null;
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-[#081311]/55 p-3 backdrop-blur-sm animate-in fade-in sm:p-6">
+    <div className="dialog-shell fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-[#081311]/55 p-3 backdrop-blur-sm sm:p-6">
       <div className={cx(
-        'surface my-4 w-full animate-in zoom-in-95 sm:my-8',
+        'dialog-panel surface my-4 w-full sm:my-8',
         wide ? 'max-w-3xl' : 'max-w-xl',
       )}>
         <div className="flex items-center justify-between border-b border-line-strong px-5 py-4 sm:px-6">

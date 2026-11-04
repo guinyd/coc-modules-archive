@@ -12,7 +12,7 @@ coc-archive-update-<版本>-<日期>.zip
 ├── index/     ← 前端静态产物（目录名与站点静态根一致，直接覆盖 index/）
 ├── backend/   ← 后端源码（server.js / lib / routes / tools / package*.json）
 ├── shared/    ← COC 7e 规则引擎（后端运行时需要）
-└── deploy/    ← 本说明、一键更新脚本 apply-update.sh、Nginx 配置样例
+└── deploy/    ← 本说明、一键更新脚本 apply-update.sh
 ```
 
 > 更新包**只发布 zip**，且只有上面这四个目录。**zip 根就是这四个目录，不再套一层父目录**（2026-10-30 起），解压时用 `-d` 指定落点即可。
@@ -113,7 +113,7 @@ sudo systemctl restart coc-archive
 
 ```bash
 curl -s http://127.0.0.1:3000/api/health          # 应为 {"ok":true,...}
-sudo nginx -t && sudo systemctl reload nginx      # 若动过 Nginx 配置
+# 若用 面板 / WAF：在面板里重载反代；若自建 Nginx：sudo nginx -t && sudo systemctl reload nginx
 ```
 
 浏览器打开站点后用 KP 账号登录，确认：
@@ -123,7 +123,7 @@ sudo nginx -t && sudo systemctl reload nginx      # 若动过 Nginx 配置
 - [ ] 首页能加载出模组卡片（说明前端产物已替换成功）
 
 > **用户端缓存提示**：`/assets/*` 文件名带内容哈希，可以放心长缓存；
-> `index.html` 必须是 `no-store`。若用户看到的是旧页面，先确认 Nginx 的 `location = /index.html` 配置还在。
+> `index.html` 必须是 `no-store`。若用户看到的是旧页面，先确认反代对 `index.html` 的 `no-store` 配置还在。
 
 ---
 

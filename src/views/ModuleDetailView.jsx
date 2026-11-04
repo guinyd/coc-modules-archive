@@ -107,7 +107,7 @@ export default function ModuleDetailView({
               <span aria-hidden="true" className="h-3 w-px bg-line-strong" />
               {module.era || '年代不明'}
             </span>
-            <div className="ml-auto flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <div className="detail-actions ml-auto flex w-full flex-wrap items-center gap-2 sm:w-auto">
               {isAdmin ? (
                 <>
                   <button type="button" onClick={(e) => onEdit(module, e)} className="record-act record-act--edit group w-full justify-center sm:w-auto">

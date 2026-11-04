@@ -49,6 +49,15 @@ function broadcastLogout(reason) {
   try { window.dispatchEvent(new CustomEvent('coc:unauthorized', { detail: { reason } })); } catch { /* ignore */ }
 }
 
+/** 在途请求计数：只用于顶部扫描线提示，不参与任何业务判断。 */
+let inflight = 0;
+function trackBusy(delta) {
+  inflight = Math.max(0, inflight + delta);
+  try {
+    window.dispatchEvent(new CustomEvent('coc:busy', { detail: { count: inflight } }));
+  } catch { /* ignore */ }
+}
+
 /**
  * @param {string} path 以 /api 开头的路径
  * @param {{method?:string, body?:any, timeout?:number, auth?:boolean}} [opts]
@@ -61,37 +70,41 @@ export async function api(path, opts = {}) {
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
-  let res;
+  trackBusy(1);
   try {
-    res = await fetch(path, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: ctrl.signal,
-    });
-  } catch (err) {
-    clearTimeout(timer);
-    if (err.name === 'AbortError') throw new ApiError('请求超时，请检查网络后重试', 0, 'timeout');
-    throw new ApiError('网络错误，无法连接服务器', 0, 'network');
-  }
-  clearTimeout(timer);
-
-  if (res.status === 204) return null;
-
-  let data = null;
-  const text = await res.text();
-  if (text) {
-    try { data = JSON.parse(text); } catch { data = null; }
-  }
-
-  if (!res.ok) {
-    if (res.status === 401 && auth) {
-      session.clear();
-      broadcastLogout(data?.error || '登录状态已失效');
+    let res;
+    try {
+      res = await fetch(path, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') throw new ApiError('请求超时，请检查网络后重试', 0, 'timeout');
+      throw new ApiError('网络错误，无法连接服务器', 0, 'network');
     }
-    throw new ApiError(data?.error || `请求失败（${res.status}）`, res.status, data?.code);
+
+    if (res.status === 204) return null;
+
+    let data = null;
+    const text = await res.text();
+    if (text) {
+      try { data = JSON.parse(text); } catch { data = null; }
+    }
+
+    if (!res.ok) {
+      if (res.status === 401 && auth) {
+        session.clear();
+        broadcastLogout(data?.error || '登录状态已失效');
+      }
+      throw new ApiError(data?.error || `请求失败（${res.status}）`, res.status, data?.code);
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
+    trackBusy(-1);
   }
-  return data;
 }
 
 export const apiGet = (path, opts) => api(path, { ...opts, method: 'GET' });

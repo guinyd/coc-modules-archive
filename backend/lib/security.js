@@ -9,27 +9,38 @@
  */
 
 import crypto from 'node:crypto';
+import { promisify } from 'node:util';
 
 const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 };
+const scryptAsync = promisify(crypto.scrypt);
+const SCRYPT_OPTS = { N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p, maxmem: 64 * 1024 * 1024 };
 export const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 天
 
 // ------------------------------------------------------------------ 口令
-export function hashPassword(password) {
+/**
+ * 同步哈希只留给启动迁移：迁移发生在监听端口之前，不占用请求线程。
+ * 请求路径一律用下面的异步版本，避免 scrypt 阻塞事件循环。
+ */
+export function hashPasswordSync(password) {
   const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(String(password), salt, SCRYPT.keylen, {
-    N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p, maxmem: 64 * 1024 * 1024,
-  }).toString('hex');
+  const hash = crypto.scryptSync(String(password), salt, SCRYPT.keylen, SCRYPT_OPTS).toString('hex');
   return { algo: 'scrypt', salt, hash, N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p };
 }
 
-export function verifyPassword(password, rec) {
+export async function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const buf = await scryptAsync(String(password), salt, SCRYPT.keylen, SCRYPT_OPTS);
+  return { algo: 'scrypt', salt, hash: buf.toString('hex'), N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p };
+}
+
+export async function verifyPassword(password, rec) {
   if (!rec || !rec.salt || !rec.hash) return false;
   try {
-    const got = crypto.scryptSync(String(password), rec.salt, SCRYPT.keylen, {
+    const buf = await scryptAsync(String(password), rec.salt, SCRYPT.keylen, {
       N: rec.N || SCRYPT.N, r: rec.r || SCRYPT.r, p: rec.p || SCRYPT.p, maxmem: 64 * 1024 * 1024,
     });
     const want = Buffer.from(rec.hash, 'hex');
-    return got.length === want.length && crypto.timingSafeEqual(got, want);
+    return buf.length === want.length && crypto.timingSafeEqual(buf, want);
   } catch {
     return false;
   }

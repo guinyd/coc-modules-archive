@@ -89,6 +89,9 @@ function CharacterCard({
                 : (item.reviewStatus && item.reviewStatus !== 'none'
                   ? <Badge tone={REVIEW_TONE[item.reviewStatus]} className="!text-[14px] !tracking-[0.08em]">{REVIEW_LABEL[item.reviewStatus]}</Badge>
                   : null)}
+              {showOwner && item.customSkillCount > 0 ? (
+                <Badge tone="cyan" className="!text-[14px] !tracking-[0.08em]">自建技能 {item.customSkillCount}</Badge>
+              ) : null}
             </div>
           </div>
         </div>
@@ -233,6 +236,7 @@ export default function CharacterList({
   const [ownerId, setOwnerId] = useState('');
   const [moduleId, setModuleId] = useState('');
   const [meta, setMeta] = useState({ owners: [], moduleOptions: [], customOccupations: [] });
+  const [quota, setQuota] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importing, setImporting] = useState(false);
 
@@ -262,12 +266,22 @@ export default function CharacterList({
   useEffect(() => {
     if (isGuest) return;
     apiGet('/api/characters/meta')
-      .then((m) => setMeta({
-        owners: m.owners || [],
-        moduleOptions: m.moduleOptions || [],
-        customOccupations: m.customOccupations || [],
-      }))
+      .then((m) => {
+        setMeta({
+          owners: m.owners || [],
+          moduleOptions: m.moduleOptions || [],
+          customOccupations: m.customOccupations || [],
+        });
+        setQuota(m.quota || null);
+      })
       .catch(() => { /* 元数据失败不影响列表 */ });
+  }, [isGuest]);
+
+  const refreshQuota = useCallback(() => {
+    if (isGuest) return;
+    apiGet('/api/characters/meta')
+      .then((m) => setQuota(m.quota || null))
+      .catch(() => { /* 配额刷新失败不阻塞列表 */ });
   }, [isGuest]);
 
   const [cardImportOpen, setCardImportOpen] = useState(false);
@@ -278,6 +292,7 @@ export default function CharacterList({
 
   const [guestItems, setGuestItems] = useState(() => buildGuestItems());
   const capacity = guestCapacity();
+  const quotaFull = Boolean(quota && quota.used >= quota.limit);
 
   const refreshGuest = useCallback(() => setGuestItems(buildGuestItems()), []);
 
@@ -296,6 +311,7 @@ export default function CharacterList({
       await apiDelete(`/api/characters/${item.id}`);
       showToast('角色卡已删除');
       load();
+      refreshQuota();
     } catch (err) { showToast(err.message, 'error'); }
   });
 
@@ -330,6 +346,7 @@ export default function CharacterList({
       await apiPost(`/api/characters/${item.id}/duplicate`, {});
       showToast('已复制一张角色卡');
       load();
+      refreshQuota();
     } catch (err) { showToast(err.message, 'error'); }
   };
 
@@ -347,6 +364,7 @@ export default function CharacterList({
       }
       refreshGuest();
       await load();
+      refreshQuota();
       setImportOpen(false);
       showToast(`已收录 ${done} 张角色卡到你的档案馆`);
     } catch (err) {
@@ -363,6 +381,7 @@ export default function CharacterList({
       await apiPost('/api/characters', payload);
       deleteGuestSheet(item.id);
       refreshGuest();
+      refreshQuota();
       showToast('已收录到你的档案馆');
     } catch (err) { showToast(err.message, 'error'); }
   };
@@ -390,14 +409,14 @@ export default function CharacterList({
               <Button variant="ghost" className="!px-3 !py-1.5 !text-[14px]" onClick={() => onEdit(null)} disabled><LogIn className="h-4 w-4" />登录后可收录</Button>
             )}
             {isGuest && guestItems.length > 0 && currentUser && (
-              <Button variant="amber" className="!px-3 !py-1.5 !text-[14px]" onClick={() => setImportOpen(true)}>
+              <Button variant="amber" className="!px-3 !py-1.5 !text-[14px]" onClick={() => setImportOpen(true)} disabled={quotaFull} title={quotaFull ? '角色卡已达上限' : undefined}>
                 <CloudUpload className="h-4 w-4" />一键收录 {guestItems.length} 张
               </Button>
             )}
-            <Button variant="ghost" className="!px-3 !py-1.5 !text-[14px]" onClick={() => setCardImportOpen(true)}>
+            <Button variant="ghost" className="!px-3 !py-1.5 !text-[14px]" onClick={() => setCardImportOpen(true)} disabled={quotaFull} title={quotaFull ? '角色卡已达上限' : undefined}>
               <Upload className="h-4 w-4" />导入角色卡
             </Button>
-            <Button className="!px-3.5 !py-1.5 !text-[14px]" onClick={() => onEdit(null)}><Plus className="h-4 w-4" />新建角色卡</Button>
+            <Button className="!px-3.5 !py-1.5 !text-[14px]" onClick={() => onEdit(null)} disabled={quotaFull} title={quotaFull ? '角色卡已达上限' : undefined}><Plus className="h-4 w-4" />新建角色卡</Button>
           </div>
         )}
       />
@@ -443,6 +462,9 @@ export default function CharacterList({
             <span className="flex items-center gap-1.5"><Filter className="h-4 w-4" strokeWidth={1.8} />共 {stats.total} 张</span>
             <span className="h-2.5 w-px bg-white/10" />
             <span>使用中 {stats.active}</span>
+            {!isGuest && quota ? (
+              <span className={quotaFull ? 'text-vermilion' : ''}>建卡额度 {quota.used} / {quota.limit}</span>
+            ) : null}
             {isKp && stats.pending > 0 ? <span className="text-ochre">待审核 {stats.pending}</span> : null}
             <span className={stats.warned ? 'text-ochre' : ''}>有规则提示 {stats.warned}</span>
           </div>
@@ -530,6 +552,7 @@ export default function CharacterList({
             });
             setCardImportOpen(false);
             await load();
+            refreshQuota();
             showToast('角色卡已导入');
           } catch (err) {
             showToast(`导入失败：${err.message}`, 'error');

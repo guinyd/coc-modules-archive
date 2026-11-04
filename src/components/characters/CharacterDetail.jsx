@@ -304,6 +304,8 @@ export default function CharacterDetail({
               ) : (
                 <p className="flex items-center gap-1.5 text-[16px] text-forest"><CheckCircle className="w-4 h-4" />按当前规则未发现问题</p>
               )}
+
+              
             </div>
           ) : null}
 

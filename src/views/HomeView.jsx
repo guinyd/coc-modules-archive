@@ -123,6 +123,21 @@ function IndexPanel({ stats, latest, currentUser, onOpenModule, onGoAuth, onGoCh
   );
 }
 
+/** 首次装载时的纸色骨架：先给出真实版式，再让内容落位，避免空白页闪跳。 */
+function DossierSkeleton({ index }) {
+  return (
+    <div className="skeleton-card" style={{ animationDelay: `${Math.min(index, 4) * 60}ms` }} aria-hidden="true">
+      <div className="skeleton-block aspect-[16/10] w-full border border-line-strong" />
+      <div className="skeleton-block mt-4 h-5 w-3/4" />
+      <div className="skeleton-block mt-2.5 h-3 w-full" />
+      <div className="skeleton-block mt-2 h-3 w-5/6" />
+      <div className="mt-3 flex gap-2">
+        <span className="skeleton-block h-5 w-16" />
+        <span className="skeleton-block h-5 w-20" />
+      </div>
+    </div>
+  );
+}
 /** 卷宗条目：封面是「印版」，文字像编目签条贴在纸面上，不再套一张卡片壳 */
 function DossierCard({ module, played, isAdmin, onOpen, onEdit, onDelete, onSeries, index }) {
   return (
@@ -215,7 +230,7 @@ function DossierCard({ module, played, isAdmin, onOpen, onEdit, onDelete, onSeri
 }
 
 export default function HomeView({
-  modules, currentUser, playedModules, isAdmin,
+  modules, loading = false, currentUser, playedModules, isAdmin,
   homeTab, setHomeTab, searchTerm, setSearchTerm,
   filterRegion, setFilterRegion, filterPlayers, setFilterPlayers,
   filterDuration, setFilterDuration, filterPlayed, setFilterPlayed,
@@ -505,8 +520,8 @@ export default function HomeView({
 
             {/* 卷宗网格 */}
             {homeTab === 'grid' ? (
-              <div className="mt-6 grid grid-cols-1 gap-x-5 gap-y-10 sm:grid-cols-2">
-                {filteredModules.map((module, i) => (
+              <div className="mt-6 grid grid-cols-1 gap-x-5 gap-y-10 sm:grid-cols-2" aria-busy={loading || undefined}>
+                {loading ? [0, 1, 2, 3].map((i) => <DossierSkeleton key={i} index={i} />) : filteredModules.map((module, i) => (
                   <DossierCard
                     key={module.id}
                     module={module}
@@ -519,12 +534,13 @@ export default function HomeView({
                     onSeries={(series) => { setSelectedCollection(series); setHomeTab('grid'); }}
                   />
                 ))}
-                {filteredModules.length === 0 ? (
+                {!loading && filteredModules.length === 0 ? (
                   <div className="col-span-full">
                     <EmptyState icon={FileText} title="没有找到匹配的档案" desc="试着调整搜索关键字，或清除筛选条件。" />
                   </div>
                 ) : null}
 
+                {!loading ? (
                 <div className="col-span-full mt-3 flex flex-wrap items-center justify-between gap-6 border-y border-ink/25 px-1 py-7">
                   <div className="flex items-center gap-4">
                     <SealMark size={44} className="shrink-0 text-vermilion/60" />
@@ -537,6 +553,7 @@ export default function HomeView({
                     END OF INDEX · {pad2(filteredModules.length)} / {pad2(modules.length)}
                   </span>
                 </div>
+                ) : null}
               </div>
             ) : null}
 

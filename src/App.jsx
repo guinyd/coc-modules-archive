@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   CheckCircle, ClipboardCheck, FileText, Github, LayoutDashboard, LogOut, Mail, Plus, Scale, Share2,
   Shield, Trash2, User, Users, X,
@@ -11,7 +12,7 @@ import {
 import { SealMark } from './components/Emblem.jsx';
 import { TentacleBackdrop, TentacleRule } from './components/Ornaments.jsx';
 import { MenuMorph, ThemeMorph } from './components/MorphIcon.jsx';
-import { DepthGauge, RouteSweep } from './components/Motion.jsx';
+import { DepthGauge, RouteProgress, RouteSweep } from './components/Motion.jsx';
 import BackToTop from './components/BackToTop.jsx';
 import AdminUsersPanel from './components/AdminUsersPanel.jsx';
 import KpDashboardPanel from './components/KpDashboardPanel.jsx';
@@ -35,6 +36,16 @@ const EMPTY_MODULE = {
   series: '', charInfo: '', occupations: '', skills: '', notes: '', isPinned: false,
 };
 
+/** 浏览器历史只记录站内视图，刷新后仍从首页开始（站点没有 URL 路由）。 */
+const VIEW_NAMES = new Set([
+  'home', 'auth', 'moduleForm', 'moduleDetail', 'profile', 'adminUsers', 'kpDashboard',
+  'characters', 'kpCharacters', 'characterEdit', 'characterView', 'characterPrint', 'kpReview',
+]);
+const ADMIN_VIEWS = new Set(['adminUsers', 'kpDashboard', 'kpReview', 'kpCharacters']);
+const HISTORY_MARK = 'cocArchive';
+
+const historyState = (view, arg = null) => ({ [HISTORY_MARK]: true, view, arg: arg ?? null });
+
 /**
  * 头衔样式（与证书、个人中心共用）。
  * v3：全部改成「油墨实色 + 衬线 + 宽字距」，头衔的分量靠字重与纸上的位置表达。
@@ -54,6 +65,7 @@ const getTitleStyles = (title, role) => {
 export default function App() {
   // ------------------------------------------------------------ 全局状态
   const [modules, setModules] = useState([]);
+  const [modulesLoading, setModulesLoading] = useState(true);
   const [playedModules, setPlayedModules] = useState([]);
   const [currentUser, setCurrentUser] = useState(() => session.user);
   const [users, setUsers] = useState([]);
@@ -61,6 +73,7 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false);
   const [viewArg, setViewArg] = useState(null);
   const [selectedModule, setSelectedModule] = useState(null);
+  
 
   const [homeTab, setHomeTab] = useState('grid');
   const [searchTerm, setSearchTerm] = useState('');
@@ -92,7 +105,8 @@ export default function App() {
     if (typeof document === 'undefined') return 'light';
     return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
   });
-  const [wipe, setWipe] = useState(null);
+  const [ink, setInk] = useState(null);
+  const themeBusyRef = useRef(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -101,17 +115,46 @@ export default function App() {
     if (meta) meta.setAttribute('content', theme === 'dark' ? '#081311' : '#ece3d1');
   }, [theme]);
 
+  // 换主题 = 圆形帷幕：新主题从拨钮处向外揭开，旧主题原地不动。
+  // 两张快照同时在场，过渡中能看见两边的内容，不是一块纯色蒙版。
   const toggleTheme = useCallback((evt) => {
-    const el = evt?.currentTarget || document.querySelector('[data-theme-toggle]');
-    const rect = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+    if (themeBusyRef.current) return;
+    const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    const next = current === 'dark' ? 'light' : 'dark';
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    const root = document.documentElement;
+    if (reduce || typeof document.startViewTransition !== 'function') {
+      setTheme(next);
+      return;
+    }
+    const rect = evt?.currentTarget?.getBoundingClientRect?.();
     const x = rect ? rect.left + rect.width / 2 : window.innerWidth - 72;
     const y = rect ? rect.top + rect.height / 2 : 40;
-    const apply = () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
-    // 主题切换：让一层印泥从按钮漫开盖住页面，在覆盖最厚时换色，避免全页逐节点重绘造成卡顿
-    if (reduce) { apply(); return; }
-    setWipe({ id: Date.now(), x, y, color: '#a52a1d' });
-    window.setTimeout(apply, 240);
+    const r = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y)) + 16;
+    root.style.setProperty('--theme-x', `${x}px`);
+    root.style.setProperty('--theme-y', `${y}px`);
+    root.style.setProperty('--theme-r', `${r}px`);
+    themeBusyRef.current = true;
+    root.classList.add('theme-push');
+    let vt;
+    try {
+      vt = document.startViewTransition(() => {
+        // 直接改写属性，保证 VT 的新快照一定拿到新主题；effect 随后补 localStorage/meta。
+        root.setAttribute('data-theme', next);
+        flushSync(() => setTheme(next));
+      });
+    } catch {
+      root.classList.remove('theme-push');
+      themeBusyRef.current = false;
+      setTheme(next);
+      return;
+    }
+    const finish = () => {
+      root.classList.remove('theme-push');
+      themeBusyRef.current = false;
+    };
+    vt.finished.finally(finish);
+    window.setTimeout(finish, 900);
   }, []);
 
   const isAdmin = currentUser?.role === 'admin';
@@ -131,16 +174,102 @@ export default function App() {
   }, []);
 
   const go = useCallback((nextView, arg = null) => {
+    // 点当前页签只归位，不重放整页换页，也不写历史。
+    const sameSpot = nextView === view && arg === viewArg;
+    if (!sameSpot) {
+      try { window.history.pushState(historyState(nextView, arg), ''); } catch { /* 隐私模式忽略 */ }
+    }
     resetScroll();
     setView(nextView);
     setViewArg(arg);
-  }, [resetScroll]);
+  }, [resetScroll, view, viewArg]);
+
+  // 浏览器历史：进入站点先放一条 home，之后 go() 逐页 push。
+  useEffect(() => {
+    try {
+      // 滚动位置由 resetScroll 接管；关掉浏览器的自动恢复，返回时不会停在半页。
+      if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
+      if (window.history.state?.[HISTORY_MARK] !== true) {
+        window.history.replaceState(historyState('home'), '');
+      }
+    } catch { /* 隐私模式忽略 */ }
+  }, []);
+
+  // 返回/前进：恢复站内视图，而不是离开站点。无权限的旧条目回首页。
+  useEffect(() => {
+    const onPop = (e) => {
+      const raw = e.state;
+      const recorded = raw && raw[HISTORY_MARK] === true;
+      let nextView = recorded ? raw.view : 'home';
+      let arg = recorded ? (raw.arg ?? null) : null;
+      if (!VIEW_NAMES.has(nextView)) { nextView = 'home'; arg = null; }
+      const blocked = (!currentUser && (nextView === 'profile' || ADMIN_VIEWS.has(nextView)))
+        || (!isAdmin && ADMIN_VIEWS.has(nextView));
+      if (blocked) { nextView = 'home'; arg = null; }
+      if (recorded && (nextView !== raw.view || arg !== (raw.arg ?? null))) {
+        try { window.history.replaceState(historyState(nextView, arg), ''); } catch { /* ignore */ }
+      }
+      if (nextView === 'moduleDetail' && modules.length) {
+        setSelectedModule(modules.find((m) => String(m.id) === String(arg)) || null);
+      }
+      resetScroll();
+      setView(nextView);
+      setViewArg(arg);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [currentUser, isAdmin, modules, resetScroll]);
+
+  // 直链/历史回到详情时，按 id 从已加载列表里补回选中的模组。
+  useEffect(() => {
+    if (view !== 'moduleDetail' || !viewArg || modules.length === 0) return;
+    const found = modules.find((m) => String(m.id) === String(viewArg)) || null;
+    setSelectedModule((prev) => (prev && String(prev.id) === String(viewArg) ? prev : found));
+  }, [view, viewArg, modules]);
+
+  // 滚动进度与报头收紧：只写 transform / dataset，不让滚动触发 React 重渲染。
+  const navRef = useRef(null);
+  const navProgressRef = useRef(null);
+  useEffect(() => {
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const progress = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+      if (navProgressRef.current) navProgressRef.current.style.transform = `scaleX(${progress})`;
+      if (navRef.current) navRef.current.dataset.scrolled = window.scrollY > 24 ? 'true' : 'false';
+    };
+    const onScroll = () => { if (!raf) raf = window.requestAnimationFrame(update); };
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      if (raf) window.cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, []);
+
+  // 按钮的按压反馈：从指针落点洇开一滴墨。独立覆盖层，不碰任何元素布局。
+  useEffect(() => {
+    const onPointerDown = (e) => {
+      if (e.button !== 0) return;
+      const hit = e.target instanceof Element
+        ? e.target.closest('button, [role="button"], .press, .record-act, .tab-stamp, .filter-chip')
+        : null;
+      if (!hit || hit.disabled || hit.getAttribute('aria-disabled') === 'true') return;
+      if (hit.closest('[data-no-ink], [data-theme-toggle]')) return;
+      setInk({ id: `${e.timeStamp}-${Math.random()}`, x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener('pointerdown', onPointerDown, true);
+    return () => window.removeEventListener('pointerdown', onPointerDown, true);
+  }, []);
 
   // ------------------------------------------------------------ 数据获取
   const fetchModules = useCallback(async () => {
     try {
       setModules(await apiGet('/api/modules', { auth: false }));
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) { showToast(err.message, 'error'); } finally { setModulesLoading(false); }
   }, [showToast]);
 
   const fetchPlayedRecords = useCallback(async () => {
@@ -280,7 +409,7 @@ export default function App() {
         : await apiPost('/api/modules', formData);
       await fetchModules();
       showToast(isEditing ? '更新成功' : '发布成功');
-      if (isEditing) { setSelectedModule(saved); go('moduleDetail'); } else { go('home'); }
+      if (isEditing) { setSelectedModule(saved); go('moduleDetail', saved.id); } else { go('home'); }
       setFormData(EMPTY_MODULE);
       setIsEditing(false);
     } catch (err) { showToast(err.message, 'error'); }
@@ -525,15 +654,17 @@ export default function App() {
         <TentacleBackdrop />
       </div>
 
-      {wipe ? (
+      {ink ? (
         <span
-          key={wipe.id}
+          key={ink.id}
           aria-hidden="true"
-          className="theme-wipe"
-          style={{ '--wipe-x': `${wipe.x}px`, '--wipe-y': `${wipe.y}px`, '--wipe-color': wipe.color }}
-          onAnimationEnd={() => setWipe(null)}
+          className="ink-drop"
+          style={{ left: ink.x, top: ink.y }}
+          onAnimationEnd={() => setInk((cur) => (cur && cur.id === ink.id ? null : cur))}
         />
       ) : null}
+
+      <RouteProgress />
 
       <Toast toast={toast} />
       <ConfirmDialog dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />
@@ -541,10 +672,14 @@ export default function App() {
       <DepthGauge />
       <BackToTop />
 
-      <nav className="no-print glass-bar sticky top-0 z-50 border-b border-black/50 shadow-[0_18px_40px_-34px_rgba(0,0,0,0.95)]">
+      <nav
+        ref={navRef}
+        data-scrolled="false"
+        className="no-print glass-bar sticky top-0 z-50 border-b border-black/50 shadow-[0_18px_40px_-34px_rgba(0,0,0,0.95)]"
+      >
         <div className="mx-auto max-w-[1240px] px-4 sm:px-6 lg:px-8">
           {/* 报头细目：卷期与身份 */}
-          <div className="hidden h-[22px] items-center justify-end gap-4 border-b border-white/10 font-mono text-[14px] tracking-[0.2em] text-[var(--c-masthead-ink)]/45 sm:flex sm:text-[14px] sm:tracking-[0.28em]">
+          <div className="masthead-strip hidden h-[22px] items-center justify-end gap-4 border-b border-white/10 font-mono text-[14px] leading-none tracking-[0.2em] text-[var(--c-masthead-ink)]/45 sm:flex sm:text-[14px] sm:tracking-[0.28em]">
             <span className="flex shrink-0 items-center gap-2.5">
               <span className="hidden md:inline">VOL. IV · NO. 27</span>
               <span className="hidden items-center gap-2.5 sm:flex">
@@ -570,7 +705,7 @@ export default function App() {
             </button>
 
             {/* 桌面导航：带编目的索引导航 */}
-            <div className="hidden flex-1 items-stretch justify-center self-stretch lg:flex">
+            <div className="hidden flex-1 items-stretch justify-center self-stretch xl:flex">
               <NavButton index="01" active={view === 'home'} onClick={() => go('home')} label="馆藏" />
               {currentUser ? (
                 <>
@@ -591,8 +726,8 @@ export default function App() {
             </div>
 
             {/* 右侧：主题 / 身份 / 登录 / 手机菜单 */}
-            <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5 md:ml-0">
-              <span className={currentUser ? 'hidden sm:inline-flex' : 'inline-flex'}>
+            <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5">
+              <span className="inline-flex">
                 <ThemeToggle theme={theme} onToggle={toggleTheme} />
               </span>
               {!currentUser ? (
@@ -623,7 +758,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="hidden p-2 text-[var(--c-masthead-ink)]/45 transition-colors hover:bg-vermilion/20 hover:text-vermilion lg:block"
+                    className="hidden p-2 text-[var(--c-masthead-ink)]/45 transition-colors hover:bg-vermilion/20 hover:text-vermilion xl:block"
                     title="登出"
                     aria-label="登出"
                   >
@@ -633,7 +768,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setNavOpen(true)}
-                    className="flex h-9 w-9 items-center justify-center border border-white/20 text-[var(--c-masthead-ink)]/80 transition-colors hover:border-vermilion/70 hover:text-vermilion lg:hidden"
+                    className="flex h-9 w-9 items-center justify-center border border-white/20 text-[var(--c-masthead-ink)]/80 transition-colors hover:border-vermilion/70 hover:text-vermilion xl:hidden"
                     aria-label="打开导航"
                   >
                     <MenuMorph open={navOpen} className="text-[var(--c-masthead-ink)]/85" />
@@ -644,6 +779,7 @@ export default function App() {
             </div>
           </div>
         </div>
+        <span ref={navProgressRef} aria-hidden="true" className="nav-progress" />
       </nav>
 
       <NavDrawer
@@ -719,6 +855,7 @@ export default function App() {
           {view === 'home' && (
             <HomeView
               modules={modules}
+              loading={modulesLoading}
               currentUser={currentUser}
               playedModules={playedModules}
               isAdmin={isAdmin}
@@ -743,7 +880,7 @@ export default function App() {
               filteredModules={filteredModules}
               onGoAuth={() => go('auth')}
               onGoCharacters={() => go('characters')}
-              onOpenModule={(m) => { setSelectedModule(m); go('moduleDetail'); }}
+              onOpenModule={(m) => { setSelectedModule(m); go('moduleDetail', m.id); }}
               onEditModule={openEditMode}
               onDeleteModule={handleDeleteModule}
               onTogglePlayed={togglePlayed}
@@ -751,7 +888,7 @@ export default function App() {
           )}
 
           {/* ---------------------------------------------------- 模组详情 */}
-          {view === 'moduleDetail' && selectedModule && (
+          {view === 'moduleDetail' && (selectedModule ? (
             <ModuleDetailView
               module={selectedModule}
               isAdmin={isAdmin}
@@ -764,7 +901,15 @@ export default function App() {
               onTogglePlayed={togglePlayed}
               onGoCharacters={() => go('characters')}
             />
-          )}
+          ) : (
+            <Panel>
+              <EmptyState
+                title="这卷档案不在馆中"
+                desc="它可能已被删除，或这条历史记录已经过期。"
+                action={<Button onClick={() => go('home')}>返回馆藏目录</Button>}
+              />
+            </Panel>
+          ))}
 
           {/* ---------------------------------------------------- 个人中心 */}
           {view === 'profile' && currentUser && (
@@ -998,17 +1143,17 @@ function ThemeToggle({ theme, onToggle, className }) {
       <span aria-hidden="true" className="relative flex h-[26px] w-[50px] items-center rounded-full bg-black/30 shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)]">
         <span
           className={cx(
-            'relative z-10 ml-[2px] flex h-[22px] w-[22px] items-center justify-center rounded-full',
+            'relative z-10 ml-[2px] flex h-[22px] w-[22px] items-center justify-center rounded-full theme-knob',
             'bg-[var(--c-masthead-ink)] text-[var(--c-masthead)] shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_2px_6px_rgba(0,0,0,0.45)]',
-            'transition-transform duration-[520ms] ease-[var(--ease-bounce)] group-active:scale-95',
-            dark ? 'translate-x-[26px]' : 'translate-x-0',
           )}
+          style={{ '--knob-x': dark ? '26px' : '0px' }}
         >
           <ThemeMorph dark={dark} className="h-4 w-4" />
         </span>
       </span>
-      <span aria-hidden="true" className="hidden w-[34px] shrink-0 font-mono text-[14px] tracking-[0.16em] text-[var(--c-masthead-ink)]/60 sm:block">
-        {dark ? 'DEEP' : 'SALT'}
+      <span aria-hidden="true" className="theme-mode hidden h-[18px] w-[34px] shrink-0 font-mono text-[14px] leading-[18px] tracking-[0.16em] text-[var(--c-masthead-ink)]/60 sm:block">
+        <span className="theme-mode__label" data-on={dark ? 'false' : 'true'}>SALT</span>
+        <span className="theme-mode__label" data-on={dark ? 'true' : 'false'}>DEEP</span>
       </span>
     </button>
   );
@@ -1049,7 +1194,7 @@ function NavDrawer({ open, onClose, view, currentUser, isAdmin, theme, onToggleT
     ];
 
   return (
-    <div className="fixed inset-0 z-[80] md:hidden">
+    <div className="fixed inset-0 z-[80] xl:hidden">
       <div
         className="scrim absolute inset-0 animate-in fade-in"
         onClick={onClose}

@@ -11,7 +11,7 @@
 #       index/    前端静态产物（目录名就叫 index，直接覆盖站点静态根）
 #       backend/  后端源码（server.js / lib / routes / tools / package*.json，不含 data/ 与 node_modules/）
 #       shared/   规则引擎（后端运行时需要）
-#       deploy/   部署与更新工具（apply-update.sh / update-guide.md / nginx.conf.sample）
+#       deploy/   部署与更新工具（apply-update.sh / update-guide.md）
 #   - **zip 根就是这四个目录，不再套 `coc-archive-update-<版本>-<时间>/` 父目录**
 #     （2026-10-30 起；服务器解压：`unzip <包>.zip -d <目录> && cd <目录>`）
 #   - _release 目录里最多保留最近 3 个 zip，更早的自动清理。
@@ -52,7 +52,7 @@ rm -rf "$STAGE/backend/data" "$STAGE/backend/database.json" "$STAGE/backend/node
 
 cp -r shared "$STAGE/shared"
 mkdir -p "$STAGE/deploy"
-cp deploy/apply-update.sh deploy/update-guide.md deploy/nginx.conf.sample "$STAGE/deploy/"
+cp deploy/apply-update.sh deploy/update-guide.md "$STAGE/deploy/"
 chmod +x "$STAGE/deploy/apply-update.sh"
 
 echo "==> 4/5 打包（仅 zip；zip 根就是四个目录，不套父目录）"

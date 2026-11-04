@@ -428,39 +428,24 @@ select option { background-color: var(--color-paper-raised); color: var(--color-
   *, *::before, *::after { transition-duration: 0.001ms !important; animation-duration: 0.001ms !important; }
 }
 
-/* 主题切换：颜色丝滑过渡 + 一圈印泥波纹（App 注入 --wipe-x/--wipe-y） */
-/* 只过渡真正需要渐变的大面积，不再给每个节点加 transition（1500+ 节点会卡） */
-html.theme-anim body {
-  transition: background-color 380ms var(--ease-soft), color 380ms var(--ease-soft);
+/* 主题切换：从拨钮处揭开新纸。
+   旧主题原地不动，新主题以圆形从拨钮向外揭开；圆外仍是旧主题，
+   两套内容同时可见，不是一块实心蒙版。只动 clip-path；560ms 结束。 */
+html.theme-push::view-transition-old(root) {
+  z-index: 1;
+  animation: none;
 }
-html.theme-anim .glass-bar,
-html.theme-anim .archive-ambient,
-html.theme-anim .sheet {
-  transition: background-color 380ms var(--ease-soft), border-color 380ms var(--ease-soft);
+html.theme-push::view-transition-new(root) {
+  z-index: 2;
+  clip-path: circle(0 at var(--theme-x, 50%) var(--theme-y, 50%));
+  animation: theme-reveal 560ms var(--ease-soft) both;
 }
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: 300ms;
-  animation-timing-function: var(--ease-soft);
+html.theme-push::view-transition-group(root) {
+  animation-duration: 560ms;
 }
-.theme-wipe {
-  position: fixed;
-  left: var(--wipe-x, 50%);
-  top: var(--wipe-y, 50%);
-  width: 150vmax;
-  height: 150vmax;
-  border-radius: 50%;
-  z-index: 120;
-  pointer-events: none;
-  will-change: transform, opacity;
-  background: var(--c-masthead, #142d2c);
-  animation: ink-flood 860ms cubic-bezier(0.4, 0.02, 0.2, 1) both;
-}
-@keyframes ink-flood {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
-  18% { opacity: 0.46; }
-  64% { opacity: 0.4; transform: translate(-50%, -50%) scale(1.02); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.06); }
+@keyframes theme-reveal {
+  from { clip-path: circle(0 at var(--theme-x, 50%) var(--theme-y, 50%)); }
+  to { clip-path: circle(var(--theme-r, 120vmax) at var(--theme-x, 50%) var(--theme-y, 50%)); }
 }
 
 /* ------------------------------------------------------------------ 显示字 */
@@ -1261,24 +1246,16 @@ button.press, a.press, .press {
   background-position: 0% 50%;
 }
 .title-grad--red {
-  background-image:
-    radial-gradient(130% 190% at 16% 6%, rgba(255, 224, 190, 0.3), transparent 56%),
-    linear-gradient(100deg, #4f160f 0%, #6d2117 16%, #8c3324 36%, #9c4630 50%, #7a2a1c 68%, #5a1a12 86%, #461209 100%);
+  background-image: linear-gradient(96deg, #57150e 0%, #7c1d14 22%, #a52a1d 52%, #9a4a2c 74%, #a8792b 100%);
 }
 .title-grad--teal {
-  background-image:
-    radial-gradient(130% 190% at 22% 8%, rgba(206, 242, 233, 0.24), transparent 58%),
-    linear-gradient(100deg, #0a2c2f 0%, #103c40 18%, #1d5357 38%, #2a6663 52%, #174a4e 70%, #113c40 86%, #08282b 100%);
+  background-image: linear-gradient(96deg, #08262a 0%, #0c2a2f 18%, #163f45 46%, #1a5b5f 76%, #4f8b8b 100%);
 }
 :root[data-theme="dark"] .title-grad--red {
-  background-image:
-    radial-gradient(130% 190% at 16% 8%, rgba(255, 212, 178, 0.22), transparent 58%),
-    linear-gradient(100deg, #9a5c45 0%, #b5765a 18%, #cc9375 38%, #b87256 54%, #a2624a 72%, #8a4e3a 90%, #9a5c45 100%);
+  background-image: linear-gradient(96deg, #d98a68 0%, #cc6a4c 28%, #b44b33 60%, #8f3a2a 100%);
 }
 :root[data-theme="dark"] .title-grad--teal {
-  background-image:
-    radial-gradient(130% 190% at 22% 8%, rgba(194, 233, 225, 0.2), transparent 60%),
-    linear-gradient(100deg, #6d9a94 0%, #81aaa4 20%, #96c0b7 40%, #78a39c 58%, #648f89 76%, #567f7b 92%, #6d9a94 100%);
+  background-image: linear-gradient(96deg, #8fcfc6 0%, #6fb3ac 28%, #4f8b8b 62%, #2f6464 100%);
 }
 .title-grad--breathe { animation: title-grad-breathe 11s ease-in-out infinite; }
 .title-grad--breathe-lag { animation-delay: -5.5s; }
@@ -1745,26 +1722,18 @@ button.press, a.press, .press {
 .filter-chip { height: 32px; min-height: 32px; padding-top: 0; padding-bottom: 0; }
 .cta-ghost { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 44px; }
 
-/* -- 头版双行渐变：暖桃高光 + 深绯 / 海玻璃高光 + 深青，明暗各一套 */
+/* -- 头版双行渐变：深绯→赭金 / 深青→海玻璃，明暗各一套，去掉浅桃高光 */
 .title-grad--red {
-  background-image:
-    radial-gradient(130% 190% at 16% 6%, rgba(255, 226, 196, 0.26), transparent 56%),
-    linear-gradient(100deg, #461209 0%, #6d2117 14%, #8f3a2a 30%, #b06a52 46%, #c98a6c 55%, #9c4630 68%, #6d2117 84%, #461209 100%);
+  background-image: linear-gradient(96deg, #57150e 0%, #7c1d14 22%, #a52a1d 52%, #9a4a2c 74%, #a8792b 100%);
 }
 .title-grad--teal {
-  background-image:
-    radial-gradient(130% 190% at 22% 8%, rgba(214, 245, 236, 0.22), transparent 58%),
-    linear-gradient(100deg, #08282b 0%, #0f3a3e 16%, #1d5357 32%, #3f7f79 48%, #6fa89e 56%, #2a6663 72%, #113c40 86%, #08282b 100%);
+  background-image: linear-gradient(96deg, #08262a 0%, #0c2a2f 18%, #163f45 46%, #1a5b5f 76%, #4f8b8b 100%);
 }
 :root[data-theme="dark"] .title-grad--red {
-  background-image:
-    radial-gradient(130% 190% at 16% 8%, rgba(255, 220, 190, 0.2), transparent 58%),
-    linear-gradient(100deg, #7d4432 0%, #9a5c45 14%, #b5765a 30%, #cf9273 46%, #dba887 55%, #b87256 70%, #8a4e3a 88%, #7d4432 100%);
+  background-image: linear-gradient(96deg, #d98a68 0%, #cc6a4c 28%, #b44b33 60%, #8f3a2a 100%);
 }
 :root[data-theme="dark"] .title-grad--teal {
-  background-image:
-    radial-gradient(130% 190% at 22% 8%, rgba(204, 240, 230, 0.18), transparent 60%),
-    linear-gradient(100deg, #456f6b 0%, #567f7b 14%, #6d9a94 30%, #8fbcb2 46%, #a6cec5 55%, #78a39c 70%, #5f8e89 88%, #456f6b 100%);
+  background-image: linear-gradient(96deg, #8fcfc6 0%, #6fb3ac 28%, #4f8b8b 62%, #2f6464 100%);
 }
 
 /* -- 内页标题：五套低饱和双色渐变（暖桃 / 赭金 / 苔藓 / 海玻璃 / 墨紫） */

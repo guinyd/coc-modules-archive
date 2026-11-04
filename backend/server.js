@@ -21,7 +21,7 @@
  */
 
 import express from 'express';
-import { load, save } from './lib/db.js';
+import { load, save, saveNow } from './lib/db.js';
 import { RateLimiter, securityHeaders } from './lib/security.js';
 import { errorHandler, notFoundHandler } from './lib/errors.js';
 import { sweepExpiredTokens } from './lib/auth.js';
@@ -106,10 +106,8 @@ const server = app.listen(PORT, HOST, () => {
 
 function shutdown(signal) {
   console.log(`[server] 收到 ${signal}，正在关闭…`);
-  server.close(() => {
-    try { save(); } catch (err) { console.error('[server] 关闭前落盘失败:', err.message); }
-    process.exit(0);
-  });
+  try { saveNow(); } catch (err) { console.error('[server] 关闭前落盘失败:', err.message); }
+  server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 5000).unref();
 }
 process.on('SIGINT', () => shutdown('SIGINT'));

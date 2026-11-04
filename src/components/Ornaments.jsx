@@ -135,9 +135,9 @@ export function TentacleBackdrop() {
       <div className="tentacle-veil" />
       <svg
         viewBox="0 0 1440 900"
-        className="absolute inset-0 h-full w-full"
+        className="tentacle-desktop absolute inset-0 h-full w-full"
         fill="none"
-        preserveAspectRatio="xMidYMid slice"
+        preserveAspectRatio="none"
       >
         <defs>
           <path id="tentacle-a" d="M-40 96c96 34 158 12 214-34 42-35 92-46 138-22 38 20 50 64 28 92-20 25-58 28-80 9-19-16-18-43 2-57" />
@@ -181,6 +181,59 @@ export function TentacleBackdrop() {
             <path d="M1520 916c-116-34-186-96-212-186" opacity="0.26" />
             {suckers([[1438, 846, 7.5], [1376, 804, 6.2], [1330, 752, 5.4], [1319, 730, 5], [1300, 682, 6.2], [1286, 646, 6.4], [1244, 602, 5], [1212, 586, 4.4], [1104, 596, 4], [1094, 638, 3.6]])}
             <path d="M1232 624c8-14 10-30 6-46M1160 600c6-10 8-20 6-31" opacity="0.45" strokeWidth="0.9" />
+          </g>
+        </g>
+      </svg>
+
+      {/* 手机竖屏构图：桌面 viewBox 按高度 slice 后只剩中央竖条，两侧触手会被裁掉。
+          这里从小屏的上下纸边重新探入，viewport 与手机比例一致。 */}
+      <svg
+        viewBox="0 0 390 844"
+        className="tentacle-mobile absolute inset-0 h-full w-full"
+        fill="none"
+        preserveAspectRatio="xMidYMid slice"
+      >
+        <defs>
+          <path id="tentacle-m-a" d="M-18 44c30 24 42 58 36 100-5 34 6 64 30 88 22 22 28 48 16 66-11 17-34 19-48 5" />
+          <path id="tentacle-m-b" d="M424 176c-62 8-102 38-122 80-16 34-40 52-69 52-27 0-45-20-42-41 2-18 19-29 33-22 13 6 19 21 11 33" />
+          <path id="tentacle-m-c" d="M28 884c6-70 34-120 80-146 36-20 58-48 62-82 4-28-12-48-33-48-19 0-33 16-30 34 3 17 18 26 32 20" />
+          <path id="tentacle-m-d" d="M420 640c-46-18-78-52-88-96-8-38-28-62-56-70-26-8-46 6-46 26 0 18 16 30 32 24 15-5 21-22 14-36" />
+        </defs>
+        <g stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+          {/* 顶部：从左纸边探入的粗触须 */}
+          <g className="tentacle-arm tentacle-arm--slow">
+            {arm('tentacle-m-a')}
+            <path d="M-14 60c24 21 33 50 28 86-4 30 6 56 27 77 18 18 23 39 14 54" opacity="0.55" />
+            <path d="M-16 76c20 19 27 44 23 74-3 24 6 46 23 63" opacity="0.28" />
+            {suckers([[6, 120, 7], [12, 150, 5.5], [20, 190, 4.2], [2, 90, 4.6], [30, 230, 3.6]])}
+            <path d="M46 230c12-12 18-27 19-44M12 246c7-7 10-16 12-26" opacity="0.5" strokeWidth="0.95" />
+          </g>
+
+          {/* 右侧：从索引背后探出的细触须 */}
+          <g className="tentacle-arm tentacle-arm--fast">
+            {arm('tentacle-m-b')}
+            <path d="M424 192c-54 9-90 35-108 73-14 31-34 47-57 49" opacity="0.55" />
+            <path d="M424 208c-46 11-78 35-94 70" opacity="0.3" />
+            {suckers([[318, 246, 7], [300, 262, 5.5], [284, 280, 4.2], [348, 226, 4.8], [262, 302, 3.6]])}
+            <path d="M262 302c-3-19 2-36 14-50M298 312c-2-12 2-23 9-33" opacity="0.45" strokeWidth="0.9" />
+          </g>
+
+          {/* 左下：从纸页下爬上来的触须 */}
+          <g className="tentacle-arm">
+            {arm('tentacle-m-c')}
+            <path d="M42 884c7-62 33-107 74-130 30-16 48-40 54-70" opacity="0.55" />
+            <path d="M60 884c6-54 30-94 66-114" opacity="0.3" />
+            {suckers([[126, 738, 4.6], [150, 706, 5], [168, 678, 4.8], [176, 660, 4.2], [142, 650, 5.2]])}
+            <path d="M180 668c5-15 3-28-5-40M152 690c3-10 2-19-2-27" opacity="0.45" strokeWidth="0.9" />
+          </g>
+
+          {/* 右下：从卷宗底下卷上来的一条 */}
+          <g className="tentacle-arm tentacle-arm--fast">
+            {arm('tentacle-m-d')}
+            <path d="M420 656c-56-20-92-54-104-100-9-38-28-60-54-68" opacity="0.55" />
+            <path d="M420 672c-46-18-78-52-88-96" opacity="0.26" />
+            {suckers([[360, 590, 6.6], [326, 556, 5.6], [300, 520, 4.8], [288, 500, 4.4], [268, 486, 5.2], [258, 470, 5.4]])}
+            <path d="M266 500c7-12 8-26 5-40M228 486c5-8 6-17 4-26" opacity="0.45" strokeWidth="0.9" />
           </g>
         </g>
       </svg>

@@ -209,6 +209,7 @@ function QueueTab({ showToast, showConfirm, onOpenCharacter, currentUser }) {
                       <Badge className={BADGE_LG} tone="slate">{STATUS_LABEL[it.status] || it.status}</Badge>
                       {it.legendary?.enabled ? <Badge className={BADGE_LG} tone="red">传奇 +{it.legendaryBonusTotal || 0}</Badge> : null}
                       {it.agePenaltyWaived ? <Badge className={BADGE_LG} tone="emerald">免年龄减益</Badge> : null}
+                      {it.customSkillCount > 0 ? <Badge className={BADGE_LG} tone="cyan">自建技能 {it.customSkillCount}</Badge> : null}
                     </div>
 
                     <dl className="mt-4 grid grid-cols-3 gap-px border border-line bg-line sm:grid-cols-6">

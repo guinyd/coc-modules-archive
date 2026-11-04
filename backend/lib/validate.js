@@ -9,6 +9,7 @@
  */
 
 import { badRequest } from './errors.js';
+import { DEFAULT_MAX_CHARACTERS } from './db.js';
 import {
   ALL_CHARS, CHARS, ERAS, STATUSES, MODULE_ROLES, REVIEW_STATUSES, CHAR_MIN, CHAR_MAX,
   SKILL_CAP, CUSTOM_SKILL_MAX, SKILL_BY_KEY, SKILLS, SPEC_SLOTS, SOCIAL_SKILLS,
@@ -141,6 +142,14 @@ export function parseNewUser(body) {
     username: vUsername(body?.username),
     password: vStr(body?.password, '初始密码', { min: 1, max: 128, required: true }),
     role: vEnum(body?.role, '角色', ['user', 'admin'], 'user'),
+    maxCharacters: vInt(body?.maxCharacters, '建卡上限', { min: 0, max: 200, def: DEFAULT_MAX_CHARACTERS }),
+  };
+}
+
+/** 管理员调整单个账号的建卡上限（0 = 暂停建卡） */
+export function parseCharacterLimit(body) {
+  return {
+    maxCharacters: vInt(body?.maxCharacters, '建卡上限', { min: 0, max: 200, def: DEFAULT_MAX_CHARACTERS }),
   };
 }
 

@@ -25,7 +25,7 @@
 import { Router } from 'express';
 import {
   db, save, findCharacterById, findUserById, findModuleById, publicUser, newId,
-  customOccupations, reviewsOf,
+  customOccupations, reviewsOf, DEFAULT_MAX_CHARACTERS,
 } from '../lib/db.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { requireAuth, requireAdmin, optionalAuth } from '../lib/auth.js';
@@ -143,6 +143,7 @@ router.get('/characters/meta', optionalAuth, (req, res) => {
       total: database.characters.length,
       mine: database.characters.filter((c) => c.ownerId === me.id).length,
     } : null,
+    quota: me ? quotaOf(me) : null,
   });
 });
 
@@ -163,6 +164,25 @@ function auditRules() {
   return { ...DEFAULT_AUDIT_RULES, ...(db().settings?.auditRules || {}) };
 }
 
+/** 某账号的角色卡配额与已用数量 */
+function quotaOf(user) {
+  if (!user) return { limit: 0, used: 0 };
+  const limit = Number.isInteger(user.maxCharacters) ? user.maxCharacters : DEFAULT_MAX_CHARACTERS;
+  const used = db().characters.filter((c) => c.ownerId === user.id).length;
+  return { limit, used };
+}
+
+/** 新建/复制/导入前统一校验；0 表示管理员已暂停该账号建卡 */
+function enforceCharacterQuota(ownerId) {
+  const owner = findUserById(ownerId);
+  if (!owner) throw badRequest('角色卡所属的玩家不存在');
+  const { limit, used } = quotaOf(owner);
+  if (used >= limit) {
+    throw badRequest(`该账号的角色卡已达上限（${used}/${limit}），请联系管理员调整`);
+  }
+  return owner;
+}
+
 function ownerNameOf(ownerId) {
   const u = findUserById(ownerId);
   return u ? u.username : '（已注销）';
@@ -179,6 +199,7 @@ function present(character, { actor, full = true }) {
   const warnings = validateSheet(character, ctx);
   const canEdit = actor.role === 'admin' || actor.id === character.ownerId;
   const isAdmin = actor.role === 'admin';
+  const customSkillCount = (character.customSkills || []).length;
 
   // 审核信息：批复只存在 reviews 集合里，**不属于角色卡本体**，因此不会被打印导出。
   const history = (isAdmin || canEdit) ? reviewsOf(character.id) : [];
@@ -218,7 +239,7 @@ function present(character, { actor, full = true }) {
       occupationName: derived.occupation?.name || '无职业',
       hp: derived.hp, san: derived.san, mov: derived.mov,
       skillCount: derived.skills.filter((s) => s.used).length,
-      customSkillCount: derived.customSkillCount,
+      customSkillCount,
       moduleCount: links.length,
       spent: derived.spent,
       budget: derived.budget,
@@ -351,6 +372,7 @@ router.post('/characters', (req, res) => {
     if (!findUserById(target)) throw badRequest('指定的玩家不存在');
     ownerId = target;
   }
+  enforceCharacterQuota(ownerId);
   const data = guardKpOnlyFields(
     parseCharacter(req.body, { knownModuleIds: knownModuleIds(), ctx: rulesCtx() }),
     req.user,
@@ -436,18 +458,24 @@ router.delete('/characters/:id', (req, res) => {
 router.post('/characters/:id/duplicate', (req, res) => {
   const { c, isOwner, isAdmin } = loadReadable(req);
   if (!isOwner && !isAdmin) throw forbidden('只能复制自己的角色卡');
+  let ownerId = req.user.id;
+  if (req.user.role === 'admin' && req.body?.ownerId) {
+    ownerId = vId(req.body.ownerId, '所属玩家');
+    if (!findUserById(ownerId)) throw badRequest('指定的玩家不存在');
+  }
+  enforceCharacterQuota(ownerId);
   const now = Date.now();
   const copy = {
     ...JSON.parse(JSON.stringify(c)),
     id: newId('c'),
-    ownerId: req.user.role === 'admin' && req.body?.ownerId ? vId(req.body.ownerId, '所属玩家') : req.user.id,
+    ownerId,
     name: `${vStr(req.body?.name, '角色名', { max: 40 }) || c.name}（副本）`.slice(0, 40),
     createdAt: now,
     updatedAt: now,
   };
   db().characters.push(copy);
   save();
-  audit(req, 'character.duplicate', { from: c.id, characterId: copy.id });
+  audit(req, 'character.duplicate', { from: c.id, characterId: copy.id, ownerId });
   res.json(present(copy, { actor: req.user }));
 });
 

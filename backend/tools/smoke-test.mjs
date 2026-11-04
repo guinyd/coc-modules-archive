@@ -762,6 +762,7 @@ try {
   await api('DELETE', `/api/characters/${withTplSkill.json.id}`, { token: A });
 
   section('级联清理');
+  await new Promise((r) => setTimeout(r, 300)); // 等 save() 的 120ms 合并窗口落盘
   const charCountBefore = JSON.parse(fs.readFileSync(dbFile, 'utf-8')).characters.length;
   const delUser = await api('DELETE', `/api/admin/users/${newUserId}`, { token: A });
   ok('删除账号成功', delUser.status === 200);
@@ -770,6 +771,7 @@ try {
   ok('删除模组成功', delModule.status === 200);
   const afterModuleDelete = await api('GET', `/api/characters/${card.id}`, { token: A });
   ok('删除模组后角色卡经历关联被摘除', afterModuleDelete.json.moduleLinks.length === 0);
+  await new Promise((r) => setTimeout(r, 300)); // 等合并写落盘
   const charCountAfter = JSON.parse(fs.readFileSync(dbFile, 'utf-8')).characters.length;
   ok('删除账号时级联清理其角色卡', charCountAfter <= charCountBefore);
 
@@ -881,6 +883,7 @@ try {
   ok('KP 通过审核', approved.status === 200 && approved.json.reviewStatus === 'approved');
   ok('通过后批复被清空', approved.json.review.comment === '', `实际「${approved.json.review.comment}」`);
 
+  await new Promise((r) => setTimeout(r, 300)); // 等合并写落盘
   const rawDb = JSON.parse(fs.readFileSync(dbFile, 'utf-8'));
   const rawCard = rawDb.characters.find((c) => c.id === usingTpl.json.id);
   // notes 是 v1.7 新增的「玩家备注」字段（不属于批复），experience 是经历栏

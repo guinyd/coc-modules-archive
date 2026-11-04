@@ -206,8 +206,6 @@ else
   fi
 fi
 run mkdir -p "$APP_DIR/backend/data"
-run mkdir -p "$APP_DIR/deploy"
-run cp -f "$SRC/deploy/nginx.conf.sample" "$APP_DIR/deploy/" 2>/dev/null || true
 run cp -f "$SRC/VERSION" "$APP_DIR/VERSION" 2>/dev/null || true
 echo "    ✓ 已同步 backend/ 与 shared/（data/ 未改动）"
 

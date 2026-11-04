@@ -10,7 +10,7 @@
  *
  * 所有组件在 prefers-reduced-motion 下退化为静态；不新增第三方依赖。
  */
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cx } from './ui.jsx';
 import {
@@ -124,4 +124,39 @@ export function ReadingLamp({ className }) {
 /** 换页时从内容顶部扫过的一道墨线，提醒「翻到下一页了」。 */
 export function RouteSweep() {
   return <span aria-hidden="true" className="route-sweep" />;
+}
+
+/**
+ * 顶部请求扫描线：api.js 维护 inflight 计数并广播 coc:busy。
+ * 延迟 160ms 才出现，短请求不会闪；请求结束后 240ms 淡出。
+ */
+export function RouteProgress() {
+  const [active, setActive] = useState(false);
+  const showTimer = useRef(0);
+  const hideTimer = useRef(0);
+
+  useEffect(() => {
+    const onBusy = (event) => {
+      const busy = (event.detail?.count || 0) > 0;
+      window.clearTimeout(showTimer.current);
+      window.clearTimeout(hideTimer.current);
+      if (busy) {
+        showTimer.current = window.setTimeout(() => setActive(true), 160);
+      } else {
+        hideTimer.current = window.setTimeout(() => setActive(false), 240);
+      }
+    };
+    window.addEventListener('coc:busy', onBusy);
+    return () => {
+      window.clearTimeout(showTimer.current);
+      window.clearTimeout(hideTimer.current);
+      window.removeEventListener('coc:busy', onBusy);
+    };
+  }, []);
+
+  return (
+    <div className={cx('route-progress no-print', active && 'is-active')} aria-hidden="true">
+      <span className="route-progress__bar" />
+    </div>
+  );
 }
