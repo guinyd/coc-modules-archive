@@ -17,8 +17,8 @@
  */
 import React from 'react';
 import {
-  ArrowDown, ArrowRight, ArrowUpRight, BookOpen, CalendarDays, CheckCircle, Dices,
-  Edit, FileText, FolderArchive, LayoutGrid, ListChecks, Lock, Pin, Search, Trash2, X,
+  ArrowDown, ArrowRight, ArrowUpRight, BookMarked, BookOpen, CalendarDays, CheckCircle, Dices,
+  Edit, FileText, FolderArchive, LayoutGrid, ListChecks, Lock, Pin, Search, Trash2, Users, X,
 } from 'lucide-react';
 import {
   EmptyState, Reveal, Select, Tabs, cx,
@@ -236,23 +236,32 @@ function DossierCard({ module, played, canManage, onOpen, onEdit, onDelete, onSe
 }
 
 export default function HomeView({
-  modules, loading = false, currentUser, playedModules, isAdmin, isChief,
+  modules, loading = false, currentUser, playedModules, isAdmin, isChief, keeperRoster = [],
   homeTab, setHomeTab, searchTerm, setSearchTerm,
   filterRegion, setFilterRegion, filterPlayers, setFilterPlayers,
   filterDuration, setFilterDuration, filterPlayed, setFilterPlayed,
   selectedCollection, setSelectedCollection, uniqueSeries, uniqueRegions,
   uniquePlayers, uniqueDurations, filteredModules,
-  onOpenModule, onEditModule, onDeleteModule, onTogglePlayed, onGoAuth, onGoCharacters,
+  onOpenModule, onEditModule, onDeleteModule, onTogglePlayed, onToggleKeeperMark, onGoAuth, onGoCharacters,
 }) {
-  const hasFilter = Boolean(filterRegion || filterPlayers || filterDuration || filterPlayed || selectedCollection);
+  const [keeperFilter, setKeeperFilter] = React.useState(null);
+  const activeKeeper = keeperFilter ? keeperRoster.find((k) => k.id === keeperFilter) : null;
+  const keeperModules = activeKeeper
+    ? modules.filter((m) => (activeKeeper.moduleIds || []).includes(m.id))
+    : null;
+  const visibleModules = keeperModules || filteredModules;
+  const myMarkedIds = new Set((keeperRoster.find((k) => k.id === currentUser?.id)?.moduleIds) || []);
+
+  const hasFilter = Boolean(filterRegion || filterPlayers || filterDuration || filterPlayed || selectedCollection || keeperFilter);
   const clearAll = () => {
     setFilterRegion(''); setFilterPlayers(''); setFilterDuration('');
-    setFilterPlayed(''); setSelectedCollection(null);
+    setFilterPlayed(''); setSelectedCollection(null); setKeeperFilter(null);
   };
 
   const tabItems = [
     { value: 'grid', label: '卷宗阅览', icon: LayoutGrid },
     { value: 'collections', label: '合集', icon: FolderArchive },
+    ...(currentUser ? [{ value: 'roster', label: '守密人名册', icon: Users }] : []),
     ...(currentUser ? [{ value: 'list', label: '列表记录', icon: ListChecks }] : []),
   ];
 
@@ -508,7 +517,7 @@ export default function HomeView({
             </div>
 
             <div className="mt-4 flex items-end gap-4">
-              <Tabs items={tabItems} value={homeTab} onChange={(v) => { if (!currentUser && v === 'list') return onGoAuth(); setHomeTab(v); }} className="flex-1" />
+              <Tabs items={tabItems} value={homeTab} onChange={(v) => { if (!currentUser && (v === 'list' || v === 'roster')) return onGoAuth(); setHomeTab(v); }} className="flex-1" />
             </div>
 
             {selectedCollection && homeTab === 'grid' ? (
@@ -524,10 +533,23 @@ export default function HomeView({
               </div>
             ) : null}
 
+            {activeKeeper && homeTab === 'grid' ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border border-ochre/45 bg-ochre/[0.06] px-3 py-2">
+                <span className="flex items-center gap-2 text-[14px] font-semibold text-ink">
+                  <Users className="h-4 w-4 text-ochre" />
+                  守秘人：{activeKeeper.username} 的书架
+                  <span className="font-mono text-[14px] font-normal tracking-[0.14em] text-ink-mute">{pad2(visibleModules.length)} 份可带团</span>
+                </span>
+                <button type="button" onClick={() => setKeeperFilter(null)} className="font-mono text-[14px] tracking-[0.12em] text-ink-mute underline decoration-line-strong underline-offset-2 hover:text-vermilion">
+                  离开书架
+                </button>
+              </div>
+            ) : null}
+
             {/* 卷宗网格 */}
             {homeTab === 'grid' ? (
               <div className="mt-6 grid grid-cols-1 gap-x-5 gap-y-10 sm:grid-cols-2" aria-busy={loading || undefined}>
-                {loading ? [0, 1, 2, 3].map((i) => <DossierSkeleton key={i} index={i} />) : filteredModules.map((module, i) => (
+                {loading ? [0, 1, 2, 3].map((i) => <DossierSkeleton key={i} index={i} />) : visibleModules.map((module, i) => (
                   <DossierCard
                     key={module.id}
                     module={module}
@@ -540,9 +562,13 @@ export default function HomeView({
                     onSeries={(series) => { setSelectedCollection(series); setHomeTab('grid'); }}
                   />
                 ))}
-                {!loading && filteredModules.length === 0 ? (
+                {!loading && visibleModules.length === 0 ? (
                   <div className="col-span-full">
-                    <EmptyState icon={FileText} title="没有找到匹配的档案" desc="试着调整搜索关键字，或清除筛选条件。" />
+                    <EmptyState
+                      icon={FileText}
+                      title="没有找到匹配的档案"
+                      desc={activeKeeper ? '这位守秘人还没有标记可带团的模组。' : '试着调整搜索关键字，或清除筛选条件。'}
+                    />
                   </div>
                 ) : null}
 
@@ -556,7 +582,7 @@ export default function HomeView({
                     </div>
                   </div>
                   <span className="font-mono text-[14px] tracking-[0.24em] text-ink-mute">
-                    END OF INDEX · {pad2(filteredModules.length)} / {pad2(modules.length)}
+                    END OF INDEX · {pad2(visibleModules.length)} / {pad2(modules.length)}
                   </span>
                 </div>
                 ) : null}
@@ -601,20 +627,68 @@ export default function HomeView({
               </div>
             ) : null}
 
+            {/* 守密人名册：与合集目录刻意做成两种形态（卡片 = 人，列表 = 卷宗合集） */}
+            {homeTab === 'roster' && currentUser ? (
+              <div className="mt-5">
+                <div className="flex flex-wrap items-end justify-between gap-3 border-b-2 border-ink/40 pb-2.5">
+                  <p className="font-serif text-[20px] font-bold tracking-[0.01em] text-ink">守密人名册</p>
+                  <span className="font-mono text-[13px] tracking-[0.2em] text-ink-mute">REGISTER OF KEEPERS · {pad2(keeperRoster.length)}</span>
+                </div>
+                {keeperRoster.length === 0 ? (
+                  <p className="border border-dashed border-line-strong py-14 text-center font-kai text-[16px] text-ink-mute">
+                    名册还是空的。等第一位守秘人给模组做上「可带团」标记。
+                  </p>
+                ) : (
+                  <ul className="mt-4 grid gap-4 sm:grid-cols-2">
+                    {keeperRoster.map((k, i) => (
+                      <Reveal as="li" key={k.id} delay={Math.min(i, 8) * 35}>
+                        <div className="group relative flex h-full items-stretch gap-4 border border-line-strong bg-paper-raised p-4">
+                          <span aria-hidden="true" className="absolute left-0 top-0 h-full w-[3px] bg-ochre/50" />
+                          <div className="flex w-12 shrink-0 flex-col items-center justify-center border border-ink/25 bg-ink/[0.04] font-serif text-[24px] font-black text-ink">
+                            {String(k.username || '?').slice(0, 1)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="flex min-w-0 items-center gap-2 font-serif text-[18px] font-bold text-ink">
+                              <span className="truncate">{k.username}</span>
+                              {k.isChief ? (
+                                <span className="shrink-0 border border-ochre/55 px-1.5 py-0.5 font-mono text-[11px] tracking-[0.12em] text-ochre">首席</span>
+                              ) : null}
+                            </p>
+                            <p className="mt-1 font-mono text-[12.5px] tracking-[0.14em] text-ink-mute">
+                              可带团 · {pad2(k.moduleCount || 0)} 份卷宗
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => { setKeeperFilter(k.id); setHomeTab('grid'); }}
+                              className="mt-3 inline-flex items-center gap-1.5 border border-ochre/60 bg-ochre/[0.09] px-3 py-1.5 text-[13.5px] font-semibold text-ochre transition-colors hover:bg-ochre/[0.18]"
+                            >
+                              查看卷宗
+                              <ArrowRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-0.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </Reveal>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : null}
+
             {/* 列表记录 */}
             {homeTab === 'list' && currentUser ? (
               <div className="mt-5 overflow-x-auto border border-line-strong">
                 <table className="w-full min-w-[520px] text-left">
                   <thead className="border-b border-line-strong bg-paper-deep/70 font-mono text-[14px] tracking-[0.18em] text-ink-mute">
                     <tr>
-                      <th className="w-12 px-3 py-2.5 text-center">状</th>
+                      <th className="w-20 whitespace-nowrap px-3 py-2.5 text-center">状态</th>
                       <th className="px-3 py-2.5">名称</th>
                       <th className="hidden px-3 py-2.5 sm:table-cell">合集</th>
-                      <th className="px-3 py-2.5 text-right">参数</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">参数</th>
+                      {isAdmin ? <th className="w-24 whitespace-nowrap px-3 py-2.5 text-center">带团列表</th> : null}
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredModules.map((m) => {
+                    {visibleModules.map((m) => {
                       const played = playedModules.includes(m.id);
                       return (
                         <tr
@@ -631,12 +705,31 @@ export default function HomeView({
                             <span className="ml-2 font-mono text-[14px] tracking-[0.14em] text-ink-mute">{fileNumberOf(m)}</span>
                           </td>
                           <td className="hidden px-3 py-3 text-[14px] text-ink-mute sm:table-cell">{m.series || '—'}</td>
-                          <td className="px-3 py-3 text-right font-mono text-[14px] text-ink-soft tabular">{m.players} 人 · {m.duration}h</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-[14px] text-ink-soft tabular">{m.players} 人 · {m.duration}h</td>
+                          {isAdmin ? (
+                            <td className="px-3 py-3 text-center">
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onToggleKeeperMark(m.id, e); }}
+                                aria-pressed={myMarkedIds.has(m.id)}
+                                title={myMarkedIds.has(m.id) ? '已在你的带团列表，点击移出' : '加入你的带团列表'}
+                                className={cx(
+                                  'inline-flex items-center gap-1.5 whitespace-nowrap border px-2 py-1 font-mono text-[13px] tracking-[0.08em] transition-colors',
+                                  myMarkedIds.has(m.id)
+                                    ? 'border-ochre bg-ochre/15 text-ochre'
+                                    : 'border-line-strong text-ink-mute hover:border-ochre hover:text-ochre',
+                                )}
+                              >
+                                <BookMarked className="h-3.5 w-3.5" strokeWidth={1.9} />
+                                {myMarkedIds.has(m.id) ? '已在册' : '加入'}
+                              </button>
+                            </td>
+                          ) : null}
                         </tr>
                       );
                     })}
-                    {filteredModules.length === 0 ? (
-                      <tr><td colSpan={4} className="px-3 py-12 text-center text-[14.5px] text-ink-mute">没有找到匹配的档案</td></tr>
+                    {visibleModules.length === 0 ? (
+                      <tr><td colSpan={isAdmin ? 5 : 4} className="px-3 py-12 text-center text-[14.5px] text-ink-mute">没有找到匹配的档案</td></tr>
                     ) : null}
                   </tbody>
                 </table>

@@ -15,10 +15,12 @@ import { SealMark, SealWatermark } from '../components/Emblem.jsx';
 import { TentacleCorner } from '../components/Ornaments.jsx';
 
 const NOTES = [
-  { index: '01', text: '首次运行时，第一个账号会成为守秘人（KP）。' },
+  { index: '01', text: '目前档案馆是邀请制，不支持自助办卡，请联系你的KP发放。' },
   { index: '02', text: '角色卡、带团记录与证书都绑定在当前账号下。' },
-  { index: '03', text: '目前档案馆是邀请制，不支持自助办卡，请联系你的KP发放。' },
+  { index: '03', text: '欢迎更多kp和调查员入驻档案馆，如有宝贵的意见可以提交GitHub或馆长邮箱。' },
 ];
+
+
 
 function PermitField({ icon: Icon, label, hint, ...props }) {
   return (
@@ -44,7 +46,11 @@ function PermitField({ icon: Icon, label, hint, ...props }) {
 
 export default function AuthView({
   isLoginMode, setIsLoginMode, username, setUsername, password, setPassword, authError, setAuthError, onSubmit,
+  initialized = true,
 }) {
+  // 已经初始化过的站点不再暴露「创建首个账号」入口，避免访客误以为自己能注册。
+  const canInit = initialized === false;
+  const initMode = canInit && !isLoginMode;
   return (
     <div className="mx-auto grid max-w-[1100px] grid-cols-1 items-start gap-11 py-3 sm:py-6 lg:grid-cols-[minmax(0,1fr)_428px] lg:gap-16 lg:py-10">
       {/* ------------------------------------------------------ 左：入馆须知 */}
@@ -128,7 +134,7 @@ export default function AuthView({
               <div className="min-w-0">
                 <p className="font-mono text-[14px] tracking-[0.26em] text-[var(--c-masthead-ink)]/60">READER&apos;S PERMIT</p>
                 <h2 className="mt-1.5 font-serif text-[22px] font-black tracking-[0.12em]">
-                  {isLoginMode ? '调查员登录' : '系统初始化'}
+                  {initMode ? '系统初始化' : '调查员登录'}
                 </h2>
               </div>
               <span className="mt-1 shrink-0 border border-[var(--c-masthead-ink)]/30 px-1.5 py-0.5 font-mono text-[14px] tracking-[0.16em] text-[var(--c-masthead-ink)]/70">
@@ -142,7 +148,7 @@ export default function AuthView({
 
           <div className="p-5 sm:p-6">
             <p className="text-[16px] leading-relaxed text-ink-soft">
-              {isLoginMode ? '填写用户名与密码，进入馆藏。' : '创建第一个账号，它将拥有守秘人权限。'}
+              {initMode ? '创建第一个账号，它将拥有守秘人权限。' : '填写用户名与密码，进入馆藏。'}
             </p>
 
             {authError ? (
@@ -166,32 +172,38 @@ export default function AuthView({
               <PermitField
                 icon={Lock}
                 label="密码 / PASSCODE"
-                hint={!isLoginMode ? '密码至少 6 位即可。' : undefined}
+                hint={initMode ? '密码至少 6 位即可。' : undefined}
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                autoComplete={isLoginMode ? 'current-password' : 'new-password'}
+                autoComplete={initMode ? 'new-password' : 'current-password'}
                 placeholder="请输入密码"
               />
 
               <Button size="lg" type="submit" className="mt-2 w-full !justify-between">
-                <span>{isLoginMode ? '进入档案馆' : '创建管理员'}</span>
+                <span>{initMode ? '创建管理员' : '进入档案馆'}</span>
                 <ArrowRight className="h-4 w-4" strokeWidth={2} />
               </Button>
             </form>
 
-            <div className="mt-5 flex items-center justify-between gap-3 border-t border-dashed border-ink/30 pt-4 text-[14px]">
-              <span className="text-ink-mute">{isLoginMode ? '还没有账号？' : '已有账号？'}</span>
-              <button
-                type="button"
-                onClick={() => { setIsLoginMode(!isLoginMode); setAuthError(''); }}
-                className="group inline-flex items-center gap-1 font-semibold text-vermilion transition-colors hover:text-vermilion/80"
-              >
-                {isLoginMode ? '点击初始化首个账号' : '切换登录'}
-                <span aria-hidden="true" className="transition-transform duration-300 group-hover:translate-x-1">→</span>
-              </button>
-            </div>
+            {canInit ? (
+              <div className="mt-5 flex items-center justify-between gap-3 border-t border-dashed border-ink/30 pt-4 text-[14px]">
+                <span className="text-ink-mute">{isLoginMode ? '还没有账号？' : '已有账号？'}</span>
+                <button
+                  type="button"
+                  onClick={() => { setIsLoginMode(!isLoginMode); setAuthError(''); }}
+                  className="group inline-flex items-center gap-1 font-semibold text-vermilion transition-colors hover:text-vermilion/80"
+                >
+                  {isLoginMode ? '点击初始化首个账号' : '切换登录'}
+                  <span aria-hidden="true" className="transition-transform duration-300 group-hover:translate-x-1">→</span>
+                </button>
+              </div>
+            ) : (
+              <div className="mt-5 border-t border-dashed border-ink/30 pt-4 text-[14px] leading-[1.85] text-ink-mute">
+                <p>还没有账号？请联系你的 KP 或馆长办理。</p>
+              </div>
+            )}
           </div>
 
           {/* 骑缝：编号 + 条码 */}

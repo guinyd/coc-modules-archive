@@ -41,6 +41,11 @@ router.get('/kp-name', (req, res) => {
   res.json({ kpName: chief ? chief.username : '档案馆首席 KP' });
 });
 
+/** 初始化状态（公开）：登录页据此决定是否显示「初始化首个账号」入口。 */
+router.get('/setup', (req, res) => {
+  res.json({ initialized: db().users.length > 0 });
+});
+
 /** 守秘人名单：玩家提交审核 / 授权托管时用来选人。只暴露公开身份信息。 */
 router.get('/keepers', requireAuth, (req, res) => {
   res.json({ items: keeperDirectory() });

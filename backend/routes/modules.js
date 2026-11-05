@@ -91,6 +91,7 @@ router.delete('/modules/:id', requireAdmin, (req, res) => {
     c.moduleLinks = (c.moduleLinks || []).filter((l) => l.moduleId !== id);
     if (c.moduleLinks.length !== before) { c.updatedAt = Date.now(); unlinked += 1; }
   }
+  database.keeperMarks = database.keeperMarks.filter((m) => m.moduleId !== id);
   save();
   audit(req, 'module.delete', { moduleId: id, played, sessions, unlinkedCharacters: unlinked });
   res.json({ success: true, playedRemoved: played, sessionsRemoved: sessions, charactersUnlinked: unlinked });
@@ -153,6 +154,61 @@ router.delete('/sessions/:id', requireAdmin, (req, res) => {
   save();
   audit(req, 'session.delete', { sessionId: id });
   res.json({ success: true });
+});
+
+// ------------------------------------------------------------------ 守密人名册
+/**
+ * 名册：所有守秘人 + 各自标记「可带团」的模组。
+ * 需要登录才能查看（访客只能看到模组本身，看不到谁带过）。
+ */
+router.get('/keepers/roster', requireAuth, (req, res) => {
+  const database = db();
+  const marks = database.keeperMarks || [];
+  const items = database.users
+    .filter((u) => u.role === 'admin')
+    .map((u) => {
+      const own = marks
+        .filter((m) => m.kpId === u.id)
+        .sort((a, b) => (b.at || 0) - (a.at || 0));
+      return {
+        id: u.id,
+        username: u.username,
+        kpTitle: kpDisplayTitle(u),
+        isChief: isChief(u),
+        moduleIds: own.map((m) => m.moduleId),
+        moduleCount: own.length,
+      };
+    })
+    .sort((a, b) => (Number(b.isChief) - Number(a.isChief))
+      || (b.moduleCount - a.moduleCount)
+      || String(a.username).localeCompare(String(b.username)));
+  res.json({ items });
+});
+
+/** 任何守秘人都能给任意模组打「可带团」标记（与谁发布的无关），再点一次取消。 */
+router.post('/modules/:id/mark', requireAdmin, (req, res) => {
+  const moduleId = vId(req.params.id, '模组');
+  const database = db();
+  if (!findModuleById(moduleId)) throw notFound('找不到该模组');
+  const marks = database.keeperMarks;
+  const idx = marks.findIndex((m) => m.moduleId === moduleId && m.kpId === req.user.id);
+  let marked;
+  if (idx >= 0) {
+    marks.splice(idx, 1);
+    marked = false;
+  } else {
+    marks.push({
+      id: newId('km'),
+      moduleId,
+      kpId: req.user.id,
+      kpName: req.user.username,
+      at: Date.now(),
+    });
+    marked = true;
+  }
+  save();
+  audit(req, 'keeper.mark', { moduleId, marked });
+  res.json({ success: true, marked, moduleId, kpId: req.user.id });
 });
 
 export default router;

@@ -477,17 +477,21 @@ export function Combobox({
 export function Toast({ toast }) {
   if (!toast) return null;
   const isError = toast.type === 'error';
-  return (
-    <div className={cx(
-      'toast-sheet fixed left-1/2 top-5 z-[100] flex max-w-[92vw] -translate-x-1/2 items-center gap-2.5 overflow-hidden rounded-[2px] border px-4 py-2.5 text-[14px] font-medium',
-      isError
-        ? 'border-red-500 bg-[#2a0e0a] text-red-100 shadow-[0_18px_40px_-24px_rgba(23,18,12,0.9)]'
-        : 'border-ink bg-ink text-paper-raised shadow-[0_18px_40px_-24px_rgba(23,18,12,0.9)]',
-    )}>
-      {isError ? <AlertCircle className="h-4 w-4 shrink-0 text-red-300" /> : <CheckCircle className="h-4 w-4 shrink-0 text-emerald-200" />}
-      <span className="truncate">{toast.msg}</span>
-      <span aria-hidden="true" className="toast-timer" />
-    </div>
+  // 用 portal 挂到 body：避免页面里带 transform 的祖先把它变成「局部 fixed」，手机上跑到屏幕外。
+  return createPortal(
+    <div className="pointer-events-none fixed inset-x-0 top-0 z-[100] flex justify-center px-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-4 sm:pt-5">
+      <div className={cx(
+        'toast-sheet flex max-w-[min(92vw,34rem)] items-center gap-2.5 overflow-hidden rounded-[2px] border px-4 py-2.5 text-[14px] font-medium',
+        isError
+          ? 'border-red-500 bg-[#2a0e0a] text-red-100 shadow-[0_18px_40px_-24px_rgba(23,18,12,0.9)]'
+          : 'border-ink bg-ink text-paper-raised shadow-[0_18px_40px_-24px_rgba(23,18,12,0.9)]',
+      )}>
+        {isError ? <AlertCircle className="h-4 w-4 shrink-0 text-red-300" /> : <CheckCircle className="h-4 w-4 shrink-0 text-emerald-200" />}
+        <span className="min-w-0 truncate">{toast.msg}</span>
+        <span aria-hidden="true" className="toast-timer" />
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -523,21 +527,21 @@ export function Modal({ open, onClose, title, children, wide }) {
   return createPortal(
     <div className="dialog-shell fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-[#081311]/55 p-3 backdrop-blur-sm sm:p-6">
       <div className={cx(
-        'dialog-panel surface my-4 w-full sm:my-8',
+        'dialog-panel surface my-2 flex max-h-[calc(100dvh-1rem)] w-full flex-col sm:my-8 sm:max-h-[calc(100dvh-4rem)]',
         wide ? 'max-w-3xl' : 'max-w-xl',
       )}>
-        <div className="flex items-center justify-between border-b border-line-strong px-5 py-4 sm:px-6">
-          <h3 className="font-serif text-[20px] font-bold tracking-wide text-slate-100">{title}</h3>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line-strong px-5 py-4 sm:px-6">
+          <h3 className="min-w-0 truncate font-serif text-[20px] font-bold tracking-wide text-slate-100">{title}</h3>
           <button
             type="button"
             onClick={onClose}
             aria-label="关闭"
-            className="flex h-9 w-9 items-center justify-center rounded-[2px] border border-transparent text-slate-500 transition-colors hover:border-line-strong hover:bg-paper-deep hover:text-slate-100"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[2px] border border-transparent text-slate-500 transition-colors hover:border-line-strong hover:bg-paper-deep hover:text-slate-100"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="p-5 sm:p-6">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 sm:p-6">{children}</div>
       </div>
     </div>,
     document.body,

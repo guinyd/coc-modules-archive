@@ -28,7 +28,7 @@ const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const BACKUP_KEEP = 14;
 /** 写合并窗口：角色卡连续保存时只落一次盘；进程退出用 saveNow() 兜底。 */
 const SAVE_DEBOUNCE_MS = 120;
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 /** 每个账号默认的角色卡上限；管理员可在账号管理里逐个调整（0 表示暂停建卡）。 */
 export const DEFAULT_MAX_CHARACTERS = 30;
 
@@ -47,6 +47,7 @@ function emptyDB() {
     characters: [],
     customOccupations: [],   // KP 自定义职业模板
     reviews: [],             // 角色卡审核记录（批复只存在这里，不进角色卡本体）
+    keeperMarks: [],         // 守秘人的「可带团」标记（模组 × 守秘人）
     settings: { auditRules: null }, // KP 辅助审卡规则（null = 使用内置默认值）
   };
 }
@@ -54,7 +55,7 @@ function emptyDB() {
 function ensureShape(d) {
   const out = d && typeof d === 'object' ? d : {};
   for (const key of ['users', 'modules', 'played_records', 'sessions', 'characters',
-    'customOccupations', 'reviews']) {
+    'customOccupations', 'reviews', 'keeperMarks']) {
     if (!Array.isArray(out[key])) out[key] = [];
   }
   if (!out.settings || typeof out.settings !== 'object') out.settings = { auditRules: null };
@@ -207,6 +208,54 @@ function migrate(d) {
     if (c.custody === undefined) { c.custody = null; changed = true; }
     if (c.reviewKpId === undefined) { c.reviewKpId = null; changed = true; }
     if (c.reviewKpName === undefined) { c.reviewKpName = null; changed = true; }
+  }
+
+  // v8 -> v9：一张角色卡允许多位守秘人托管；新增守秘人「可带团」标记
+  //  - custody 由单个对象升级为数组 [{ kpId, kpName, grantedAt, grantedBy }]
+  //  - keeperMarks: [{ id, moduleId, kpId, kpName, at }] —— 任何守秘人都能标记任意模组
+  //  - 老账号补「发放人」真实用户名（没有记录的按首席回填）
+  const chiefUser = d.users.find((u) => u.role === 'admin' && u.kpRank === 'chief')
+    || d.users.find((u) => u.role === 'admin');
+  const chiefName = chiefUser ? chiefUser.username : '';
+  for (const c of d.characters) {
+    let list;
+    if (Array.isArray(c.custody)) list = c.custody;
+    else if (c.custody && typeof c.custody === 'object' && c.custody.kpId) list = [c.custody];
+    else list = [];
+    const seen = new Set();
+    const next = [];
+    for (const g of list) {
+      if (!g || typeof g !== 'object' || typeof g.kpId !== 'string' || !g.kpId) continue;
+      if (seen.has(g.kpId)) continue;
+      seen.add(g.kpId);
+      next.push({
+        kpId: g.kpId,
+        kpName: typeof g.kpName === 'string' ? g.kpName : '',
+        grantedAt: Number(g.grantedAt) || 0,
+        grantedBy: typeof g.grantedBy === 'string' ? g.grantedBy : '',
+      });
+    }
+    if (JSON.stringify(next) !== JSON.stringify(c.custody)) { c.custody = next; changed = true; }
+  }
+  const markSeen = new Set();
+  d.keeperMarks = (d.keeperMarks || []).filter((m) => {
+    if (!m || typeof m !== 'object' || !m.moduleId || !m.kpId) return false;
+    const key = `${m.moduleId}|${m.kpId}`;
+    if (markSeen.has(key)) return false;
+    markSeen.add(key);
+    return true;
+  }).map((m) => ({
+    id: typeof m.id === 'string' && m.id ? m.id : `km_${m.moduleId}_${m.kpId}`,
+    moduleId: m.moduleId,
+    kpId: m.kpId,
+    kpName: typeof m.kpName === 'string' ? m.kpName : '',
+    at: Number(m.at) || 0,
+  }));
+  for (const u of d.users) {
+    if (u.role === 'admin' || u.createdByName) continue;
+    const issuer = u.createdBy ? d.users.find((x) => x.id === u.createdBy) : null;
+    const name = (issuer && issuer.username) || chiefName || '';
+    if (name) { u.createdByName = name; changed = true; }
   }
 
   if (!d.schemaVersion || d.schemaVersion < SCHEMA_VERSION) {

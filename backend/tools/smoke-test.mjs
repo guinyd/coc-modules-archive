@@ -1006,8 +1006,19 @@ try {
   ok('普通守秘人不能编辑未托管卡 → 403', kEditOther.status === 403);
 
   const pCard = await api('POST', '/api/characters', { token: playerToken, body: { ...blank, name: '玩家托管卡' } });
-  const custody = await api('POST', `/api/characters/${pCard.json.id}/custody`, { token: playerToken, body: { kpId: kId } });
-  ok('玩家可授权守秘人托管', custody.status === 200 && custody.json?.custody?.kpId === kId);
+  const custody = await api('POST', `/api/characters/${pCard.json.id}/custody`, { token: playerToken, body: { kpIds: [kId] } });
+  ok('玩家可授权守秘人托管', custody.status === 200 && Array.isArray(custody.json?.custody)
+    && custody.json.custody.some((g) => g.kpId === kId));
+  const aMe = await api('GET', '/api/user/me', { token: A });
+  const custodyMore = await api('POST', `/api/characters/${pCard.json.id}/custody`, {
+    token: playerToken, body: { kpIds: [aMe.json.id] },
+  });
+  ok('托管支持多选守秘人', custodyMore.status === 200 && Array.isArray(custodyMore.json?.custody)
+    && custodyMore.json.custody.length === 2);
+  const extraGrantId = custodyMore.json.custody.find((g) => g.kpId !== kId)?.kpId;
+  const custodyRevoke = await api('DELETE', `/api/characters/${pCard.json.id}/custody?kpId=${encodeURIComponent(extraGrantId)}`, { token: playerToken });
+  ok('可逐个撤销托管', custodyRevoke.status === 200 && Array.isArray(custodyRevoke.json?.custody)
+    && custodyRevoke.json.custody.length === 1 && custodyRevoke.json.custody[0].kpId === kId);
   const kScope = await api('GET', '/api/characters?scope=all', { token: K });
   ok('托管卡进入守秘人管理页', kScope.json?.scope === 'custody'
     && (kScope.json.items || []).some((c) => c.id === pCard.json.id));
@@ -1044,6 +1055,20 @@ try {
   ok('守秘人不能改别人发布的模组 → 403', kModEdit.status === 403);
   const kModDel = await api('DELETE', `/api/modules/${chiefMod.json.id}`, { token: K });
   ok('守秘人不能删别人发布的模组 → 403', kModDel.status === 403);
+
+  // 守秘人「可带团」标记 + 名册
+  const kMark = await api('POST', `/api/modules/${chiefMod.json.id}/mark`, { token: K });
+  ok('守秘人可标记别人的模组为可带团', kMark.status === 200 && kMark.json?.marked === true);
+  const kRoster = await api('GET', '/api/keepers/roster', { token: playerToken });
+  const kRow = (kRoster.json?.items || []).find((k) => k.id === kId);
+  ok('名册列出该守秘人与其可带模组', kRoster.status === 200 && Boolean(kRow) && kRow.moduleIds.includes(chiefMod.json.id));
+  const kUnmark = await api('POST', `/api/modules/${chiefMod.json.id}/mark`, { token: K });
+  ok('重复点击取消标记', kUnmark.status === 200 && kUnmark.json?.marked === false);
+  const pMarkDenied = await api('POST', `/api/modules/${chiefMod.json.id}/mark`, { token: playerToken });
+  ok('玩家不能做可带团标记 → 403', pMarkDenied.status === 403);
+
+  const setup = await api('GET', '/api/setup');
+  ok('公开接口报告系统已初始化', setup.status === 200 && setup.json?.initialized === true);
 
   // 收尾：首席清理本轮产生的账号与模组
   await api('DELETE', `/api/modules/${kMod.json.id}`, { token: A });

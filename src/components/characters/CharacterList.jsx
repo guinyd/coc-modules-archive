@@ -92,8 +92,8 @@ function CharacterCard({
               {showOwner && item.customSkillCount > 0 ? (
                 <Badge tone="cyan" className="!text-[14px] !tracking-[0.08em]">自建技能 {item.customSkillCount}</Badge>
               ) : null}
-              {!guest && item.custody?.kpName ? (
-                <Badge tone="indigo" className="!text-[14px] !tracking-[0.08em]">托管 · {item.custody.kpName}</Badge>
+              {!guest && Array.isArray(item.custody) && item.custody.length > 0 ? (
+                <Badge tone="indigo" className="!text-[14px] !tracking-[0.08em]">已托管</Badge>
               ) : null}
               {!guest && item.reviewStatus === 'pending' && item.reviewTarget?.kpName ? (
                 <Badge tone="amber" className="!text-[14px] !tracking-[0.08em]">指定 · {item.reviewTarget.kpName}</Badge>

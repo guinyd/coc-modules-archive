@@ -71,10 +71,16 @@ export function canEditCard(actor, character) {
   return isChief(actor) || character.ownerId === actor.id;
 }
 
-/** 托管中的那张卡：普通 KP 只能做「传奇 / 豁免年龄 / 教育」三个快捷操作 */
+/** 这张卡的托管守秘人 id 列表（兼容旧的单对象写法） */
+export function custodianIds(character) {
+  const list = Array.isArray(character?.custody) ? character.custody : [];
+  return list.map((g) => g?.kpId).filter(Boolean);
+}
+
+/** 托管中的那张卡：普通 KP 只能做「传奇 / 豁免年龄 / 教育」三个快捷操作（可多人托管） */
 export function isCustodian(actor, character) {
   if (!actor || !character) return false;
-  return isKeeper(actor) && Boolean(character.custody?.kpId) && character.custody.kpId === actor.id;
+  return isKeeper(actor) && custodianIds(character).includes(actor.id);
 }
 
 /** 能在角色卡管理页里看到 / 做快捷操作的卡：首席全部，普通 KP 只看托管给自己的 */

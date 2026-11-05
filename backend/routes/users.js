@@ -218,8 +218,11 @@ router.put('/users/:id/kp-rank', requireChief, (req, res) => {
         c.reviewKpId = null;
         c.reviewKpName = null;
       }
-      if (c.custody && c.custody.kpId === id) c.custody = null;
+      if (Array.isArray(c.custody) && c.custody.some((g) => g.kpId === id)) {
+        c.custody = c.custody.filter((g) => g.kpId !== id);
+      }
     }
+    database.keeperMarks = database.keeperMarks.filter((m) => m.kpId !== id);
     user.updatedAt = Date.now();
     save();
     audit(req, 'admin.user_demote', { userId: id, username: user.username });
@@ -265,9 +268,12 @@ router.delete('/users/:id', requireChief, (req, res) => {
   database.characters = database.characters.filter((c) => c.ownerId !== id);
   // 他托管中的卡与被指派的审卡任务一并清空
   for (const c of database.characters) {
-    if (c.custody && c.custody.kpId === id) c.custody = null;
+    if (Array.isArray(c.custody) && c.custody.some((g) => g.kpId === id)) {
+      c.custody = c.custody.filter((g) => g.kpId !== id);
+    }
     if (c.reviewKpId === id) { c.reviewKpId = null; c.reviewKpName = null; }
   }
+  database.keeperMarks = database.keeperMarks.filter((m) => m.kpId !== id);
   save();
   audit(req, 'admin.user_delete', { userId: id, username: user.username, playedRemoved, charsRemoved });
   res.json({ success: true, playedRemoved, charsRemoved });

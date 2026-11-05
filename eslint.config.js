@@ -14,7 +14,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
  *  - react-refresh/only-export-components 只是热更新体验提示，同样降级为 warning。
  */
 export default defineConfig([
-  globalIgnores(['dist', 'node_modules', 'backend/data', '.tmp-build', '**/*.tmpdir/**']),
+  globalIgnores(['dist', 'node_modules', 'backend/data', '.tmp-build', '.tmp-*', 'tools/_shots', '**/*.tmpdir/**']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [

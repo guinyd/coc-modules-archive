@@ -228,8 +228,8 @@
 /* ---------------------------------------------------------------- 7. 反馈 */
 .toast-sheet { animation: toast-in 440ms var(--ease-bounce) both; }
 @keyframes toast-in {
-  from { opacity: 0; transform: translate(-50%, -18px) scale(0.96); }
-  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  from { opacity: 0; transform: translateY(-14px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .toast-timer {
   position: absolute;
@@ -285,14 +285,15 @@
   from { opacity: 0; transform: translateY(20px); }
 }
 
-/* 详情操作条：手机上两列，主操作独占一行。 */
+/* 详情操作条：手机上两列；只有一个操作或只有三个操作时，最后一个独占一行。 */
 .detail-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
   width: 100%;
 }
-.detail-actions > :last-child { grid-column: 1 / -1; }
+.detail-actions > :only-child,
+.detail-actions > :nth-child(3):last-child { grid-column: 1 / -1; }
 @media (min-width: 640px) {
   .detail-actions {
     display: flex;
@@ -300,7 +301,8 @@
     flex-wrap: wrap;
     align-items: center;
   }
-  .detail-actions > :last-child { grid-column: auto; }
+  .detail-actions > :only-child,
+  .detail-actions > :nth-child(3):last-child { grid-column: auto; }
 }
 
 /* ---------------------------------------------------------------- 9. 证件

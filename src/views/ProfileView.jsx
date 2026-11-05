@@ -11,13 +11,41 @@ import { SealMark, SealWatermark } from '../components/Emblem.jsx';
 import PasswordChangeForm from '../components/PasswordChangeForm.jsx';
 import AccountRenameCard from '../components/AccountRenameCard.jsx';
 
-export default function ProfileView({ currentUser, isAdmin, isChief, modules, playedModules, onTogglePlayed, onPreviewCertificate, onGo, showToast, onLogout, onRenamed }) {
+/** 联单分页：一页 4 行 × 2 列 = 8 条 */
+function Pager({ page, total, onChange }) {
+  const pages = Math.max(1, Math.ceil(total / 8));
+  if (pages <= 1) return null;
+  const btn = 'border border-line px-3 py-1.5 text-[13.5px] tracking-[0.1em] text-ink-soft transition-colors hover:border-moon hover:text-moon disabled:pointer-events-none disabled:opacity-35';
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-line px-5 py-3 font-mono text-[13.5px] tracking-[0.14em] text-ink-mute">
+      <button type="button" onClick={() => onChange(page - 1)} disabled={page <= 1} className={btn}>← 上一页</button>
+      <span className="tabular">第 {String(page).padStart(2, '0')} / {String(pages).padStart(2, '0')} 页</span>
+      <button type="button" onClick={() => onChange(page + 1)} disabled={page >= pages} className={btn}>下一页 →</button>
+    </div>
+  );
+}
+
+export default function ProfileView({ currentUser, isAdmin, isChief, modules, playedModules, keeperRoster = [], onTogglePlayed, onToggleKeeperMark, onPreviewCertificate, onGo, showToast, onLogout, onRenamed }) {
   const played = modules.filter((m) => playedModules.includes(m.id));
   const initial = (currentUser?.username || '档').slice(0, 1);
   const cardNo = `NO.${String(currentUser?.id || currentUser?.username || '0000').replace(/[^0-9a-z]/gi, '').slice(-5).toUpperCase().padStart(5, '0')}`;
   const year = new Date().getFullYear();
   const kpTitle = currentUser?.kpTitle || '见习守秘人';
   const identityLine = isChief ? '首席守秘人' : (isAdmin ? `守秘人 · ${kpTitle}` : (currentUser?.title || '见习调查员'));
+
+  // 每页 4 行 × 2 列 = 8 条
+  const PAGE_SIZE = 8;
+  const [logPage, setLogPage] = React.useState(1);
+  const [shelfPage, setShelfPage] = React.useState(1);
+
+  const myModuleIds = keeperRoster.find((k) => k.id === currentUser?.id)?.moduleIds || [];
+  const shelf = modules.filter((m) => myModuleIds.includes(m.id));
+
+  const clampPage = (page, list) => Math.min(Math.max(1, page), Math.max(1, Math.ceil(list.length / PAGE_SIZE)));
+  const logPageNow = clampPage(logPage, played);
+  const shelfPageNow = clampPage(shelfPage, shelf);
+  const logItems = played.slice((logPageNow - 1) * PAGE_SIZE, logPageNow * PAGE_SIZE);
+  const shelfItems = shelf.slice((shelfPageNow - 1) * PAGE_SIZE, shelfPageNow * PAGE_SIZE);
 
   const quickLinks = [
     { label: '我的角色卡', icon: Users, onClick: () => onGo('characters') },
@@ -153,29 +181,78 @@ export default function ProfileView({ currentUser, isAdmin, isChief, modules, pl
             {played.length === 0 ? (
               <p className="mx-5 mb-5 mt-4 border border-dashed border-line py-7 text-center font-kai text-[16px] text-ink-mute">还没有归档任何案件。</p>
             ) : (
-              <ul className="mt-2 grid gap-x-8 px-5 pb-4 sm:grid-cols-2">
-                {played.map((m, i) => (
-                  <li key={m.id} className="group flex items-center justify-between gap-3 border-b border-line-soft py-2.5 last:border-b-0">
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      <span aria-hidden="true" className="tabular shrink-0 font-mono text-[14px] text-ink-mute">{String(i + 1).padStart(2, '0')}</span>
-                      <span aria-hidden="true" className="h-6 w-[2px] shrink-0 bg-moon/70 transition-all group-hover:h-8" />
-                      <div className="min-w-0">
-                        <span className="block truncate font-serif text-[15px] text-ink transition-colors group-hover:text-moon">{m.title}</span>
-                        <span className="text-[14px] text-ink-mute">{m.region} · {m.era}</span>
+              <>
+                <ul className="mt-2 grid gap-x-8 px-5 pb-4 sm:grid-cols-2">
+                  {logItems.map((m, i) => (
+                    <li key={m.id} className="group flex items-center justify-between gap-3 border-b border-line-soft py-2.5 last:border-b-0">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span aria-hidden="true" className="tabular shrink-0 font-mono text-[14px] text-ink-mute">{String((logPageNow - 1) * PAGE_SIZE + i + 1).padStart(2, '0')}</span>
+                        <span aria-hidden="true" className="h-6 w-[2px] shrink-0 bg-moon/70 transition-all group-hover:h-8" />
+                        <div className="min-w-0">
+                          <span className="block truncate font-serif text-[15px] text-ink transition-colors group-hover:text-moon">{m.title}</span>
+                          <span className="text-[14px] text-ink-mute">{m.region} · {m.era}</span>
+                        </div>
                       </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => onTogglePlayed(m.id, e)}
-                      className="shrink-0 border border-transparent px-2 py-1 text-[14px] text-ink-mute transition-colors hover:border-line hover:text-red-500"
-                    >
-                      撤销
-                    </button>
-                  </li>
-                ))}
-              </ul>
+                      <button
+                        type="button"
+                        onClick={(e) => onTogglePlayed(m.id, e)}
+                        className="shrink-0 border border-transparent px-2 py-1 text-[14px] text-ink-mute transition-colors hover:border-line hover:text-red-500"
+                      >
+                        撤销
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <Pager page={logPageNow} total={played.length} onChange={setLogPage} />
+              </>
             )}
           </section>
+
+          {/* 带团列表：KP 标记过的可带卷宗 */}
+          {isAdmin ? (
+            <section className="relative overflow-hidden border border-line bg-paper-raised/60">
+              <div aria-hidden="true" className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-ochre/50 to-transparent" />
+              <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-line px-5 py-3">
+                <div className="flex items-baseline gap-3">
+                  <span className="font-mono text-[14px] tracking-[0.2em] text-ochre">04</span>
+                  <h4 className="font-serif text-[17px] font-bold tracking-[0.02em] text-ink">带团列表</h4>
+                </div>
+                <div className="flex items-baseline gap-3">
+                  <span className="text-[14px] tracking-[0.22em] text-ink-mute">KEEPER'S SHIFT LIST</span>
+                  <span className="tabular text-[14px] tracking-[0.12em] text-ink-mute">{shelf.length} 份卷宗</span>
+                </div>
+              </div>
+              <p className="px-5 pt-3 text-[16px] leading-relaxed text-ink-mute">在模组详情或列表记录里加入的卷宗会出现在这里，方便开团前快速翻查。</p>
+              {shelf.length === 0 ? (
+                <p className="mx-5 mb-5 mt-4 border border-dashed border-line py-7 text-center font-kai text-[16px] text-ink-mute">带团列表还是空的，去馆藏里挑一份吧。</p>
+              ) : (
+                <>
+                  <ul className="mt-2 grid gap-x-8 px-5 pb-4 sm:grid-cols-2">
+                    {shelfItems.map((m, i) => (
+                      <li key={m.id} className="group flex items-center justify-between gap-3 border-b border-line-soft py-2.5 last:border-b-0">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span aria-hidden="true" className="tabular shrink-0 font-mono text-[14px] text-ink-mute">{String((shelfPageNow - 1) * PAGE_SIZE + i + 1).padStart(2, '0')}</span>
+                          <span aria-hidden="true" className="h-6 w-[2px] shrink-0 bg-ochre/70 transition-all group-hover:h-8" />
+                          <div className="min-w-0">
+                            <span className="block truncate font-serif text-[15px] text-ink transition-colors group-hover:text-ochre">{m.title}</span>
+                            <span className="text-[14px] text-ink-mute">{m.region} · {m.era}</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => onToggleKeeperMark(m.id, e)}
+                          className="shrink-0 border border-transparent px-2 py-1 text-[14px] text-ink-mute transition-colors hover:border-line hover:text-ochre"
+                        >
+                          移出
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <Pager page={shelfPageNow} total={shelf.length} onChange={setShelfPage} />
+                </>
+              )}
+            </section>
+          ) : null}
         </div>
       </div>
     </div>

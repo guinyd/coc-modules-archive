@@ -1972,6 +1972,23 @@ button.press, a.press, .press {
   color: var(--color-vermilion);
   box-shadow: 0 12px 20px -18px rgba(90, 20, 12, 0.65);
 }
+/* -- 守秘人「可带团」标记：棕黄，和已调查的苔绿、编辑的墨线区分开 -- */
+.record-act--mark {
+  border-color: color-mix(in srgb, var(--color-ochre) 55%, transparent);
+  background: color-mix(in srgb, var(--color-ochre) 9%, transparent);
+  color: var(--color-ochre);
+}
+.record-act--mark:hover {
+  border-color: var(--color-ochre);
+  background: var(--color-ochre);
+  color: var(--color-paper-raised);
+  box-shadow: 0 14px 22px -18px rgba(122, 88, 18, 0.8);
+}
+.record-act--mark.is-marked {
+  border-color: var(--color-ochre);
+  background: color-mix(in srgb, var(--color-ochre) 86%, #000);
+  color: var(--color-paper-raised);
+}
 
 /* -- 封面上的一体化标签：书签压在左上、状态与置顶退到右上 */
 .cover-chip {

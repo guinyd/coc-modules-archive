@@ -31,7 +31,7 @@ const DEFAULT_CHARACTER_LIMIT = 30;
 const isChiefAccount = (u) => u?.role === 'admin' && u?.kpRank === 'chief';
 const isKeeperAccount = (u) => u?.role === 'admin';
 /** 发放人：老数据没有留痕时按「首席」展示 */
-const issuerOf = (u) => u?.createdByName || '首席';
+const issuerOf = (u, chiefName) => u?.createdByName || chiefName || '首席';
 
 /** 三档身份：首席守秘人 / 守秘人 · 称号 / 调查员 */
 function RoleBadge({ user, className }) {
@@ -47,7 +47,7 @@ function RoleBadge({ user, className }) {
       className,
     )}>
       <Icon className="h-4 w-4" />
-      {chief ? '首席守秘人' : keeper ? `守秘人 · ${user.kpTitle || KP_TITLES[0]}` : '调查员'}
+      {chief ? '首席守秘人' : keeper ? '守秘人' : '调查员'}
     </span>
   );
 }
@@ -276,6 +276,8 @@ export default function AdminUsersPanel({
   );
 
   const admins = users.filter(isKeeperAccount).length;
+  /** 老账号没有 createdByName 时，用首席守秘人的真实用户名兜底 */
+  const chiefName = users.find(isChiefAccount)?.username || '首席';
   const stats = [
     { label: isChief ? '在册馆员' : '我发放的账号', value: users.length, unit: '人' },
     { label: isChief ? '守秘人' : '其中守秘人', value: admins, unit: '位' },
@@ -427,7 +429,7 @@ export default function AdminUsersPanel({
                         {k.username}
                         {k.id === currentUser?.id ? <span className="ml-2 font-kai text-[14px] tracking-[0.08em] text-slate-500">本账号</span> : null}
                       </span>
-                      <span className="mt-0.5 block font-kai text-[14px] tracking-[0.06em] text-slate-500">发放人：{issuerOf(k)}</span>
+                      <span className="mt-0.5 block font-kai text-[14px] tracking-[0.06em] text-slate-500">发放人：{issuerOf(k, chiefName)}</span>
                     </span>
                   </div>
 
@@ -627,7 +629,7 @@ export default function AdminUsersPanel({
                       )}
                     </td>
                     <td className="px-4 py-[13px]">
-                      <span className="font-kai text-[14.5px] tracking-[0.08em] text-slate-400">{issuerOf(u)}</span>
+                      <span className="font-kai text-[14.5px] tracking-[0.08em] text-slate-400">{issuerOf(u, chiefName)}</span>
                     </td>
                     {isChief && (
                       <td className="px-4 py-[13px]">
@@ -716,7 +718,7 @@ export default function AdminUsersPanel({
                   </div>
                   <div className="col-span-2 border-t border-line-soft pt-2">
                     <dt className="font-mono text-[14px] tracking-[0.14em] text-slate-500">发放人</dt>
-                    <dd className="mt-0.5 font-kai text-[14.5px] tracking-[0.08em] text-slate-300">{issuerOf(u)}</dd>
+                    <dd className="mt-0.5 font-kai text-[14.5px] tracking-[0.08em] text-slate-300">{issuerOf(u, chiefName)}</dd>
                   </div>
                 </dl>
 

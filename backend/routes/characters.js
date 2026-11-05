@@ -30,7 +30,7 @@ import {
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { requireAuth, requireAdmin, optionalAuth } from '../lib/auth.js';
 import {
-  isChief, isCustodian, canManageCard, canReviewCard, auditRulesFor, keeperDirectory,
+  isChief, isCustodian, custodianIds, canManageCard, canReviewCard, auditRulesFor, keeperDirectory,
 } from '../lib/roles.js';
 import { parseCharacter, parseReview, parseBatchReview, vArray, vEnum, vId, vStr } from '../lib/validate.js';
 import { audit } from '../lib/audit.js';
@@ -156,7 +156,7 @@ router.get('/characters/meta', optionalAuth, (req, res) => {
     const ids = new Set([me.id]);
     if (me.role === 'admin') {
       for (const c of database.characters) {
-        if (c.custody?.kpId === me.id) ids.add(c.ownerId);
+        if (custodianIds(c).includes(me.id)) ids.add(c.ownerId);
       }
     }
     owners = [...ids].map((id) => findUserById(id)).filter(Boolean).map((u) => publicUser(u));
@@ -272,9 +272,9 @@ function present(character, { actor, full = true }) {
     canReview,
     isOwner: owner,
     isCustodian: custodian,
-    custody: character.custody
-      ? { kpId: character.custody.kpId, kpName: character.custody.kpName || '', grantedAt: character.custody.grantedAt || 0 }
-      : null,
+    custody: (Array.isArray(character.custody) ? character.custody : []).map((g) => ({
+      kpId: g.kpId, kpName: g.kpName || '', grantedAt: g.grantedAt || 0,
+    })),
     reviewTarget: character.reviewKpId
       ? { kpId: character.reviewKpId, kpName: character.reviewKpName || '' }
       : null,
@@ -485,7 +485,7 @@ router.post('/characters', (req, res) => {
     ownerId,
     ...data,
     skills: data.skills && data.skills.length ? data.skills : blankSkills(),
-    custody: null,
+    custody: [],
     reviewStatus: 'none',
     reviewKpId: null,
     reviewKpName: null,
@@ -584,7 +584,7 @@ router.post('/characters/:id/duplicate', (req, res) => {
     reviewedBy: null,
     reviewKpId: null,
     reviewKpName: null,
-    custody: null,
+    custody: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -681,29 +681,46 @@ router.post('/characters/:id/withdraw', (req, res) => {
  */
 router.post('/characters/:id/custody', (req, res) => {
   const c = loadWritable(req);
-  const kpId = vId(req.body?.kpId, '守秘人');
-  const kp = findUserById(kpId);
-  if (!kp || kp.role !== 'admin') throw badRequest('指定的守秘人不存在');
-  c.custody = {
-    kpId: kp.id,
-    kpName: kp.username,
-    grantedAt: Date.now(),
-    grantedBy: req.user.id,
-  };
-  c.updatedAt = Date.now();
+  const raw = req.body?.kpIds ?? req.body?.kpId;
+  const wanted = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+  if (!wanted.length) throw badRequest('请选择要托管的守秘人');
+  const list = Array.isArray(c.custody) ? c.custody : [];
+  const now = Date.now();
+  const added = [];
+  for (const rawId of wanted.slice(0, 12)) {
+    const kpId = vId(rawId, '守秘人');
+    const kp = findUserById(kpId);
+    if (!kp || kp.role !== 'admin') throw badRequest('指定的守秘人不存在');
+    if (list.some((g) => g.kpId === kp.id)) continue;
+    list.push({ kpId: kp.id, kpName: kp.username, grantedAt: now, grantedBy: req.user.id });
+    added.push(kp.id);
+  }
+  if (!added.length) throw badRequest('所选守秘人已经在托管列表中');
+  c.custody = list;
+  c.updatedAt = now;
   save();
-  audit(req, 'character.custody_grant', { characterId: c.id, kpId: kp.id });
+  audit(req, 'character.custody_grant', { characterId: c.id, kpIds: added });
   res.json(present(c, { actor: req.user }));
 });
 
 router.delete('/characters/:id/custody', (req, res) => {
   const c = loadWritable(req);
-  if (!c.custody) throw badRequest('这张角色卡没有设置托管守秘人');
-  const prev = c.custody.kpId;
-  c.custody = null;
+  const list = Array.isArray(c.custody) ? c.custody : [];
+  if (!list.length) throw badRequest('这张角色卡没有设置托管守秘人');
+  const rawId = req.body?.kpId ?? req.query?.kpId;
+  let removed;
+  if (rawId) {
+    const kpId = vId(rawId, '守秘人');
+    removed = list.filter((g) => g.kpId === kpId).map((g) => g.kpId);
+    if (!removed.length) throw badRequest('该守秘人不在托管列表中');
+    c.custody = list.filter((g) => g.kpId !== kpId);
+  } else {
+    removed = list.map((g) => g.kpId);
+    c.custody = [];
+  }
   c.updatedAt = Date.now();
   save();
-  audit(req, 'character.custody_revoke', { characterId: c.id, kpId: prev });
+  audit(req, 'character.custody_revoke', { characterId: c.id, kpIds: removed });
   res.json(present(c, { actor: req.user }));
 });
 

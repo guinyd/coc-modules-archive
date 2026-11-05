@@ -16,7 +16,7 @@
 
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
-  AlertCircle, ArrowLeft, BookOpen, CloudUpload, Crown, Dices, Download, FileText, Info, Plus, Save,
+  AlertCircle, ArrowLeft, BookOpen, Check, CloudUpload, Crown, Dices, Download, FileText, Info, Plus, Save,
   Search, Sword, Trash2, User as UserIcon, Wand2, X,
 } from 'lucide-react';
 import {
@@ -431,6 +431,12 @@ export default function CharacterEditor({
   // 结算过又没有 KP 授权 → 玩家不能自助重掷 / 清零（服务端同样会拦）
   const eduLocked = derived.eduGrowth.locked && !isKp;
   const eduGranted = derived.eduGrowth.granted || 0;
+  // 手动录入先存草稿，点「确认结算」才写入 eduBonus / 记一条流水（避免每敲一键就结算）
+  const [eduDraft, setEduDraft] = useState(String(Number(sheet.eduBonus) || 0));
+  useEffect(() => {
+    setEduDraft(String(Number(sheet.eduBonus) || 0));
+  }, [sheet.eduBonus]);
+  const eduDraftDirty = Math.max(0, Math.trunc(Number(eduDraft) || 0)) !== (Number(sheet.eduBonus) || 0);
 
   const doEduChecks = () => {
     const n = derived.ageAdjust.eduChecks;
@@ -484,7 +490,7 @@ export default function CharacterEditor({
     showToast(totalGain > 0 ? `教育增强完成，共 +${totalGain}（流水已保存，KP 可见）` : '教育增强检定完成，本次没有提升（已记为已结算）');
   };
 
-  /** 手动录入教育增强总值（面团补录）：数值与记录一起写（同样受锁定约束） */
+  /** 手动录入教育增强总值（面团补录）：确认后一次性写入数值与流水（同样受锁定约束） */
   const setEduBonusManual = (v) => {
     if (eduLocked) return showToast('已结算，手动修改需要 KP 先授权重掷或重置', 'error');
     const gain = v === '' ? 0 : Math.max(0, Math.min(999, Math.trunc(Number(v)) || 0));
@@ -508,6 +514,11 @@ export default function CharacterEditor({
       };
     });
     setDirty(true);
+  };
+
+  /** 玩家点「确认结算」才落库：写一次 eduBonus、记一条流水 */
+  const commitEduManual = () => {
+    setEduBonusManual(eduDraft);
   };
 
   /** 清零教育补正（KP 用；玩家在锁定状态下被服务端拦住） */
@@ -1086,9 +1097,25 @@ export default function CharacterEditor({
                 </div>
 
                 <div className="flex flex-wrap items-end gap-3">
-                  <Field label={eduLocked ? '提升总值（已锁定）' : '提升总值（可手动录入）'} className={cx('!w-52', FIELD)}>
-                    <NumberInput min={0} max={999} value={sheet.eduBonus} onChange={setEduBonusManual} disabled={eduLocked} />
+                  <Field label={eduLocked ? '提升总值（已锁定）' : '提升总值（填好后确认）'} className={cx('!w-52', FIELD)}>
+                    <NumberInput
+                      min={0}
+                      max={999}
+                      value={eduDraft === '' ? '' : Number(eduDraft) || 0}
+                      onChange={(v) => setEduDraft(v === '' ? '' : String(v))}
+                      disabled={eduLocked}
+                    />
                   </Field>
+                  {!eduLocked ? (
+                    <Button
+                      variant="subtle"
+                      onClick={commitEduManual}
+                      disabled={!eduDraftDirty}
+                      title={eduDraftDirty ? '确认后才会写入提升值并记一条流水' : '数值未变化'}
+                    >
+                      <Check className="w-4 h-4" />确认结算
+                    </Button>
+                  ) : null}
                   {isKp ? (
                     <>
                       <Button variant="subtle" onClick={grantEduRerollOnce}>授权重掷一次</Button>
@@ -1098,7 +1125,7 @@ export default function CharacterEditor({
                     <Button variant="subtle" onClick={clearEduBonus} disabled={eduLocked}>清零教育补正</Button>
                   )}
                   <span className="pb-2 text-[14px] text-ink-mute">
-                    有效教育 = 掷骰教育 + 提升总值，改动即时生效
+                    有效教育 = 掷骰教育 + 提升总值；填完点「确认结算」，只记一条流水
                   </span>
                 </div>
 

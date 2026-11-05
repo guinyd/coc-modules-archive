@@ -45,12 +45,18 @@ function ReaderRow({ label, value }) {
 }
 
 export default function ModuleDetailView({
-  module, isAdmin, isChief, played, currentUser, onBack, onCopy, onEdit, onDelete, onTogglePlayed, onGoCharacters,
+  module, isAdmin, isChief, played, currentUser, keeperName, keeperRoster = [],
+  onBack, onCopy, onEdit, onDelete, onTogglePlayed, onToggleKeeperMark, onGoCharacters,
 }) {
   const hasExtra = Boolean(module.charInfo || module.occupations || module.skills || module.notes);
   const minted = jitter(`${module.id}seal`, -5, 3, 1);
   const canManage = Boolean(isAdmin && (isChief || (currentUser && module.createdBy === currentUser.id)));
-  const handler = module.createdByName || '';
+  const handler = module.createdByName || keeperName || '';
+  // 我（当前守秘人）是否已把这份卷宗标进自己的「可带团」书架
+  const marked = Boolean(isAdmin && keeperRoster.some(
+    (k) => k.id === currentUser?.id && (k.moduleIds || []).includes(module.id),
+  ));
+  const markers = keeperRoster.filter((k) => (k.moduleIds || []).includes(module.id));
   const issuedOn = module.createdAt ? new Date(module.createdAt) : null;
   const issuedText = issuedOn && !Number.isNaN(issuedOn.getTime())
     ? `${issuedOn.getFullYear()}.${String(issuedOn.getMonth() + 1).padStart(2, '0')}.${String(issuedOn.getDate()).padStart(2, '0')}`
@@ -113,24 +119,35 @@ export default function ModuleDetailView({
               <span aria-hidden="true" className="h-3 w-px bg-line-strong" />
               {module.era || '年代不明'}
             </span>
-            <div className="detail-actions ml-auto flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <div className="detail-actions ml-auto w-full sm:w-auto">
               {canManage ? (
                 <>
-                  <button type="button" onClick={(e) => onEdit(module, e)} className="record-act record-act--edit group w-full justify-center sm:w-auto">
+                  <button type="button" onClick={(e) => onEdit(module, e)} className="record-act record-act--edit group w-full justify-center whitespace-nowrap sm:w-auto">
                     <Edit className="h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:rotate-6" strokeWidth={1.9} />
                     编辑
                   </button>
-                  <button type="button" onClick={(e) => onDelete(module.id, e)} className="record-act record-act--delete group w-full justify-center sm:w-auto">
+                  <button type="button" onClick={(e) => onDelete(module.id, e)} className="record-act record-act--delete group w-full justify-center whitespace-nowrap sm:w-auto">
                     <Trash2 className="h-4 w-4 transition-transform duration-300 group-hover:-rotate-6" strokeWidth={1.9} />
                     删除
                   </button>
                 </>
               ) : null}
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={(e) => onToggleKeeperMark(module.id, e)}
+                  title={marked ? '点击移出带团列表' : '把这份卷宗加进自己的带团列表'}
+                  className={cx('record-act record-act--mark group w-full justify-center whitespace-nowrap sm:w-auto', marked && 'is-marked')}
+                >
+                  <BookMarked className="h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5" strokeWidth={1.9} />
+                  {marked ? '已在册' : '加入带团列表'}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={(e) => onTogglePlayed(module.id, e)}
                 title={played ? '点击撤销调查标记' : '点击标记为已调查'}
-                className={cx('record-act record-act--investigate group w-full justify-center sm:w-auto', played && 'is-played')}
+                className={cx('record-act record-act--investigate group w-full justify-center whitespace-nowrap sm:w-auto', played && 'is-played')}
               >
                 {played ? (
                   <BadgeCheck className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" strokeWidth={2} />
@@ -239,6 +256,12 @@ export default function ModuleDetailView({
                   {issuedText ? <span className="shrink-0 font-mono text-[14px] tracking-[0.12em] text-ink-mute/80">{issuedText}</span> : null}
                   <span aria-hidden="true" className="h-[13px] min-w-[40px] flex-1 border-b border-dotted border-line-strong" />
                 </p>
+                {markers.length > 0 ? (
+                  <p className="mt-2 flex flex-wrap items-baseline gap-x-2 font-kai text-[14px] tracking-[0.08em] text-ink-mute">
+                    <span className="shrink-0 text-ochre">可带团</span>
+                    <span className="text-ink-soft">{markers.map((m) => m.username).join('、')}</span>
+                  </p>
+                ) : null}
               </div>
               <span
                 aria-hidden="true"

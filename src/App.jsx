@@ -95,6 +95,9 @@ export default function App() {
   const [confirmDialog, setConfirmDialog] = useState(null);
 
   const [kpName, setKpName] = useState('档案馆首席 KP');
+  // null = 尚未探测：登录页先按「已初始化」渲染，避免闪一下初始化入口
+  const [initialized, setInitialized] = useState(null);
+  const [keeperRoster, setKeeperRoster] = useState([]);
   const [previewMode, setPreviewMode] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [characterRefresh, setCharacterRefresh] = useState(0);
@@ -300,9 +303,23 @@ export default function App() {
     } catch { /* ignore */ }
   }, []);
 
+  // 守密人名册：登录后可读；模组详情据此显示「可带团」标记状态
+  const fetchKeeperRoster = useCallback(async () => {
+    if (!session.token) { setKeeperRoster([]); return; }
+    try {
+      const data = await apiGet('/api/keepers/roster');
+      setKeeperRoster(Array.isArray(data.items) ? data.items : []);
+    } catch { /* ignore */ }
+  }, []);
+
   // 启动：校验收据 + 拉取最新用户信息（含头衔）
   useEffect(() => {
     const init = async () => {
+      try {
+        const setup = await apiGet('/api/setup', { auth: false });
+        setInitialized(Boolean(setup.initialized));
+        if (setup.initialized) setIsLoginMode(true);
+      } catch { setInitialized(true); }
       if (session.token) {
         try {
           const fresh = await apiGet('/api/user/me');
@@ -341,6 +358,7 @@ export default function App() {
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
   useEffect(() => { fetchCharacterMeta(); }, [fetchCharacterMeta]);
+  useEffect(() => { fetchKeeperRoster(); }, [currentUser, fetchKeeperRoster]);
 
   useEffect(() => {
     if (toast) {
@@ -381,6 +399,7 @@ export default function App() {
       );
       session.save(data.token, data.user);
       setCurrentUser(data.user);
+      setInitialized(true);
       setUsername(''); setPassword('');
       showToast(isLoginMode ? '欢迎回来' : '注册成功');
       go('home');
@@ -439,6 +458,19 @@ export default function App() {
       setPlayedModules((prev) => (res.played
         ? [...new Set([...prev, moduleId])]
         : prev.filter((id) => id !== moduleId)));
+    } catch (err) { showToast(err.message, 'error'); }
+  };
+
+  // 守秘人给模组打「可带团」标记：只有登录的守秘人能用，与模组发布者无关
+  const toggleKeeperMark = async (moduleId, e) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    if (!currentUser) return go('auth');
+    if (!isAdmin) return showToast('只有守秘人才能标记可带团模组', 'error');
+    try {
+      const res = await apiPost(`/api/modules/${moduleId}/mark`, {});
+      await fetchKeeperRoster();
+      showToast(res.marked ? '已标记为可带团' : '已取消可带团标记');
     } catch (err) { showToast(err.message, 'error'); }
   };
 
@@ -813,6 +845,7 @@ export default function App() {
               authError={authError}
               setAuthError={setAuthError}
               onSubmit={handleAuth}
+              initialized={initialized !== false}
             />
           )}
 
@@ -870,6 +903,7 @@ export default function App() {
               playedModules={playedModules}
               isAdmin={isAdmin}
               isChief={isChief}
+              keeperRoster={keeperRoster}
               homeTab={homeTab}
               setHomeTab={setHomeTab}
               searchTerm={searchTerm}
@@ -895,6 +929,7 @@ export default function App() {
               onEditModule={openEditMode}
               onDeleteModule={handleDeleteModule}
               onTogglePlayed={togglePlayed}
+              onToggleKeeperMark={toggleKeeperMark}
             />
           )}
 
@@ -905,6 +940,9 @@ export default function App() {
               isAdmin={isAdmin}
               isChief={isChief}
               currentUser={currentUser}
+              keeperName={kpName}
+              keeperRoster={keeperRoster}
+              onToggleKeeperMark={toggleKeeperMark}
               played={playedModules.includes(selectedModule.id)}
               onBack={() => go('home')}
               onCopy={handleCopy}
@@ -931,9 +969,11 @@ export default function App() {
               isChief={isChief}
               modules={modules}
               playedModules={playedModules}
+              keeperRoster={keeperRoster}
               getTitleStyles={getTitleStyles}
               showToast={showToast}
               onTogglePlayed={togglePlayed}
+              onToggleKeeperMark={toggleKeeperMark}
               onPreviewCertificate={() => handlePreview('player')}
               onGo={go}
               onLogout={handleLogout}
@@ -976,7 +1016,7 @@ export default function App() {
               </span>
               <span className="inline-flex min-w-0 items-center gap-2.5 sm:col-span-2">
                 <Mail className="h-[18px] w-[18px] shrink-0 text-[var(--c-masthead-ink)]/45" strokeWidth={1.6} />
-                <span className="tracking-[0.16em]">馆长邮箱 · 站内联系</span>
+                <span className="tracking-[0.16em]">馆长邮箱 · yundecoc@agent.qq.com</span>
               </span>
             </div>
           </div>

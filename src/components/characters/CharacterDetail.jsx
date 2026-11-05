@@ -65,7 +65,15 @@ export default function CharacterDetail({
   const [keepers, setKeepers] = useState([]);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitKpId, setSubmitKpId] = useState('');
-  const [custodyKpId, setCustodyKpId] = useState('');
+  const [custodyPick, setCustodyPick] = useState([]);
+
+  // 托管是多选：custody 为 [{kpId,kpName,grantedAt}]，这里派生已授权与可选名单
+  const custodyList = Array.isArray(c?.custody) ? c.custody : [];
+  const custodyIds = custodyList.map((g) => g.kpId);
+  const custodyOptions = keepers.filter((k) => !custodyIds.includes(k.id));
+  const toggleCustodyPick = (id) => setCustodyPick((prev) => (
+    prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+  ));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -128,19 +136,19 @@ export default function CharacterDetail({
   };
 
   const grantCustody = async () => {
-    if (!custodyKpId) return;
+    if (!custodyPick.length) return;
     try {
-      setC(await apiPost(`/api/characters/${c.id}/custody`, { kpId: custodyKpId }));
-      setCustodyKpId('');
-      showToast('已允许该守秘人托管这张角色卡');
+      setC(await apiPost(`/api/characters/${c.id}/custody`, { kpIds: custodyPick }));
+      setCustodyPick([]);
+      showToast(custodyPick.length > 1 ? '已允许这些守秘人托管这张角色卡' : '已允许该守秘人托管这张角色卡');
       onChanged?.();
     } catch (err) { showToast(err.message, 'error'); }
   };
 
-  const revokeCustody = async () => {
+  const revokeCustody = async (kpId) => {
     try {
-      setC(await apiDelete(`/api/characters/${c.id}/custody`));
-      showToast('已撤销托管');
+      setC(await apiDelete(`/api/characters/${c.id}/custody?kpId=${encodeURIComponent(kpId)}`));
+      showToast('已撤销该守秘人的托管');
       onChanged?.();
     } catch (err) { showToast(err.message, 'error'); }
   };
@@ -264,23 +272,54 @@ export default function CharacterDetail({
 
         {/* 托管授权：只有玩家主动允许，守秘人才能在角色卡管理里看到并做有限调整 */}
         {c.isOwner ? (
-          <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3.5 text-[14px] text-ink-soft">
-            <span className="flex items-center gap-1.5 font-bold text-ink"><Shield className="w-4 h-4 text-moon" />托管授权</span>
-            {c.custody ? (
-              <>
-                <span>已允许 <b className="text-ink">{c.custody.kpName}</b> 托管</span>
-                <Button variant="ghost" className="!px-2.5 !py-1 !text-[14px]" onClick={revokeCustody}><Undo2 className="w-3.5 h-3.5" />撤销托管</Button>
-              </>
-            ) : (
-              <>
-                <Select value={custodyKpId} onChange={(e) => setCustodyKpId(e.target.value)} className="!w-auto !rounded-none !border-line-strong !py-1.5 !text-[14px]">
-                  <option value="">选择守秘人…</option>
-                  {keepers.map((k) => <option key={k.id} value={k.id}>{k.username}（{k.isChief ? '首席' : k.kpTitle}）</option>)}
-                </Select>
-                <Button variant="ghost" className="!px-2.5 !py-1 !text-[14px]" disabled={!custodyKpId} onClick={grantCustody}>允许托管</Button>
-                <span className="text-ink-mute">托管后该守秘人只能调整传奇、年龄豁免与教育增强。</span>
-              </>
-            )}
+          <div className="mt-5 border-t border-line pt-3.5 text-[14px] text-ink-soft">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span className="flex items-center gap-1.5 font-bold text-ink"><Shield className="w-4 h-4 text-moon" />托管授权</span>
+              {custodyList.length === 0 ? (
+                <span className="text-ink-mute">暂未允许任何守秘人托管。</span>
+              ) : (
+                <span className="flex flex-wrap items-center gap-2">
+                  已允许托管：
+                  {custodyList.map((g) => (
+                    <span key={g.kpId} className="inline-flex items-center gap-1.5 border border-moon/45 bg-moon/[0.07] px-2 py-0.5 text-ink">
+                      {g.kpName}
+                      <button
+                        type="button"
+                        onClick={() => revokeCustody(g.kpId)}
+                        title={`撤销 ${g.kpName} 的托管`}
+                        className="text-ink-mute transition-colors hover:text-vermilion"
+                      >
+                        <Undo2 className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  ))}
+                </span>
+              )}
+            </div>
+            {custodyOptions.length > 0 ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="font-mono text-[12.5px] tracking-[0.12em] text-ink-mute">可授权</span>
+                {custodyOptions.map((k) => {
+                  const picked = custodyPick.includes(k.id);
+                  return (
+                    <button
+                      type="button"
+                      key={k.id}
+                      onClick={() => toggleCustodyPick(k.id)}
+                      aria-pressed={picked}
+                      className={cx(
+                        'border px-2.5 py-1 text-[13.5px] transition-colors',
+                        picked ? 'border-moon bg-moon/15 text-ink' : 'border-line-strong text-ink-soft hover:border-moon/50',
+                      )}
+                    >
+                      {k.username}
+                    </button>
+                  );
+                })}
+                <Button variant="ghost" className="!px-2.5 !py-1 !text-[14px]" disabled={!custodyPick.length} onClick={grantCustody}>允许托管</Button>
+              </div>
+            ) : null}
+            <p className="mt-2 text-ink-mute">托管后该守秘人只能调整传奇、年龄豁免与教育增强，可随时逐个撤销。</p>
           </div>
         ) : null}
       </Panel>
