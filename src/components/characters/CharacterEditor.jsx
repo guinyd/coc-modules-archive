@@ -17,7 +17,7 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
   AlertCircle, ArrowLeft, BookOpen, Check, CloudUpload, Crown, Dices, Download, FileText, Info, Plus, Save,
-  Search, Sword, Trash2, User as UserIcon, Wand2, X,
+  ScrollText, Search, Sword, Trash2, User as UserIcon, Wand2, X,
 } from 'lucide-react';
 import {
   ALL_CHARS, BACKGROUND_FIELDS, BUILTIN_WEAPON, CHAR_LABEL, CUSTOM_SKILL_MAX, ERAS,
@@ -25,10 +25,11 @@ import {
   WEAPONS, ageAdjust, agePoolKeys, agePoolPoints, defaultAgeAlloc, resolveAgeAlloc,
   occupationBranchHints, blankCustomSkill, blankSheet, blankSkills, computeSheet,
   currenciesFor, DEFAULT_CURRENCY, isNamedSkill, specOptions, validateSheet,
-  blankEduGrowth, blankLegendary, blankLegendaryBonus, grantEduReroll, resetEduGrowth,
+  blankEduGrowth, blankLegendary, blankLegendaryBonus, grantEduReroll, resetEduGrowth, houseRuleSummary,
 } from '../../../shared/coc7e.js';
 import { rollCharacteristics, rollLuck, educationCheck } from '../../lib/dice.js';
-import { apiPost, apiPut } from '../../lib/api.js';
+import { parseAttributeBlocks, ATTR_LABEL, ATTR_ORDER } from '../../lib/attrImport.js';
+import { apiGet, apiPost, apiPut } from '../../lib/api.js';
 import {
   Badge, Button, Field, Input, Modal, NumberInput, Panel, Select, Tabs, Textarea, Toggle, WarningList, cx,
 } from '../ui.jsx';
@@ -41,13 +42,16 @@ const TABS = [
   { key: 'skills', label: '技能分配', icon: Wand2 },
   { key: 'combat', label: '战斗', icon: Sword },
   { key: 'story', label: '背景故事', icon: BookOpen },
+  { key: 'house', label: '房规', icon: ScrollText },
   { key: 'journal', label: '装备与经历', icon: FileText },
 ];
 
+
 /** 把后端返回的角色卡对象（或访客草稿）转成可编辑的表单数据 */
 export function toEditableSheet(character) {
-  if (!character) return blankSheet();
+  if (!character) return { ...blankSheet(), ruleSetId: '' };
   return {
+    ruleSetId: character.ruleSetId || '',
     name: character.name || '',
     playerName: character.playerName || '',
     occupationId: character.occupationId === undefined || character.occupationId === null
@@ -59,7 +63,7 @@ export function toEditableSheet(character) {
     era: character.era || '1920s',
     chars: { ...blankSheet().chars, ...(character.chars || {}) },
     eduBonus: character.eduBonus || 0,
-    applyAgeAdjust: character.applyAgeAdjust !== false,
+    applyAgeAdjust: character.applyAgeAdjust === true,   // 默认关闭，老卡保留已保存的选择
     armorPenalty: character.armorPenalty || 0,
     ageAlloc: { ...(character.ageAlloc || {}) },
     eduGrowth: { ...blankEduGrowth(), ...(character.eduGrowth || {}) },
@@ -255,14 +259,23 @@ export default function CharacterEditor({
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [occOpen, setOccOpen] = useState(false);
-  const [rollLog, setRollLog] = useState([]);
+  // 骰娘导入：长期存在的输入框 + 解析出的候选卡片
+  const [importText, setImportText] = useState('');
+  const [importBlocks, setImportBlocks] = useState([]);
   const [skillFilter, setSkillFilter] = useState('all');
   const [skillQuery, setSkillQuery] = useState('');
   const [ownerId, setOwnerId] = useState(initialSheet?.ownerId || currentUser?.id || '');
   const [weaponPick, setWeaponPick] = useState('');
+  // 守秘人发布的规则集（房规 + 审卡规则）：玩家在「房规」页选用
+  const [ruleSets, setRuleSets] = useState([]);
 
   const occupations = useMemo(() => [...OCCUPATIONS, ...(customOccupations || [])], [customOccupations]);
-  const ctx = useMemo(() => ({ customOccupations }), [customOccupations]);
+  const chosenRuleSet = useMemo(
+    () => (ruleSets || []).find((s) => s.id === sheet.ruleSetId) || null,
+    [ruleSets, sheet.ruleSetId],
+  );
+  const houseRules = useMemo(() => chosenRuleSet?.houseRules || [], [chosenRuleSet]);
+  const ctx = useMemo(() => ({ customOccupations, houseRules }), [customOccupations, houseRules]);
 
   /**
    * 编辑既有角色卡时加载数据。
@@ -305,6 +318,16 @@ export default function CharacterEditor({
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [characterId, guest]);
+
+  // 房规列表：登录用户才能看到守秘人发布的规则集；访客只能看到本机草稿
+  useEffect(() => {
+    if (guest) { setRuleSets([]); return undefined; }
+    let alive = true;
+    apiGet('/api/rule-sets')
+      .then((data) => { if (alive) setRuleSets(Array.isArray(data.items) ? data.items : []); })
+      .catch(() => { /* 拉取失败不阻塞车卡 */ });
+    return () => { alive = false; };
+  }, [guest]);
 
   const derived = useMemo(() => computeSheet(sheet, ctx), [sheet, ctx]);
   const warnings = useMemo(() => validateSheet(sheet, ctx), [sheet, ctx]);
@@ -401,20 +424,46 @@ export default function CharacterEditor({
   const luckTwice = derived.ageAdjust.luckRolls > 1;   // 15-19 岁：幸运掷两次取高
 
   const doRollAll = () => {
-    const { chars, detail } = rollCharacteristics();
+    const { chars } = rollCharacteristics();
     const luck = rollLuck(luckTwice);
     setSheet((prev) => ({ ...prev, chars: { ...chars, Luck: luck.value } }));
-    setRollLog([
-      ...ALL_CHARS.filter((k) => k !== 'Luck').map((k) => `${CHAR_LABEL[k]} ${chars[k]} （${detail[k]}）`),
-      `幸运 ${luck.value} （${luck.detail}${luckTwice ? ' · 15-19 岁取高' : ''}）`,
-    ]);
     setDirty(true);
+    showToast(`已生成属性（幸运 ${luck.value}）`);
   };
 
   const doRollLuck = () => {
     const luck = rollLuck(luckTwice);
     setChar('Luck', luck.value);
-    setRollLog([`幸运 ${luck.value} （${luck.detail}${luckTwice ? ' · 15-19 岁取高' : ''}）`]);
+    showToast(`幸运重掷为 ${luck.value}`);
+  };
+
+  /** 把一组解析结果填进属性；缺失项保持原值 */
+  const applyImportBlock = (block) => {
+    setSheet((prev) => ({
+      ...prev,
+      chars: {
+        ...prev.chars,
+        ...block.chars,
+        ...(block.luck !== null ? { Luck: block.luck } : {}),
+      },
+    }));
+    setImportBlocks([]);
+    setDirty(true);
+    showToast(`已导入 ${Object.keys(block.chars).length + (block.luck !== null ? 1 : 0)} 项属性`);
+  };
+
+  /** 解析粘贴框：一组直接填，多组拆成卡片让玩家选 */
+  const doImportAttributes = () => {
+    const blocks = parseAttributeBlocks(importText);
+    if (!blocks.length) {
+      showToast('没有识别到属性，请确认文本里有「力量:55」这类行', 'error');
+      return;
+    }
+    if (blocks.length === 1) {
+      applyImportBlock(blocks[0]);
+      return;
+    }
+    setImportBlocks(blocks);
   };
 
   /**
@@ -485,7 +534,6 @@ export default function CharacterEditor({
         },
       };
     });
-    setRollLog([...log, `教育增强合计 +${totalGain}`]);
     setDirty(true);
     showToast(totalGain > 0 ? `教育增强完成，共 +${totalGain}（流水已保存，KP 可见）` : '教育增强检定完成，本次没有提升（已记为已结算）');
   };
@@ -676,7 +724,7 @@ export default function CharacterEditor({
     return derived.skills.filter((s) => {
       if (s.kind === 'custom') return !q || s.name.toLowerCase().includes(q);
       if (q && !s.name.toLowerCase().includes(q)) return false;
-      if (skillFilter === 'used') return s.used || s.occ > 0 || s.interest > 0 || s.growth > 0;
+      if (skillFilter === 'used') return s.used || s.occ > 0 || s.interest > 0 || s.growth > 0 || s.houseBase;
       if (skillFilter === 'occ') return s.isOccupation;
       if (skillFilter === 'spec') return Boolean(s.spec);
       return true;
@@ -821,11 +869,59 @@ export default function CharacterEditor({
                   <Trash2 className="w-4 h-4" />清空
                 </Button>
               </div>
-              {rollLog.length > 0 && (
-                <div className="max-h-32 space-y-0.5 overflow-y-auto rounded-[2px] border border-line-strong bg-paper-deep/50 p-3 font-mono text-[14px] leading-[1.7] text-ink-soft">
-                  {rollLog.map((l, i) => <div key={i}>{l}</div>)}
+              <div className="space-y-2 rounded-[2px] border border-line-strong bg-paper-deep/40 p-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <p className="text-[14px] font-semibold tracking-[0.06em] text-ink-soft">
+                    从骰娘导入属性 <span className="ml-1 font-mono text-[13px] tracking-[0.14em] text-ink-mute">PASTE FROM DICE BOT</span>
+                  </p>
+                  <span className="text-[13px] text-ink-mute">一次可粘多组，自动拆分</span>
                 </div>
-              )}
+                <Textarea
+                  rows={4}
+                  value={importText}
+                  onChange={(e) => {
+                    setImportText(e.target.value);
+                    if (importBlocks.length) setImportBlocks([]);
+                  }}
+                  placeholder={'力量:55 敏捷:60 意志:70\n体质:50 外貌:55 教育:60\n体型:65 智力:85 幸运:50'}
+                  className="font-mono text-[14px] leading-[1.7]"
+                  aria-label="粘贴骰娘生成的属性"
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button variant="ghost" onClick={doImportAttributes}><Download className="w-4 h-4" />导入属性</Button>
+                  {importText ? (
+                    <Button variant="ghost" onClick={() => { setImportText(''); setImportBlocks([]); }}>
+                      <X className="w-4 h-4" />清空输入
+                    </Button>
+                  ) : null}
+                  {importBlocks.length > 1 ? (
+                    <span className="text-[13px] text-ochre">识别到 {importBlocks.length} 组，点一张卡片填入</span>
+                  ) : null}
+                </div>
+                {importBlocks.length > 1 ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {importBlocks.map((b, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => applyImportBlock(b)}
+                        className="group rounded-[2px] border border-line-strong bg-paper/70 p-2.5 text-left transition-colors hover:border-ochre hover:bg-ochre/10"
+                      >
+                        <span className="mb-1.5 block font-mono text-[12.5px] tracking-[0.14em] text-ink-mute group-hover:text-ochre">
+                          候选 {String(i + 1).padStart(2, '0')}
+                        </span>
+                        <span className="grid grid-cols-3 gap-x-3 gap-y-0.5 font-mono text-[13px] leading-[1.7] text-ink-soft">
+                          {ATTR_ORDER.filter((k) => (k === 'Luck' ? b.luck !== null : Number.isFinite(b.chars[k]))).map((k) => (
+                            <span key={k}>
+                              {ATTR_LABEL[k]} <b className="text-ink">{k === 'Luck' ? b.luck : b.chars[k]}</b>
+                            </span>
+                          ))}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </Panel>
 
             <Panel className="space-y-4 p-5 sm:p-6">
@@ -1534,6 +1630,86 @@ export default function CharacterEditor({
             ))}
           </div>
         </Panel>
+      )}
+
+      {/* ---------------------------------------------------- 房规 */}
+      {tab === 'house' && (
+        <div className="space-y-5">
+          <Panel className="space-y-4 p-5 sm:p-6">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-2">
+              <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink">
+                <ScrollText className="h-4 w-4 text-ochre" />房规
+              </h3>
+              <span className="font-mono text-[13px] tracking-[0.14em] text-ink-mute tabular">{ruleSets.length} 套规则集</span>
+            </div>
+            <p className="text-[15px] leading-relaxed text-ink-soft">
+              守秘人可以发布多套规则集，每一套同时包含房规与审卡规则。选定后本卡按这套房规计算；提交审核时会冻结当时的规则，
+              之后守秘人再改也不影响这张卡。
+            </p>
+
+            {guest ? (
+              <p className="border-l-2 border-ochre bg-paper-deep/40 px-3 py-2 text-[14px] leading-relaxed text-ink-soft">
+                访客草稿不联网，只能按规则书基础值计算；登录后可选用守秘人发布的房规。
+              </p>
+            ) : ruleSets.length === 0 ? (
+              <p className="border-l-2 border-line-strong bg-paper-deep/40 px-3 py-2 text-[14px] leading-relaxed text-ink-soft">
+                还没有守秘人发布规则集，按官方规则书计算即可。
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <label className={cx('flex cursor-pointer items-start gap-3 rounded-[2px] border p-4 transition-colors',
+                  !sheet.ruleSetId ? 'border-ochre bg-ochre/[0.06]' : 'border-line-strong bg-paper-raised hover:border-ink-mute')}>
+                  <input type="radio" name="ruleSet" className="mt-1 accent-[var(--ink)]" checked={!sheet.ruleSetId} onChange={() => patch({ ruleSetId: '' })} />
+                  <span className="min-w-0">
+                    <span className="block font-serif text-[16px] font-bold text-ink">官方规则书</span>
+                    <span className="mt-0.5 block text-[14px] leading-relaxed text-ink-soft">不使用任何房规，按规则书基础值计算。</span>
+                  </span>
+                </label>
+
+                {ruleSets.map((set) => {
+                  const active = sheet.ruleSetId === set.id;
+                  const numeric = (set.houseRules || []).filter((r) => r.type === 'deriveBase');
+                  const checks = (set.houseRules || []).filter((r) => r.type !== 'deriveBase');
+                  return (
+                    <label key={set.id} className={cx('flex cursor-pointer items-start gap-3 rounded-[2px] border p-4 transition-colors',
+                      active ? 'border-ochre bg-ochre/[0.06]' : 'border-line-strong bg-paper-raised hover:border-ink-mute')}>
+                      <input type="radio" name="ruleSet" className="mt-1 accent-[var(--ink)]" checked={active} onChange={() => patch({ ruleSetId: set.id })} />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="font-serif text-[16px] font-bold text-ink">{set.name}</span>
+                          <Badge tone={set.scope === 'global' ? 'amber' : 'slate'}>{set.scope === 'global' ? '全局默认' : '个人规则'}</Badge>
+                          {set.isActive ? <Badge tone="emerald">守秘人当前在用</Badge> : null}
+                        </span>
+                        <span className="mt-0.5 block text-[13.5px] text-ink-mute">
+                          发布：{set.ownerName || '首席守秘人'}
+                          {set.updatedAt ? ` · ${new Date(set.updatedAt).toLocaleDateString('zh-CN')}` : ''}
+                        </span>
+                        {numeric.length ? (
+                          <span className="mt-2 block space-y-1">
+                            {numeric.map((r) => (
+                              <span key={r.id} className="block text-[14px] leading-relaxed text-ink-soft">
+                                <span className="mr-1 font-mono text-[12.5px] tracking-[0.1em] text-ink-mute">数值</span>
+                                {houseRuleSummary(r)}
+                                <span className="text-ink-mute">（原 {derived.skills?.find((s) => s.key === r.skill)?.origBase ?? SKILL_BY_KEY[r.skill]?.base ?? 0}）</span>
+                              </span>
+                            ))}
+                          </span>
+                        ) : (
+                          <span className="mt-2 block text-[14px] text-ink-mute">这套规则不改变车卡基础值。</span>
+                        )}
+                        {checks.length ? (
+                          <span className="mt-1 block text-[13.5px] leading-relaxed text-ink-mute">
+                            另有 {checks.length} 条审卡要求（不改变数值，提交后由守秘人复核）。
+                          </span>
+                        ) : null}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </Panel>
+        </div>
       )}
 
       {/* ---------------------------------------------------- 装备与经历 */}

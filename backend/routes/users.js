@@ -21,14 +21,15 @@ import { badRequest, notFound, forbidden } from '../lib/errors.js';
 import { checkPasswordStrength, hashPassword } from '../lib/security.js';
 import { requireAdmin } from '../lib/auth.js';
 import {
-  isChief, requireChief, auditRulesFor, kpDisplayTitle,
+  isChief, requireChief, auditRulesFor, kpDisplayTitle, officialAuditRules, globalAuditRules,
+  activeRuleSet, globalAuditSet, ruleSetSummary,
 } from '../lib/roles.js';
 import {
   parseNewUser, parseTitle, parseKpTitle, parseKpRank, parseOccupationTemplate,
   parseAuditRules, parseUsernameChange, parseCharacterLimit, vId,
 } from '../lib/validate.js';
 import { audit, readAudit } from '../lib/audit.js';
-import { DEFAULT_AUDIT_RULES, AUDIT_RULE_META } from '../../shared/coc7e.js';
+import { AUDIT_RULE_META, normalizeHouseRules } from '../../shared/coc7e.js';
 
 const router = Router();
 router.use(requireAdmin);
@@ -357,47 +358,154 @@ router.delete('/occupations/:id', (req, res) => {
 
 // ============================================================ 辅助审卡规则
 /**
- * 规则分两层：
- *   - 全局基准（settings.auditRules）：首席维护，所有玩家的规则提示都按它走；
- *   - 个人覆盖（user.auditRules）：普通 KP 自己的一份差异配置，只影响他自己的审核判定。
- * 首席直接使用全局基准（他自己就是基准的维护者）。
+ * 三层结构（v10.3 起）：
+ *   官方规则书基线 —— 代码内置（DEFAULT_AUDIT_RULES），任何人都不能改；
+ *   全局默认规则   —— settings.auditRules，首席显式「保存为全局默认」；
+ *   个人覆盖       —— user.auditRules，只影响本人审卡（首席也一样）。
+ *
+ * 「重置为默认」= 清空个人覆盖，回落到全局默认（未设即官方基线）。
  */
+/** 规则集清单（自己的 + 全局），供规则页的切换器使用 */
+function ruleSetList(user) {
+  const globals = (db().settings.ruleSets || []).filter((s) => s && s.scope === 'global');
+  const mine = (user.ruleSets || []).filter((s) => s && s.scope !== 'global');
+  return [...globals, ...mine].map((s) => {
+    const out = ruleSetSummary(s);
+    return out ? { ...out, isMine: out.ownerId === user.id } : null;
+  }).filter(Boolean);
+}
+
 router.get('/audit-rules', (req, res) => {
-  const base = { ...DEFAULT_AUDIT_RULES, ...(db().settings?.auditRules || {}) };
+  const official = officialAuditRules();
+  const global = globalAuditRules();
   const effective = auditRulesFor(req.user);
+  const active = activeRuleSet(req.user);
+  const gset = globalAuditSet();
+  const draft = req.user.auditRules && typeof req.user.auditRules === 'object' ? req.user.auditRules : {};
+  const draftHouseRules = normalizeHouseRules(req.user.draftHouseRules || []);
   res.json({
     rules: effective,               // 兼容旧前端字段
-    base,
-    own: req.user.auditRules || null,
+    meta: AUDIT_RULE_META,          // 兼容旧前端：规则元数据
+    official,                       // 官方规则书基线
+    global,                         // 全局默认（官方 < 首席设定）
+    base: global,                   // 兼容旧字段
+    own: active && active.ownerId === req.user.id ? (active.auditRules || null) : null,
     effective,
-    scope: isChief(req.user) ? 'global' : 'personal',
-    meta: AUDIT_RULE_META,
+    personalized: active
+      ? Boolean(active.ownerId === req.user.id && Object.keys(active.auditRules || {}).length)
+      : Object.keys(draft).length > 0,
+    hasGlobal: Boolean((gset && Object.keys(gset.auditRules || {}).length)
+      || Object.keys(db().settings?.auditRules || {}).length),
+    activeSet: ruleSetSummary(active),
+    activeSetId: active ? active.id : null,
+    sets: ruleSetList(req.user),
+    draftRules: { ...global, ...draft },      // 「未选择」模式下编辑用的完整规则
+    draftHouseRules,                          // 临时规则里的自定义规则（只含审卡校验）
+    draftPersonalized: Object.keys(draft).length > 0 || draftHouseRules.length > 0,
   });
 });
 
+/**
+ * 保存「未选择」模式下的临时规则：只写在自己的 user.auditRules / draftHouseRules 上，
+ * 不创建规则集、不出现在他人的列表里；同时清掉 activeRuleSetId。
+ */
 router.put('/audit-rules', (req, res) => {
-  const rules = parseAuditRules(req.body);
-  const database = db();
-  if (isChief(req.user)) {
-    database.settings = database.settings || {};
-    database.settings.auditRules = rules;
-    save();
-    audit(req, 'admin.audit_rules_update', { enabled: rules.enabled, keys: Object.keys(rules).length });
-    return res.json({ success: true, rules, scope: 'global' });
-  }
-  // 普通 KP：只保存与全局基准不同的差异项，基准变了也能自动跟上
-  const base = { ...DEFAULT_AUDIT_RULES, ...(database.settings?.auditRules || {}) };
-  const own = {};
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const rules = parseAuditRules(body.auditRules && typeof body.auditRules === 'object' ? body.auditRules : body);
+  const base = globalAuditRules();
+  const diff = {};
   for (const key of Object.keys(rules)) {
-    if (rules[key] !== base[key]) own[key] = rules[key];
+    if (rules[key] !== base[key]) diff[key] = rules[key];
   }
-  req.user.auditRules = Object.keys(own).length ? own : null;
+  const draftHouseRules = normalizeHouseRules(Array.isArray(body.houseRules) ? body.houseRules : [])
+    .filter((r) => r.type !== 'deriveBase');
+  req.user.auditRules = Object.keys(diff).length ? diff : null;
+  req.user.draftHouseRules = draftHouseRules;
+  req.user.activeRuleSetId = null;
   req.user.updatedAt = Date.now();
   save();
-  audit(req, 'admin.audit_rules_update', {
-    enabled: rules.enabled, keys: Object.keys(own).length, scope: 'personal',
+  audit(req, 'admin.audit_rules_draft', {
+    enabled: rules.enabled, keys: Object.keys(diff).length, houseRules: draftHouseRules.length,
   });
-  res.json({ success: true, rules: auditRulesFor(req.user), scope: 'personal' });
+  res.json({
+    success: true, draft: true, scope: 'personal',
+    rules: auditRulesFor(req.user), own: req.user.auditRules,
+    personalized: Object.keys(diff).length > 0,
+    activeSetId: null, activeSet: null, sets: ruleSetList(req.user),
+    draftRules: { ...base, ...(req.user.auditRules || {}) },
+    draftHouseRules, draftPersonalized: Object.keys(diff).length > 0 || draftHouseRules.length > 0,
+  });
+});
+
+router.delete('/audit-rules', (req, res) => {
+  req.user.auditRules = null;
+  req.user.draftHouseRules = [];
+  req.user.updatedAt = Date.now();
+  save();
+  audit(req, 'admin.audit_rules_reset', { scope: 'draft' });
+  res.json({
+    success: true, draft: true, scope: 'personal',
+    rules: auditRulesFor(req.user), own: null, personalized: false,
+    activeSetId: null, activeSet: null, sets: ruleSetList(req.user),
+    draftRules: globalAuditRules(), draftHouseRules: [], draftPersonalized: false,
+  });
+});
+
+/** 首席：把当前规则写进「全局规则集」（没有就建一套） */
+router.put('/audit-rules/global', requireChief, (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const rules = parseAuditRules(body.auditRules && typeof body.auditRules === 'object' ? body.auditRules : body);
+  const base = officialAuditRules();
+  const diff = {};
+  for (const key of Object.keys(rules)) {
+    if (rules[key] !== base[key]) diff[key] = rules[key];
+  }
+  const now = Date.now();
+  let set = globalAuditSet();
+  if (!set) {
+    set = {
+      id: `rs_global_${now.toString(36)}`,
+      name: '全局默认规则',
+      scope: 'global',
+      ownerId: null,
+      ownerName: '首席守秘人',
+      auditRules: {}, houseRules: [],
+      createdAt: now, updatedAt: now,
+    };
+    db().settings.ruleSets = [...(db().settings.ruleSets || []), set];
+  }
+  const displayName = String(body.name == null ? '' : body.name).trim().slice(0, 30);
+  if (displayName) set.name = displayName;
+  set.auditRules = diff;
+  if (Array.isArray(body.houseRules)) {
+    set.houseRules = normalizeHouseRules(body.houseRules);
+  }
+  set.updatedAt = now;
+  req.user.auditRules = null;
+  req.user.updatedAt = now;
+  save();
+  audit(req, 'admin.audit_rules_global', { enabled: rules.enabled, keys: Object.keys(diff).length });
+  res.json({
+    success: true, rules: globalAuditRules(), global: diff, own: null,
+    hasGlobal: Object.keys(diff).length > 0, activeSetId: set.id,
+    activeSet: ruleSetSummary(set), sets: ruleSetList(req.user), scope: 'chief',
+  });
+});
+
+router.delete('/audit-rules/global', requireChief, (req, res) => {
+  const now = Date.now();
+  for (const s of db().settings.ruleSets || []) {
+    if (s && s.scope === 'global') { s.auditRules = {}; s.updatedAt = now; }
+  }
+  if (db().settings) db().settings.auditRules = null;
+  req.user.auditRules = null;
+  req.user.updatedAt = now;
+  save();
+  audit(req, 'admin.audit_rules_global_reset', {});
+  res.json({
+    success: true, rules: globalAuditRules(), global: null, own: null,
+    hasGlobal: false, sets: ruleSetList(req.user), scope: 'chief',
+  });
 });
 
 export default router;

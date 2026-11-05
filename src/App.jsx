@@ -289,12 +289,14 @@ export default function App() {
     try { setUsers(await apiGet('/api/admin/users')); } catch { /* ignore */ }
   }, [isAdmin]);
 
+  // 自定义职业模板随登录状态变化：登录后必须重拉，否则先挂载再登录会一直拿到空列表
   const fetchCharacterMeta = useCallback(async () => {
+    if (!currentUser) { setCustomOccupations([]); return; }
     try {
-      const m = await apiGet('/api/characters/meta', { auth: Boolean(session.token) });
+      const m = await apiGet('/api/characters/meta', { auth: true });
       setCustomOccupations(m.customOccupations || []);
     } catch { /* 元数据失败不影响主流程 */ }
-  }, []);
+  }, [currentUser]);
 
   const fetchKpName = useCallback(async () => {
     try {

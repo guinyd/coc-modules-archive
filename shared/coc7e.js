@@ -66,7 +66,7 @@ export function isNamedSkill(key) {
   return Boolean(SKILL_BY_KEY[key]?.flags?.includes('named'));
 }
 export const NAMED_SKILL_HINT = {
-  ownLanguage: { label: '语种', placeholder: '例：中文 / 英语 / 拉丁语', warn: '母语未选择语种（不强制，建议填写）' },
+  ownLanguage: { label: '语种', placeholder: '例：中文 / 英语 / 拉丁语', warn: '母语未选择语种（建议填写）' },
 };
 
 /** 新建角色卡时给专攻槽位预置的默认方向（规则书最常见的两项） */
@@ -634,7 +634,7 @@ export function occupationBranchHints(occ) {
 export function computeSheet(sheet, ctx = {}) {
   const s = sheet || {};
   const age = clampInt(s.age, 0, 200, 0);
-  const applyAge = s.applyAgeAdjust !== false;
+  const applyAge = s.applyAgeAdjust === true;   // 默认关闭：玩家不主动开启时不套用年龄补正
   const raw = {};
   for (const k of ALL_CHARS) raw[k] = clampInt(s.chars?.[k], 0, 999, 0);
   const waivePenalty = s.agePenaltyWaived === true;
@@ -653,6 +653,8 @@ export function computeSheet(sheet, ctx = {}) {
     half[k] = Math.floor(eff[k] / 2);
     fifth[k] = Math.floor(eff[k] / 5);
   }
+  // 房规：技能基础值改写（deriveBase），只影响技能，不改变属性推导
+  const houseBase = deriveBaseMap(ctx.houseRules);
 
   const hp = Math.floor((eff.CON + eff.SIZ) / 10);
   const mp = Math.floor(eff.POW / 5);
@@ -679,7 +681,8 @@ export function computeSheet(sheet, ctx = {}) {
   for (const slot of blankSkills()) {
     const src = incoming.get(slot.id);
     const custom = cleanCustom(slot.key, src?.custom);
-    const base = skillBase(slot.key, custom, eff);
+    const rawBase = skillBase(slot.key, custom, eff);
+    const base = applyHouseBase(slot.key, rawBase, eff, houseBase);
     const o = clampInt(src?.occ, 0, SKILL_CAP, 0);
     const i = clampInt(src?.interest, 0, SKILL_CAP, 0);
     const g = clampInt(src?.growth, 0, SKILL_CAP, 0);
@@ -690,11 +693,11 @@ export function computeSheet(sheet, ctx = {}) {
     interestSpent += i;
     skills.push({
       id: slot.id, key: slot.key, custom, name: skillName(slot.key, custom),
-      base, occ: o, interest: i, growth: g, total,
+      base, origBase: rawBase, occ: o, interest: i, growth: g, total,
       half: Math.floor(total / 2), fifth: Math.floor(total / 5),
       isOccupation: allowed.has(slot.key), capExempt, spec: def.spec || null,
       special: SPECIAL_SKILLS.includes(slot.key) ? slot.key : null,
-      kind: 'standard',
+      kind: 'standard', houseBase: houseBase.has(slot.key),
       used: Boolean(src && (o > 0 || i > 0 || g > 0 || custom)),
     });
   }
@@ -818,7 +821,7 @@ export function validateSheet(sheet, ctx = {}) {
   if (CHARS.every((k) => !c.raw[k])) w.push('还有属性未填写（为 0）');
   // 教育增强：只要「还没结算过」就提示 —— 结算过（哪怕这次没提升）就不再打扰
   if (c.ageAdjust.eduChecks > 0 && c.ageAdjust.apply && !c.ageAdjust.settled) {
-    w.push(`该年龄需要做 ${c.ageAdjust.eduChecks} 次教育增强检定，请在「教育增强」中填入提升总值`);
+    w.push(`该年龄有 ${c.ageAdjust.eduChecks} 次教育增强检定未使用`);
   }
   if (c.ageAdjust.waived) w.push('KP 已豁免这张卡的年龄减益（属性不因年龄下降，教育成长照常保留）');
   if (c.legendary.enabled) {
@@ -856,14 +859,14 @@ export function validateSheet(sheet, ctx = {}) {
     }
     const illegal = c.skills.filter((s) => s.occ > 0 && !s.isOccupation);
     if (illegal.length) {
-      w.push(`以下技能不是本职技能，不能投入职业点：${illegal.map((s) => s.name).join('、')}`);
+      w.push(`以下技能作为非本职技能，投入职业点了：${illegal.map((s) => s.name).join('、')}`);
     }
     const bothPoints = c.skills.filter((s) => s.occ > 0 && s.interest > 0);
     if (bothPoints.length) {
       w.push(`同一个技能不能同时吃职业点与兴趣点：${bothPoints.map((s) => `${s.name}(职业${s.occ}+兴趣${s.interest})`).join('、')}`);
     }
     const creditInt = c.skills.find((s) => s.key === 'credit' && s.interest > 0);
-    if (creditInt) w.push('信用评级只能用职业点提升，不能投入兴趣点');
+    if (creditInt) w.push('信用评级投入了兴趣点');
     const cr = occ.cr || [0, 99];
     if (c.creditRating < cr[0] || c.creditRating > cr[1]) {
       w.push(`信用评级 ${c.creditRating} 不在【${occ.name}】要求的 ${cr[0]}-${cr[1]} 区间内`);
@@ -877,8 +880,8 @@ export function validateSheet(sheet, ctx = {}) {
       const filled = slots.filter((s) => s.custom);
       if (filled.some((s) => h.options.includes(s.custom))) continue;
       const want = h.required ? `指定：${h.options.join(' / ')}` : `建议从中选择：${h.options.join(' / ')}`;
-      if (!filled.length) w.push(`【${occ.name}】的「${h.name}」尚未选择方向（官方${want}）`);
-      else w.push(`【${occ.name}】的「${h.name}」官方${want}，当前填写的是「${filled.map((s) => s.custom).join('、')}」`);
+      if (!filled.length) w.push(`【${occ.name}】的「${h.name}」尚未选择方向（职业模板${want}）`);
+      else w.push(`【${occ.name}】的「${h.name}」职业模板${want}，当前填写的是「${filled.map((s) => s.custom).join('、')}」`);
     }
   }
 
@@ -901,39 +904,246 @@ export function validateSheet(sheet, ctx = {}) {
 
 // --------------------------------------------------------- KP 辅助审卡规则
 /**
- * 全部规则均为**可选**：值为 0 / false 表示不启用该条检查。
- * 由 KP 通过界面保存，对全站生效。
+ * 官方规则书基线。
+ *
+ * 这里的所有默认值都取自《克苏鲁的呼唤》第七版规则书，**不代表任何一位 KP 的偏好**：
+ *   · 属性单项范围 15-90（3D6×5 与 (2D6+6)×5 的生成区间）；
+ *   · 智力与体型不得低于 40（(2D6+6)×5 的生成下限，守秘人允许时才能破例）；
+ *   · 技能成功率官方没有上下限；
+ *   · 官方允许混点（职业点用于本职技能，兴趣点不限），因此「禁混点」默认关闭；
+ *   · 信用评级须落在职业区间（职业条目自带规定）。
+ *
+ * 层级：官方基线（本对象）< 全局默认（settings.auditRules，首席设定）< 个人覆盖（user.auditRules）。
+ * 值 0 / false 表示关闭该条检查。
  */
 export const DEFAULT_AUDIT_RULES = {
-  enabled: false,
-  charMax: 0,              // 任意属性「有效值」上限（0=不检查）
-  charMin: 0,              // 任意属性有效值下限
-  charTotalMax: 0,         // 八项属性有效值之和上限
-  occSkillMax: 0,          // 投入过职业点的技能：成功率上限
-  interestSkillMax: 0,     // 投入过兴趣点的技能：成功率上限
-  requireCreditInRange: true,   // 信用评级必须落在职业区间
-  forbidMixedPoints: true,      // 禁止混点：职业点限本职 + 同技能禁双点 + 信用评级仅职业点
-  requireOccupation: false,     // 必须选择职业
-  backgroundMinFields: 0,       // 背景故事至少填写的栏数
-  minPointUsage: 0,             // 职业点至少用掉的比例（0~1）
-  flagCustomSkills: true,       // 使用了自定义技能 → 提示 KP 重点核查
-  checkOccBranches: true,       // 职业技能的官方指定专攻方向（外语（拉丁语）等）核对
+  enabled: true,               // 功能项：启用「规则项」检查（内置底线不检查开关）
+  // —— 规则项 ——
+  charMin: 15,                 // 任意属性有效值下限（官方生成下限 15）
+  charMax: 90,                 // 任意属性有效值上限（官方生成上限 90）
+  intSizMin40: true,           // 智力与体型不得低于 40（(2D6+6)×5 下限）
+  charTotalMax: 0,             // 八项属性总和上限（官方不限制）
+  occSkillMax: 0,              // 投入过职业点的技能成功率上限（官方无上限）
+  interestSkillMax: 0,         // 投入过兴趣点的技能成功率上限（官方无上限）
+  requireCreditInRange: true,  // 信用评级必须落在职业区间
+  forbidMixedPoints: false,    // 禁混点：职业点限本职 + 同技能禁双点（官方允许混点）
+  creditOccOnly: false,        // 独立规则项：信用评级只能用职业点
+  backgroundMinFields: 0,      // 背景故事至少填写的栏数
+  minPointUsage: 0,            // 职业点至少用掉的比例（0~1）
+  // —— 功能项 ——
+  flagCustomSkills: true,      // 使用了自定义技能 → 提示 KP 重点核查
+  checkOccBranches: true,      // 核对职业的官方指定专攻方向（外语（拉丁语）等）
 };
 
+/**
+ * 规则清单。`group` 区分两类开关：
+ *   rule    —— 会影响「是否合规」的判定规则；
+ *   feature —— 只影响提示 / 辅助行为，不改变合规结论。
+ */
 export const AUDIT_RULE_META = [
-  { key: 'charMax', label: '属性有效值上限', type: 'number', hint: '任意一项属性超过该值即不合规；0 = 不检查' },
-  { key: 'charMin', label: '属性有效值下限', type: 'number', hint: '防止刻意压低属性；0 = 不检查' },
-  { key: 'charTotalMax', label: '属性总和上限', type: 'number', hint: '八项属性（不含幸运）有效值之和；0 = 不检查' },
-  { key: 'occSkillMax', label: '职业技能成功率上限', type: 'number', hint: '投入过职业点的技能，其成功率不得超过该值；0 = 不检查' },
-  { key: 'interestSkillMax', label: '兴趣技能成功率上限', type: 'number', hint: '投入过兴趣点的技能，其成功率不得超过该值；0 = 不检查' },
-  { key: 'backgroundMinFields', label: '背景故事最少填写栏数', type: 'number', hint: '共 10 栏；0 = 不检查' },
-  { key: 'minPointUsage', label: '职业技能点最低使用率', type: 'number', hint: '0~1，例如 0.8 表示至少用掉 80% 的职业点；0 = 不检查' },
-  { key: 'requireCreditInRange', label: '信用评级须符合职业区间', type: 'boolean' },
-  { key: 'forbidMixedPoints', label: '禁止混点（职业点限本职 · 同技能禁双点 · 信用评级仅职业点）', type: 'boolean' },
-  { key: 'requireOccupation', label: '必须选择职业', type: 'boolean' },
-  { key: 'flagCustomSkills', label: '使用自定义技能时提示 KP 重点核查', type: 'boolean' },
-  { key: 'checkOccBranches', label: '核对职业的官方指定专攻方向（如 外语（拉丁语））', type: 'boolean' },
+  { key: 'charMin', group: 'rule', label: '属性下限（单项）', type: 'number', hint: '官方生成下限 15；0 = 不检查' },
+  { key: 'charMax', group: 'rule', label: '属性上限（单项）', type: 'number', hint: '官方生成上限 90；0 = 不检查' },
+  { key: 'intSizMin40', group: 'rule', label: '智力与体型不得低于 40', type: 'boolean', hint: '(2D6+6)×5 的生成下限；守秘人允许时可放宽' },
+  { key: 'charTotalMax', group: 'rule', label: '属性总和上限', type: 'number', hint: '八项属性（不含幸运）有效值之和；0 = 不检查（官方无此限制）' },
+  { key: 'occSkillMax', group: 'rule', label: '职业技能成功率上限', type: 'number', hint: '投入过职业点的技能上限；0 = 不检查（官方技能无上限）' },
+  { key: 'interestSkillMax', group: 'rule', label: '兴趣技能成功率上限', type: 'number', hint: '投入过兴趣点的技能上限；0 = 不检查（官方技能无上限）' },
+  { key: 'requireCreditInRange', group: 'rule', label: '信用评级须符合职业区间', type: 'boolean' },
+  { key: 'forbidMixedPoints', group: 'rule', label: '禁混点（职业点限本职 · 同技能禁双点）', type: 'boolean' },
+  { key: 'creditOccOnly', group: 'rule', label: '信用评级只能用职业点', type: 'boolean' },
+  { key: 'backgroundMinFields', group: 'rule', label: '背景故事最少填写栏数', type: 'number', hint: '共 10 栏；0 = 不检查' },
+  { key: 'minPointUsage', group: 'rule', label: '职业技能点最低使用率', type: 'number', hint: '0~1，例如 0.8 表示至少用掉 80% 的职业点；0 = 不检查' },
+  { key: 'enabled', group: 'feature', label: '启用自定义规则审卡', type: 'boolean', hint: '关闭后只执行「点数预算」等内置底线，不套用上面的阈值' },
+  { key: 'flagCustomSkills', group: 'feature', label: '使用自定义技能时提示 KP 重点核查', type: 'boolean' },
+  { key: 'checkOccBranches', group: 'feature', label: '核对职业的官方指定专攻方向（如 外语（拉丁语））', type: 'boolean' },
 ];
+
+// ------------------------------------------------------------------ 房规
+/**
+ * 免代码房规。只存数据，不存可执行代码；类型、目标、数值全部在白名单内。
+ * 三类 v1：
+ *   deriveBase   —— 改写技能基础值（例：魅惑 / 取悦 = 外貌 ÷ 2）
+ *   requireAttr  —— 属性门槛（例：智力 ≥ 60）
+ *   requireSkill —— 技能门槛，支持「全部达标（and）」与「任选 N 项达标（or）」
+ */
+export const HOUSE_RULE_TYPES = [
+  { type: 'deriveBase', label: '技能基础值', hint: '改写技能基础值：固定值，或按属性乘除后再加减，例如「取悦 = 固定 30」「聆听 = 智力 × 2」' },
+  { type: 'requireAttr', label: '属性要求', hint: '某个属性必须达到区间，例如智力至少 60' },
+  { type: 'requireSkill', label: '技能要求', hint: '指定技能全部达标（and），或任选 N 项达标（or），例如「侦查 / 聆听 任选一项 ≥ 60」' },
+];
+export const HOUSE_RULE_LIMIT = 50;
+export const HOUSE_FORMULA_FROM = ALL_CHARS;
+
+const hrInt = (v, min, max, dflt) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return dflt;
+  return Math.max(min, Math.min(max, Math.trunc(n)));
+};
+const hrNum = (v, min, max, dflt) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return dflt;
+  return Math.max(min, Math.min(max, Math.round(n * 100) / 100));
+};
+const hrText = (v, max) => String(v == null ? '' : v).trim().slice(0, max);
+
+/** 单条房规白名单校验；无法识别的类型返回 null。 */
+export function normalizeHouseRule(input, index = 0) {
+  const src = input && typeof input === 'object' ? input : {};
+  const type = HOUSE_RULE_TYPES.some((t) => t.type === src.type) ? src.type : '';
+  if (!type) return null;
+  const id = /^[A-Za-z0-9_-]{1,24}$/.test(String(src.id || '')) ? String(src.id) : `h${index + 1}`;
+  // 房规是「本桌必须满足」的硬约束，不允许下发方把级别调成 warn/info 来绕开审卡
+  const level = 'error';
+  const label = hrText(src.label, 80);
+  if (type === 'deriveBase') {
+    const skill = String(src.skill || '');
+    if (!SKILL_BY_KEY[skill]) return null;
+    // 新结构：source=fixed 固定值 / source=attr 按属性；兼容旧 formula{from,div,add,round}
+    const legacy = src.formula && typeof src.formula === 'object' ? src.formula : null;
+    const source = legacy ? 'attr' : (src.source === 'fixed' ? 'fixed' : 'attr');
+    if (source === 'fixed') {
+      return {
+        id, type, level, label, skill, source: 'fixed', from: '', op: 'eq',
+        value: hrInt(src.value, 0, 999, 0),
+        adjust: hrInt(src.adjust, -50, 50, 0),
+        round: ['floor', 'round', 'ceil'].includes(src.round) ? src.round : 'round',
+      };
+    }
+    const from = String((legacy ? legacy.from : src.from) || '').toUpperCase();
+    if (!HOUSE_FORMULA_FROM.includes(from)) return null;
+    const op = (legacy ? 'div' : (src.op === 'mul' ? 'mul' : 'div'));
+    const value = op === 'mul'
+      ? hrNum(legacy ? 2 : src.value, 0.1, 20, 2)
+      : hrInt(legacy ? legacy.div : src.value, 1, 20, 2);
+    return {
+      id, type, level, label, skill, source: 'attr', from, op, value,
+      adjust: hrInt(legacy ? legacy.add : src.adjust, -50, 50, 0),
+      round: ['floor', 'round', 'ceil'].includes(legacy ? legacy.round : src.round) ? (legacy ? legacy.round : src.round) : 'round',
+    };
+  }
+  if (type === 'requireAttr') {
+    const attr = String(src.attr || '').toUpperCase();
+    if (!HOUSE_FORMULA_FROM.includes(attr)) return null;
+    const min = hrInt(src.min, 0, 99, 0);
+    const max = hrInt(src.max, 0, 99, 0);
+    if (!min && !max) return null;
+    return { id, type, level, label, attr, min, max };
+  }
+  // requireSkill
+  const skills = [...new Set((Array.isArray(src.skills) ? src.skills : []).map(String).filter((k) => SKILL_BY_KEY[k]))].slice(0, 8);
+  if (!skills.length) return null;
+  const min = hrInt(src.min, 1, 99, 60);
+  const mode = src.mode === 'any' ? 'any' : 'all';
+  const count = mode === 'any' ? Math.max(1, Math.min(skills.length, hrInt(src.count, 1, 8, 1))) : skills.length;
+  return { id, type, level, label, skills, min, mode, count };
+}
+
+/** 归一化整份房规清单（去重 id、截断到上限）。 */
+export function normalizeHouseRules(list) {
+  const out = [];
+  const seen = new Set();
+  for (const item of Array.isArray(list) ? list.slice(0, HOUSE_RULE_LIMIT) : []) {
+    const rule = normalizeHouseRule(item, out.length);
+    if (!rule || seen.has(rule.id)) continue;
+    seen.add(rule.id);
+    out.push(rule);
+  }
+  return out;
+}
+
+/** 把 deriveBase 房规折成 Map<技能 key, formula>；后面的覆盖前面的。 */
+export function deriveBaseMap(houseRules) {
+  const map = new Map();
+  for (const rule of normalizeHouseRules(houseRules)) {
+    if (rule.type === 'deriveBase') map.set(rule.skill, rule);
+  }
+  return map;
+}
+
+/** 计算某个技能套用房规后的基础值。 */
+export function applyHouseBase(key, base, eff, map) {
+  const f = map && map.get(key);
+  if (!f) return base;
+  let raw;
+  if (f.source === 'fixed') {
+    raw = (Number(f.value) || 0) + (Number(f.adjust) || 0);
+  } else {
+    const attr = Number(eff?.[f.from]) || 0;
+    const value = Number(f.value) || 1;
+    raw = (f.op === 'mul' ? attr * value : attr / value) + (Number(f.adjust) || 0);
+  }
+  const v = f.round === 'ceil' ? Math.ceil(raw) : f.round === 'round' ? Math.round(raw) : Math.floor(raw);
+  return Math.max(0, Math.min(999, v));
+}
+
+/** 房规 → 一句人话（前端展示与提示共用，保证口径一致）。 */
+export function houseRuleSummary(rule) {
+  const r = normalizeHouseRule(rule);
+  if (!r) return '';
+  if (r.type === 'deriveBase') {
+    const sign = r.adjust > 0 ? ` + ${r.adjust}` : r.adjust < 0 ? ` − ${Math.abs(r.adjust)}` : '';
+    if (r.source === 'fixed') return `${skillName(r.skill)}基础值 = 固定 ${r.value}${sign}`;
+    return `${skillName(r.skill)}基础值 = ${CHAR_LABEL[r.from] || r.from} ${r.op === 'mul' ? '×' : '÷'} ${r.value}${sign}`;
+  }
+  if (r.type === 'requireAttr') {
+    const label = CHAR_LABEL[r.attr] || r.attr;
+    if (r.min && r.max) return `${label}需在 ${r.min}–${r.max} 之间`;
+    if (r.max) return `${label} ≤ ${r.max}`;
+    return `${label} ≥ ${r.min}`;
+  }
+  const names = (r.skills || []).map((k) => skillName(k)).join(' / ');
+  return `${names} ${r.mode === 'all' ? '全部' : `任选 ${r.count || 1} 项`} ≥ ${r.min}`;
+}
+
+/**
+ * 按房规复核一张卡（只处理检查类；deriveBase 已体现在 computeSheet 里）。
+ * @returns {Array<{id,label,level,detail}>}
+ */
+export function evaluateHouseRules(sheet, houseRules, computed) {
+  const list = normalizeHouseRules(houseRules);
+  if (!list.length || !computed) return [];
+  const c = computed;
+  const out = [];
+  for (const rule of list) {
+    if (rule.type === 'deriveBase') continue;
+    const label = rule.label || HOUSE_RULE_TYPES.find((t) => t.type === rule.type)?.label || '房规';
+    if (rule.type === 'requireAttr') {
+      const v = c.eff?.[rule.attr] ?? 0;
+      const name = CHAR_LABEL[rule.attr] || rule.attr;
+      if (rule.min > 0 && v < rule.min) {
+        out.push({ id: `house.${rule.id}`, label, level: rule.level, detail: `房规要求${name}至少 ${rule.min}，当前 ${v}` });
+      }
+      if (rule.max > 0 && v > rule.max) {
+        out.push({ id: `house.${rule.id}`, label, level: rule.level, detail: `房规要求${name}不超过 ${rule.max}，当前 ${v}` });
+      }
+      continue;
+    }
+    // requireSkill：同一技能可能展开成多个专攻槽位，取最高值
+    const totals = new Map();
+    for (const s of c.skills || []) {
+      if (!rule.skills.includes(s.key)) continue;
+      totals.set(s.key, Math.max(totals.get(s.key) ?? 0, s.total || 0));
+    }
+    const values = rule.skills.map((k) => ({ key: k, name: skillName(k), total: totals.get(k) ?? 0 }));
+    if (rule.mode === 'all') {
+      const bad = values.filter((v) => v.total < rule.min);
+      if (bad.length) {
+        out.push({
+          id: `house.${rule.id}`, label, level: rule.level,
+          detail: `房规要求 ${values.map((v) => `${v.name} ≥ ${rule.min}`).join('、')}；未达标：${bad.map((v) => `${v.name}(${v.total})`).join('、')}`,
+        });
+      }
+    } else {
+      const ok = values.filter((v) => v.total >= rule.min).length;
+      if (ok < rule.count) {
+        out.push({
+          id: `house.${rule.id}`, label, level: rule.level,
+          detail: `房规要求 ${values.map((v) => v.name).join(' / ')} 中至少 ${rule.count} 项 ≥ ${rule.min}；当前 ${ok} 项达标`,
+        });
+      }
+    }
+  }
+  return out;
+}
 
 /**
  * 依据 KP 设定的规则审核一张角色卡。
@@ -958,25 +1168,33 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
   }
 
   const max = num(r.charMax);
-  if (max > 0 && !legendaryOn) {
+  // 「启用自定义规则审卡」关闭时，下面的阈值一律不套用；传奇标记仍然只影响属性类规则
+  const rulesOn = r.enabled !== false;
+  if (rulesOn && max > 0 && !legendaryOn) {
     for (const k of ALL_CHARS) {
       if (c.eff[k] > max) add(`charMax.${k}`, '属性上限', 'error', `${CHAR_LABEL[k]} ${c.eff[k]} 超过上限 ${max}`);
     }
   }
   const min = num(r.charMin);
-  if (min > 0) {
+  if (rulesOn && min > 0) {
     for (const k of ALL_CHARS) {
       if (c.eff[k] < min) add(`charMin.${k}`, '属性下限', 'warn', `${CHAR_LABEL[k]} ${c.eff[k]} 低于下限 ${min}`);
     }
   }
-  if (num(r.charTotalMax) > 0 && !legendaryOn && charTotal > num(r.charTotalMax)) {
+  // 官方生成法下限：智力 / 体型由 (2D6+6)×5 生成，最低 40
+  if (rulesOn && r.intSizMin40) {
+    for (const k of ['INT', 'SIZ']) {
+      if (c.eff[k] < 40) {
+        add(`intSizMin40.${k}`, '智力/体型低于生成下限', 'error',
+          `${CHAR_LABEL[k]} ${c.eff[k]} 低于规则书生成下限 40（守秘人允许时可破例）`);
+      }
+    }
+  }
+  if (rulesOn && num(r.charTotalMax) > 0 && !legendaryOn && charTotal > num(r.charTotalMax)) {
     add('charTotalMax', '属性总和上限', 'error', `八项属性合计 ${charTotal}，超过上限 ${num(r.charTotalMax)}`);
   }
-  if (r.requireOccupation && !c.occupation) {
-    add('requireOccupation', '必须选择职业', 'error', '尚未选择职业');
-  }
 
-  if (num(r.minPointUsage) > 0 && c.budget.occupation > 0) {
+  if (rulesOn && num(r.minPointUsage) > 0 && c.budget.occupation > 0) {
     const usage = c.spent.occupation / c.budget.occupation;
     if (usage < num(r.minPointUsage)) {
       add('minPointUsage', '职业点使用率过低', 'warn',
@@ -984,7 +1202,7 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
     }
   }
 
-  if (r.forbidMixedPoints) {
+  if (rulesOn && r.forbidMixedPoints) {
     // ① 职业点只能投在本职技能上
     const notOcc = c.skills.filter((s) => s.occ > 0 && !s.isOccupation);
     if (notOcc.length) {
@@ -998,15 +1216,18 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
         `以下技能同时吃了职业点与兴趣点：${both.map((s) => `${s.name}(职业${s.occ}+兴趣${s.interest})`).join('、')}`
         + '；请只保留其中一种（本职技能可以改投兴趣点，上限按兴趣技能计算）');
     }
-    // ③ 信用评级始终只能用职业点
+  }
+
+  // 信用评级只能用职业点：独立规则项（与「禁混点」解耦）
+  if (rulesOn && r.creditOccOnly) {
     const creditInterest = c.skills.filter((s) => s.key === 'credit' && s.interest > 0);
     if (creditInterest.length) {
-      add('forbidMixedPoints.credit', '信用评级只能用职业点', 'error',
+      add('creditOccOnly', '信用评级只能用职业点', 'error',
         `信用评级投入了 ${creditInterest[0].interest} 点兴趣点；规则要求信用评级始终使用职业技能点提升`);
     }
   }
 
-  if (r.requireCreditInRange && c.occupation) {
+  if (rulesOn && r.requireCreditInRange && c.occupation) {
     const [lo, hi] = c.occupation.cr || [0, 99];
     if (c.creditRating < lo || c.creditRating > hi) {
       add('requireCreditInRange', '信用评级不符合职业区间', 'error',
@@ -1015,7 +1236,7 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
   }
 
   const occSkillMax = num(r.occSkillMax);
-  if (occSkillMax > 0) {
+  if (rulesOn && occSkillMax > 0) {
     const over = c.skills.filter((s) => s.occ > 0 && !s.capExempt && s.total > occSkillMax);
     if (over.length) {
       add('occSkillMax', '职业技能成功率上限', 'error',
@@ -1023,7 +1244,7 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
     }
   }
   const intSkillMax = num(r.interestSkillMax);
-  if (intSkillMax > 0) {
+  if (rulesOn && intSkillMax > 0) {
     const over = c.skills.filter((s) => s.interest > 0 && !s.capExempt && s.total > intSkillMax);
     if (over.length) {
       add('interestSkillMax', '兴趣技能成功率上限', 'error',
@@ -1031,7 +1252,7 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
     }
   }
 
-  if (num(r.backgroundMinFields) > 0) {
+  if (rulesOn && num(r.backgroundMinFields) > 0) {
     const filled = Object.values(sheet?.background || {}).filter((v) => String(v || '').trim()).length;
     if (filled < num(r.backgroundMinFields)) {
       add('backgroundMinFields', '背景故事不完整', 'warn',
@@ -1070,6 +1291,9 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
         `【${c.occupation.name}】的「${h.name}」官方${want}；当前${filled.length ? `填写为「${filled.map((s) => s.custom).join('、')}」` : '未选择方向'}`);
     }
   }
+  // 房规检查项：与审卡规则共用同一求值路径（deriveBase 已体现在 computeSheet 中）
+  for (const f of evaluateHouseRules(sheet, ctx.houseRules, c)) findings.push(f);
+
   return {
     passed: !findings.some((f) => f.level === 'error'),
     findings,
@@ -1092,6 +1316,7 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
       eduSettled: c.eduGrowth.settled,
       eduCount: c.eduGrowth.count,
       eduManual: c.eduGrowth.manual,
+      houseRuleCount: Array.isArray(ctx.houseRules) ? ctx.houseRules.length : 0,
     },
   };
 }
@@ -1116,7 +1341,7 @@ export function blankSheet(ownerId = '') {
   for (const k of ALL_CHARS) chars[k] = 0;
   return {
     name: '', playerName: '', occupationId: '', age: 25, gender: '', residence: '', birthplace: '', era: '1920s',
-    chars, eduBonus: 0, applyAgeAdjust: true, armorPenalty: 0, ageAlloc: {},
+    chars, eduBonus: 0, applyAgeAdjust: false, armorPenalty: 0, ageAlloc: {},   // 年龄补正默认不套用，由玩家主动开启
     eduGrowth: blankEduGrowth(),          // 教育增强结算记录（KP 可见）
     legendary: blankLegendary(),          // 传奇标记（KP 单独开启，允许突破 99）
     legendaryBonus: blankLegendaryBonus(),// 传奇额外调整值（单独一栏）

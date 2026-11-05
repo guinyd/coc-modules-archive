@@ -14,12 +14,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  AlertTriangle, CheckCircle, ClipboardCheck, Crown, Eye, GraduationCap, Plus, RefreshCw,
-  Save, Scale, Shield, Trash2, Users, Wand2, X, XCircle,
+  AlertTriangle, CheckCircle, ClipboardCheck, Copy, Crown, Eye, GraduationCap, Plus, RefreshCw,
+  Power, RotateCcw, Save, Scale, Shield, Trash2, Users, Wand2, X, XCircle,
 } from 'lucide-react';
 import {
-  AUDIT_RULE_META, DEFAULT_AUDIT_RULES, REVIEW_LABEL, SKILLS, SKILL_BY_KEY,
-  SOCIAL_SKILLS, STATUS_LABEL,
+  ALL_CHARS, AUDIT_RULE_META, CHAR_LABEL, DEFAULT_AUDIT_RULES, REVIEW_LABEL, SKILLS, SKILL_BY_KEY,
+  SOCIAL_SKILLS, STATUS_LABEL, houseRuleSummary,
 } from '../../../shared/coc7e.js';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../../lib/api.js';
 import { eduGrowthLabel, grantEduReroll } from '../../../shared/coc7e.js';
@@ -108,7 +108,7 @@ export default function KpReviewCenter({ currentUser, showToast, showConfirm, on
         <QueueTab showToast={showToast} showConfirm={showConfirm} onOpenCharacter={onOpenCharacter} currentUser={currentUser} />
       )}
       {tab === 'batch' && <BatchTab showToast={showToast} onOpenCharacter={onOpenCharacter} />}
-      {tab === 'rules' && <RulesTab showToast={showToast} currentUser={currentUser} />}
+      {tab === 'rules' && <RulesTab showToast={showToast} showConfirm={showConfirm} currentUser={currentUser} />}
       {tab === 'occupations' && <OccupationsTab showToast={showToast} showConfirm={showConfirm} currentUser={currentUser} />}
     </div>
   );
@@ -219,6 +219,9 @@ function QueueTab({ showToast, showConfirm, onOpenCharacter, currentUser }) {
                       {it.customSkillCount > 0 ? <Badge className={BADGE_LG} tone="cyan">自建技能 {it.customSkillCount}</Badge> : null}
                       {it.reviewTarget?.kpName ? (
                         <Badge className={BADGE_LG} tone="amber">指定：{it.reviewTarget.kpName}</Badge>
+                      ) : null}
+                      {it.ruleSet?.name ? (
+                        <Badge className={BADGE_LG} tone="indigo">规则：{it.ruleSet.name}</Badge>
                       ) : null}
                     </div>
 
@@ -556,53 +559,303 @@ function BatchTab({ showToast, onOpenCharacter }) {
 }
 
 // ------------------------------------------------------------------ 审卡规则
-function RulesTab({ showToast, currentUser }) {
+const HOUSE_TYPES = [
+  { key: 'deriveBase', label: '技能基础值（改变车卡数值）' },
+  { key: 'requireAttr', label: '属性门槛（审卡要求）' },
+  { key: 'requireSkill', label: '技能门槛（审卡要求）' },
+];
+
+const blankDraft = () => ({
+  type: 'deriveBase', skill: 'charm',
+  source: 'attr', from: 'APP', op: 'div', value: 2, adjust: 0,
+  attr: 'INT', min: 60, max: 0, mode: 'any', skills: [''], count: 2,
+});
+
+/** 房规 → 一句人话（与车卡页共用同一份文案） */
+const houseRuleText = houseRuleSummary;
+
+function ruleTypeLabel(type) {
+  return HOUSE_TYPES.find((t) => t.key === type)?.label || type;
+}
+
+/** 房规 + 审卡规则同一页：规则集切换、规则编辑、自定义规则编辑 */
+function RulesTab({ showToast, showConfirm, currentUser }) {
+  const isChief = currentUser?.kpRank === 'chief';
   const [rules, setRules] = useState(DEFAULT_AUDIT_RULES);
-  const [base, setBase] = useState(null);
-  const [scope, setScope] = useState(currentUser?.kpRank === 'chief' ? 'global' : 'personal');
+  const [sets, setSets] = useState([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [setName, setSetName] = useState('');
+  const [houseRules, setHouseRules] = useState([]);
+  const [draftData, setDraftData] = useState({ rules: DEFAULT_AUDIT_RULES, houseRules: [] });
+  const [draft, setDraft] = useState(blankDraft);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
+  const selected = useMemo(() => sets.find((s) => s.id === selectedId) || null, [sets, selectedId]);
+  const isDraft = !selectedId;
+  // 全局规则集和其他守秘人的个人集都只能「使用」，不能编辑
+  const locked = Boolean(selected && !selected.isMine);
+  const canDelete = Boolean(selected && selected.scope !== 'global' && (isChief || selected.isMine));
+  const canPublish = Boolean(isChief && selected?.isMine);
+  const allowDeriveBase = !isDraft;
+  const visibleHouseRules = allowDeriveBase ? houseRules : houseRules.filter((r) => r.type !== 'deriveBase');
+
+  const fillDraftView = (data) => {
+    setSelectedId('');
+    setSetName('');
+    setRules({ ...DEFAULT_AUDIT_RULES, ...(data?.rules || {}) });
+    setHouseRules((data?.houseRules || []).map((r) => ({ ...r })));
+  };
+
+  const fillSet = (set) => {
+    setSelectedId(set.id);
+    setSetName(set.name || '');
+    setRules({ ...DEFAULT_AUDIT_RULES, ...(set.auditRules || {}) });
+    setHouseRules((set.houseRules || []).map((r) => ({ ...r })));
+  };
+
+  const refresh = useCallback(async (preferId) => {
     setLoading(true);
     try {
-      const res = await apiGet('/api/admin/audit-rules');
-      setRules({ ...DEFAULT_AUDIT_RULES, ...(res.rules || {}) });
-      // PUT 的响应不带 base，必须留一份 GET 时拿到的最新全局基准
-      setBase({ ...DEFAULT_AUDIT_RULES, ...(res.base || res.rules || {}) });
-      if (res.scope) setScope(res.scope);
+      const [res, rs] = await Promise.all([
+        apiGet('/api/admin/audit-rules'),
+        apiGet('/api/rule-sets'),
+      ]);
+      const list = Array.isArray(rs.items) ? rs.items : [];
+      setSets(list);
+      const view = {
+        rules: res.draftRules || { ...DEFAULT_AUDIT_RULES },
+        houseRules: Array.isArray(res.draftHouseRules) ? res.draftHouseRules : [],
+      };
+      setDraftData(view);
+      const wanted = preferId !== undefined ? preferId : (res.activeSetId || rs.activeId || '');
+      const pick = list.find((s) => s.id === wanted) || null;
+      if (pick) fillSet(pick); else fillDraftView(view);
     } catch (err) { showToast(err.message, 'error'); } finally { setLoading(false); }
   }, [showToast]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { refresh(); }, [refresh]);
 
-  const save = async () => {
+  // 临时规则模式不允许技能基础值
+  useEffect(() => {
+    if (isDraft) setDraft((d) => (d.type === 'deriveBase' ? { ...d, type: 'requireAttr' } : d));
+  }, [isDraft]);
+
+  const runSet = async (fn, message, preferId) => {
     setBusy(true);
     try {
-      const res = await apiPut('/api/admin/audit-rules', rules);
-      setRules({ ...DEFAULT_AUDIT_RULES, ...res.rules });
-      if (res.scope) setScope(res.scope);
-      showToast(res.scope === 'global' ? '全局审卡规则已保存' : '个人审卡规则已保存');
+      await fn();
+      await refresh(preferId);
+      showToast(message);
     } catch (err) { showToast(err.message, 'error'); } finally { setBusy(false); }
   };
 
-  /** 普通守秘人放弃个人覆盖，回到首席维护的全局基准 */
-  const restoreGlobal = async () => {
-    if (!base) return showToast('还没有读到全局基准，请先点「重新读取」', 'error');
+  const pickSet = async (id) => {
+    if (id === selectedId) return;
+    if (!id) {
+      setBusy(true);
+      try {
+        await apiPut('/api/rule-sets/active', { id: null });
+        fillDraftView(draftData);
+        showToast('已切换到临时规则：只对你生效，不会生成规则集');
+      } catch (err) { showToast(err.message, 'error'); } finally { setBusy(false); }
+      return;
+    }
+    const set = sets.find((s) => s.id === id);
+    if (set) fillSet(set);
+  };
+
+  const saveCurrent = () => {
+    if (locked) return;
+    runSet(async () => {
+      if (isDraft) {
+        await apiPut('/api/admin/audit-rules', {
+          auditRules: rules,
+          houseRules: houseRules.filter((r) => r.type !== 'deriveBase'),
+        });
+      } else {
+        await apiPut(`/api/rule-sets/${selected.id}`, {
+          name: (setName || '').trim() || '我的规则集',
+          auditRules: rules,
+          houseRules,
+        });
+      }
+    }, isDraft ? '临时规则已保存：只对你生效，不会新建规则集' : '规则集已保存', isDraft ? '' : selectedId);
+  };
+
+  const newSet = async () => {
     setBusy(true);
     try {
-      const res = await apiPut('/api/admin/audit-rules', base);
-      setRules({ ...DEFAULT_AUDIT_RULES, ...(res.rules || base) });
-      if (res.scope) setScope(res.scope);
-      showToast('已恢复为全局基准');
+      const mineCount = sets.filter((s) => s.isMine).length;
+      const created = await apiPost('/api/rule-sets', {
+        name: `我的规则集 ${mineCount + 1}`, scope: 'personal', auditRules: {}, houseRules: [],
+      });
+      await refresh(created?.item?.id || '');
+      showToast('已新建规则集：编辑内容后点「保存规则集」');
     } catch (err) { showToast(err.message, 'error'); } finally { setBusy(false); }
   };
 
-  const numbers = AUDIT_RULE_META.filter((m) => m.type === 'number');
-  const booleans = AUDIT_RULE_META.filter((m) => m.type === 'boolean');
+  const duplicate = async () => {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      const created = await apiPost(`/api/rule-sets/${selected.id}/duplicate`, {});
+      await refresh(created?.item?.id || '');
+      showToast('已复制为自己的规则集');
+    } catch (err) { showToast(err.message, 'error'); } finally { setBusy(false); }
+  };
+
+  const removeSet = () => {
+    if (!selected || !canDelete) return;
+    showConfirm(`删除规则集【${selected.name}】？已提交审核的卡会保留当时的规则快照。`, () => (
+      runSet(() => apiDelete(`/api/rule-sets/${selected.id}`), '规则集已删除', '')
+    ));
+  };
+
+  const activate = () => {
+    if (!selected) return;
+    runSet(() => apiPut('/api/rule-sets/active', { id: selected.id }), '已设为当前规则集', selected.id);
+  };
+
+  const publishGlobal = () => {
+    if (!canPublish) return;
+    showConfirm(`把【${selected.name}】发布为全局规则集？所有守秘人与玩家都会看到这套规则。`, () => (
+      runSet(async () => {
+        await apiPut('/api/admin/audit-rules/global', {
+          auditRules: rules, houseRules, name: setName || selected.name,
+        });
+      }, '已发布为全局规则集', selectedId)
+    ));
+  };
+
+  const resetCurrent = () => {
+    if (locked) return;
+    if (isDraft) {
+      runSet(() => apiDelete('/api/admin/audit-rules'), '已清空临时规则', '');
+      return;
+    }
+    runSet(() => apiPut(`/api/rule-sets/${selected.id}`, {
+      name: setName || selected.name, auditRules: {}, houseRules: [],
+    }), '已重置这套规则集', selectedId);
+  };
+
+  const addRule = () => {
+    const d = draft;
+    let rule = null;
+    if (d.type === 'deriveBase') {
+      if (!allowDeriveBase) { showToast('临时规则模式下不能改技能基础值', 'error'); return; }
+      rule = {
+        type: 'deriveBase', skill: d.skill, source: d.source,
+        from: d.source === 'attr' ? d.from : '',
+        op: d.source === 'fixed' ? 'eq' : (d.op === 'mul' ? 'mul' : 'div'),
+        value: Number(d.value) || (d.source === 'fixed' ? 0 : 2),
+        adjust: Number(d.adjust) || 0,
+      };
+    } else if (d.type === 'requireAttr') {
+      const min = Number(d.min) || 0;
+      const max = Number(d.max) || 0;
+      if (!min && !max) { showToast('属性门槛至少要设置下限或上限', 'error'); return; }
+      rule = { type: 'requireAttr', attr: d.attr, min, max };
+    } else {
+      const skills = [...new Set((d.skills || []).filter(Boolean))];
+      if (!skills.length) { showToast('技能门槛至少要选一个技能', 'error'); return; }
+      rule = {
+        type: 'requireSkill', skills, min: Number(d.min) || 60,
+        mode: skills.length > 1 ? d.mode : 'all',
+        count: skills.length > 1 && d.mode === 'any' ? Math.min(Number(d.count) || 1, skills.length) : skills.length,
+      };
+    }
+    setHouseRules((prev) => [...prev, { ...rule, id: `h${prev.length + 1}_${Date.now().toString(36)}` }]);
+    showToast(isDraft ? '已加入临时规则，点「保存临时规则」后生效' : '已加入规则集，点「保存规则集」后生效');
+  };
+
+  const skillOptions = SKILLS.filter((s) => !s.spec);
+
+  const ruleMeta = AUDIT_RULE_META.filter((m) => m.group === 'rule');
+  const featureMeta = AUDIT_RULE_META.filter((m) => m.group === 'feature');
+  const numbers = ruleMeta.filter((m) => m.type === 'number');
+  const booleans = ruleMeta.filter((m) => m.type === 'boolean');
+  const rulesOn = rules.enabled !== false;
+
+  const stateLabel = isDraft
+    ? '临时规则'
+    : locked ? (selected.scope === 'global' ? '全局规则（只读）' : '其他守秘人的规则（只读）') : '个人规则中';
+  const stateTone = isDraft ? 'amber' : locked ? 'slate' : 'cyan';
+
+  const typeOptions = HOUSE_TYPES.filter((t) => allowDeriveBase || t.key !== 'deriveBase');
 
   return (
     <div className="space-y-5">
+      {/* -------------------------------------------------- 规则集 */}
+      <Panel>
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line-strong px-5 py-3.5">
+          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+            <span className="font-mono text-[14px] tracking-[0.18em] text-red-500">RULE SET 00</span>
+            <h3 className="flex items-center gap-2 font-serif text-[19px] font-bold tracking-[0.02em] text-slate-100">
+              <Scale className="h-4 w-4 text-amber-500" strokeWidth={1.7} />规则集
+            </h3>
+            <Badge className={BADGE_LG} tone="slate">{sets.length} 套</Badge>
+          </div>
+          <span className="text-[14px] text-slate-500">房规与审卡规则同源</span>
+        </div>
+        <div className="space-y-4 p-5">
+          <p className="text-[16px] leading-relaxed text-slate-500">
+            一套规则集同时包含审卡规则与自定义规则。你可以保存多套、随时切换；玩家在车卡「房规」页选用，
+            提交审核时服务端会把当时这套规则冻结到卡上。
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="选择规则集">
+              <Select
+                value={selectedId}
+                onChange={(e) => pickSet(e.target.value)}
+                disabled={loading || busy}
+              >
+                <option value="">— 未选择 —</option>
+                {sets.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}{s.scope === 'global' ? '（全局）' : `（${s.ownerName || '守秘人'}）`}{s.isActive ? ' · 当前使用' : ''}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="规则集名称" hint={isDraft ? '未选择规则集时不能命名' : locked ? '这套规则集不由你维护，名称只读' : undefined}>
+              <Input
+                maxLength={30}
+                value={isDraft ? '' : setName}
+                onChange={(e) => setSetName(e.target.value)}
+                placeholder={isDraft ? '临时规则不会生成规则集' : '如：本桌房规 / 硬核团'}
+                disabled={loading || busy || isDraft || locked}
+              />
+            </Field>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="ghost" onClick={newSet} disabled={busy || loading}><Plus className="w-4 h-4" />新建</Button>
+            <Button variant="ghost" onClick={duplicate} disabled={busy || !selected}><Copy className="w-4 h-4" />复制</Button>
+            <Button
+              variant="success"
+              onClick={activate}
+              disabled={busy || !selected || selected.isActive}
+            >
+              <CheckCircle className="w-4 h-4" />{selected?.isActive ? '当前使用中' : '设为当前'}
+            </Button>
+            {isChief ? (
+              <Button variant="ghost" onClick={publishGlobal} disabled={busy || !canPublish}>
+                <Shield className="w-4 h-4" />发布为全局
+              </Button>
+            ) : null}
+            <Button variant="ghost" onClick={removeSet} disabled={busy || !canDelete}><Trash2 className="w-4 h-4" />删除</Button>
+          </div>
+          <p className="text-[14px] leading-relaxed text-slate-500">
+            {locked
+              ? '这套规则集不由你维护：名称与内容都是只读的；可以直接「设为当前」使用，或「复制」一套再改。'
+              : isDraft
+                ? '未选择规则集：下面的内容只保存在你名下，不会生成规则集，其他人也看不到；这个模式只能设置审卡校验，不能改技能基础值。'
+                : '保存只会更新这套规则集本身；要让它生效，请点「设为当前」。'}
+          </p>
+        </div>
+      </Panel>
+
+      {/* -------------------------------------------------- 审卡规则 */}
       <Panel>
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line-strong px-5 py-3.5">
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
@@ -610,93 +863,297 @@ function RulesTab({ showToast, currentUser }) {
             <h3 className="flex items-center gap-2 font-serif text-[19px] font-bold tracking-[0.02em] text-slate-100">
               <Shield className="h-4 w-4 text-amber-500" strokeWidth={1.7} />辅助审卡规则
             </h3>
-            <Badge className={BADGE_LG} tone={scope === 'global' ? 'amber' : 'cyan'}>
-              {scope === 'global' ? '全局基准' : '个人规则'}
-            </Badge>
+            <Badge className={BADGE_LG} tone={stateTone}>{stateLabel}</Badge>
           </div>
-          <Button variant="ghost" className={MINI} onClick={load}><RefreshCw className={cx('w-3.5 h-3.5', loading && 'animate-spin')} />重新读取</Button>
+          <Button variant="ghost" className={MINI} onClick={() => refresh(selectedId)}>
+            <RefreshCw className={cx('w-3.5 h-3.5', loading && 'animate-spin')} />重新读取
+          </Button>
         </div>
         <div className="space-y-5 p-5">
           <p className="text-[16px] leading-relaxed text-slate-500">
-            所有规则都是<b className="text-slate-300">可选</b>的：数字填 0、开关关掉即表示不检查这一条。规则由服务端判定，玩家端改不了。
-          </p>
-          <p className="border-l-2 border-line-strong pl-3 text-[14px] leading-relaxed text-slate-500">
-            首席守秘人保存的规则是全站默认基准，普通守秘人的改动只影响自己的审卡判定。
+            默认值全部来自<b className="text-slate-300">官方规则书</b>。
           </p>
 
-          <Toggle
-            checked={Boolean(rules.enabled)}
-            onChange={(v) => setRules({ ...rules, enabled: v })}
-            label="启用规则审卡"
-            hint="关闭后批量审卡仍可运行，但只会用「职业公式预算」这类内置底线，不套用下面的自定义阈值"
-          />
+          <fieldset disabled={locked} className={cx('m-0 min-w-0 space-y-5 border-0 p-0', locked && 'opacity-70')}>
+            {/* 核心开关：审卡中心 / 审卡规则的总闸 */}
+            <div className={cx('rounded-[2px] border p-4',
+              rulesOn ? 'border-amber-600/45 bg-amber-500/[0.06]' : 'border-line-strong bg-paper-deep/40')}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Power className={cx('h-4 w-4', rulesOn ? 'text-amber-500' : 'text-ink-mute')} strokeWidth={1.7} />
+                    <span className="font-serif text-[17px] font-bold text-slate-100">启用自定义规则审卡</span>
+                    <Badge className={BADGE_LG} tone={rulesOn ? 'emerald' : 'slate'}>{rulesOn ? '已启用' : '已关闭'}</Badge>
+                  </div>
+                  <p className="mt-1 text-[14px] leading-relaxed text-slate-500">
+                    审卡中心与审卡规则的核心开关：关闭后只执行官方规则书基线；开启后按下面的自定义检查项复核。
+                  </p>
+                </div>
+                <Toggle compact checked={rulesOn} onChange={(v) => setRules({ ...rules, enabled: v })} ariaLabel="启用自定义规则审卡" />
+              </div>
+            </div>
 
-          <div>
-            <div className="mb-3 flex items-baseline justify-between border-b border-line pb-1.5">
-              <h4 className="font-serif text-[16px] font-bold text-slate-100">数值阈值</h4>
-              <span className="caption !text-[14px]">THRESHOLDS</span>
+            <div className={cx(!rulesOn && 'opacity-45')}>
+              <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-1.5">
+                <h4 className="font-serif text-[16px] font-bold text-slate-100">规则项</h4>
+                <span className="caption !text-[14px]">RULES · 影响是否合规</span>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {numbers.map((m) => (
+                  <Field key={m.key} className={FIELD_LG} label={m.label} hint={m.hint}>
+                    <NumberInput
+                      min={0}
+                      max={m.key === 'minPointUsage' ? 1 : 10000}
+                      value={rules[m.key]}
+                      onChange={(v) => setRules({ ...rules, [m.key]: v === '' ? 0 : v })}
+                    />
+                  </Field>
+                ))}
+              </div>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {booleans.map((m) => (
+                  <div key={m.key} className="space-y-1">
+                    <Toggle
+                      checked={Boolean(rules[m.key])}
+                      onChange={(v) => setRules({ ...rules, [m.key]: v })}
+                      label={m.label}
+                    />
+                    {m.hint ? <p className="pl-[52px] text-[14px] leading-relaxed text-slate-500">{m.hint}</p> : null}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {numbers.map((m) => (
-                <Field key={m.key} className={FIELD_LG} label={m.label} hint={m.hint}>
-                  <NumberInput
-                    min={0}
-                    max={m.key === 'minPointUsage' ? 1 : 10000}
-                    value={rules[m.key]}
-                    onChange={(v) => setRules({ ...rules, [m.key]: v === '' ? 0 : v })}
-                  />
-                </Field>
-              ))}
-            </div>
-          </div>
 
-          <div>
-            <div className="mb-3 flex items-baseline justify-between border-b border-line pb-1.5">
-              <h4 className="font-serif text-[16px] font-bold text-slate-100">开关项</h4>
-              <span className="caption !text-[14px]">TOGGLES</span>
+            <div className={cx(!rulesOn && 'opacity-45')}>
+              <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-1.5">
+                <h4 className="font-serif text-[16px] font-bold text-slate-100">功能项</h4>
+                <span className="caption !text-[14px]">FEATURES · 只影响提示，不改变合规结论</span>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {featureMeta.map((m) => (
+                  <div key={m.key} className="space-y-1">
+                    <Toggle
+                      checked={Boolean(rules[m.key])}
+                      onChange={(v) => setRules({ ...rules, [m.key]: v })}
+                      label={m.label}
+                    />
+                    {m.hint ? <p className="pl-[52px] text-[14px] leading-relaxed text-slate-500">{m.hint}</p> : null}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {booleans.map((m) => (
-                <Toggle
-                  key={m.key}
-                  checked={Boolean(rules[m.key])}
-                  onChange={(v) => setRules({ ...rules, [m.key]: v })}
-                  label={m.label}
-                />
-              ))}
-            </div>
-          </div>
 
-          <div className="flex flex-wrap gap-2 border-t border-line pt-4">
-            <Button onClick={save} disabled={busy}><Save className="w-4 h-4" />{busy ? '保存中…' : '保存规则'}</Button>
-            <Button variant="ghost" onClick={() => setRules(DEFAULT_AUDIT_RULES)}>恢复默认</Button>
-            {scope === 'personal' ? (
-              <Button
-                variant="ghost"
-                onClick={restoreGlobal}
-                disabled={busy}
-                title="丢弃个人覆盖，回到首席守秘人维护的全局基准"
-              >
-                <RefreshCw className="w-4 h-4" />恢复为全局基准
+            <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
+              <Button onClick={saveCurrent} disabled={busy || loading || locked}>
+                <Save className="w-4 h-4" />{busy ? '保存中…' : isDraft ? '保存临时规则' : '保存规则集'}
               </Button>
-            ) : null}
-          </div>
+              <Button variant="ghost" onClick={resetCurrent} disabled={busy || loading || locked}>
+                <RotateCcw className="w-4 h-4" />{isDraft ? '清空临时规则' : '重置这套规则集'}
+              </Button>
+              <span className="text-[13.5px] leading-relaxed text-slate-500">
+                {locked ? '只读：这套规则集不由你维护。' : isDraft ? '临时规则只影响你本人的审卡结论。' : '保存的是这套规则集本身；是否生效取决于「设为当前」。'}
+              </span>
+            </div>
+          </fieldset>
         </div>
       </Panel>
 
-      <section className="border-l-2 border-ink bg-paper-deep/30 py-4 pl-4 pr-5" aria-label="规则说明与建议">
-        <div className="mb-3 flex items-baseline justify-between gap-3 border-b border-line pb-2">
-          <p className="font-serif text-[16px] font-bold text-slate-200">规则说明与建议</p>
-          <span className="caption !text-[14px]">MARGINALIA</span>
+      {/* -------------------------------------------------- 自定义规则 */}
+      <Panel>
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line-strong px-5 py-3.5">
+          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+            <span className="font-mono text-[14px] tracking-[0.18em] text-red-500">CUSTOM RULES 02</span>
+            <h3 className="flex items-center gap-2 font-serif text-[19px] font-bold tracking-[0.02em] text-slate-100">
+              <Wand2 className="h-4 w-4 text-amber-500" strokeWidth={1.7} />自定义规则
+            </h3>
+            <Badge className={BADGE_LG} tone="slate">{visibleHouseRules.length} 条</Badge>
+          </div>
+          <span className="text-[14px] text-slate-500">会改变车卡数值，或增加审卡要求</span>
         </div>
-        <div className="space-y-2 text-[14px] leading-relaxed text-slate-500">
-          <p>· <b className="text-slate-300">属性上限 / 下限 / 总和上限</b>用来卡"六边形战士"：常规 1920s 调查员八项属性合计多在 450-650。</p>
-          <p>· <b className="text-slate-300">职业/兴趣技能成功率上限</b>建议 70-80：初始就 90% 的侦查会让模组失去悬念；两项分开设，可以允许兴趣技能堆得更高或更低。</p>
-          <p>· <b className="text-slate-300">禁止混点</b>是核心一致性检查：职业点只能投本职技能，兴趣点才是不限的（点数总量本身已由职业公式与智力×2 兜底）。</p>
-          <p>· <b className="text-slate-300">职业点最低使用率</b>能揪出"懒得分配"的卡（例如低于 0.8 就提醒）。</p>
-          <p>· 自定义技能、关闭年龄补正这类情况只做 info 提示，最终仍由你判断。</p>
+        <div className="space-y-4 p-5">
+          <p className="text-[16px] leading-relaxed text-slate-500">
+            自定义规则随规则集保存。技能基础值会写进车卡数值，玩家在「房规」页能看到；
+            属性 / 技能门槛只进入审卡结论。
+          </p>
+
+          <fieldset disabled={locked} className={cx('m-0 min-w-0 space-y-4 border-0 p-0', locked && 'opacity-70')}>
+            {visibleHouseRules.length === 0 ? (
+              <p className="border-l-2 border-line-strong bg-paper-deep/40 px-3 py-2 text-[14px] text-slate-500">
+                {isDraft ? '临时规则里还没有审卡要求。下面加一条试试。' : '这套规则集还没有自定义规则。下面加一条试试，例如「魅惑基础值 = APP ÷ 2」。'}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {visibleHouseRules.map((r) => (
+                  <div key={r.id} className="flex items-start justify-between gap-3 border border-line-strong bg-paper-raised p-3">
+                    <div className="min-w-0">
+                      <Badge tone={r.type === 'deriveBase' ? 'amber' : 'slate'}>{ruleTypeLabel(r.type)}</Badge>
+                      <p className="mt-1 text-[15px] leading-relaxed text-slate-200">{houseRuleText(r)}</p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      className={MINI}
+                      aria-label={`删除自定义规则 ${houseRuleText(r)}`}
+                      onClick={() => setHouseRules((prev) => prev.filter((x) => x.id !== r.id))}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="border-t border-line pt-4">
+              <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                <h4 className="font-serif text-[16px] font-bold text-slate-100">新增自定义规则</h4>
+                <span className="caption !text-[14px]">加完记得点上面的「{isDraft ? '保存临时规则' : '保存规则集'}」</span>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="类型">
+                  <Select value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })}>
+                    {typeOptions.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+                  </Select>
+                </Field>
+
+                {draft.type === 'deriveBase' ? (
+                  <>
+                    <Field label="匹配目标" hint={`规则书基础值 ${SKILL_BY_KEY[draft.skill]?.base ?? 0}（特殊技能按属性计算）`}>
+                      <Select value={draft.skill} onChange={(e) => setDraft({ ...draft, skill: e.target.value })}>
+                        {skillOptions.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
+                      </Select>
+                    </Field>
+                    <Field label="匹配来源">
+                      <Select
+                        value={draft.source}
+                        onChange={(e) => {
+                          const source = e.target.value;
+                          setDraft({ ...draft, source, op: source === 'fixed' ? 'eq' : (draft.op === 'eq' ? 'div' : draft.op) });
+                        }}
+                      >
+                        <option value="fixed">固定值</option>
+                        <option value="attr">各项属性</option>
+                      </Select>
+                    </Field>
+                    {draft.source === 'attr' ? (
+                      <Field label="属性来源">
+                        <Select value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })}>
+                          {ALL_CHARS.map((k) => <option key={k} value={k}>{CHAR_LABEL[k] || k}</option>)}
+                        </Select>
+                      </Field>
+                    ) : null}
+                    <Field label="匹配方式">
+                      <Select
+                        value={draft.source === 'fixed' ? 'eq' : draft.op}
+                        disabled={draft.source === 'fixed'}
+                        onChange={(e) => setDraft({ ...draft, op: e.target.value })}
+                      >
+                        {draft.source === 'fixed' ? <option value="eq">等于</option> : (
+                          <>
+                            <option value="div">除法（÷）</option>
+                            <option value="mul">乘法（×）</option>
+                          </>
+                        )}
+                      </Select>
+                    </Field>
+                    <Field label="匹配数值" hint={draft.source === 'fixed' ? '直接覆盖原基础值' : draft.op === 'mul' ? '如 2 = ×2' : '如 2 = ÷2'}>
+                      <NumberInput
+                        min={draft.source === 'fixed' ? 0 : 1}
+                        max={draft.source === 'fixed' ? 999 : 20}
+                        value={draft.value}
+                        onChange={(v) => setDraft({ ...draft, value: v === '' ? (draft.source === 'fixed' ? 0 : 2) : v })}
+                      />
+                    </Field>
+                    <Field label="调整数值" hint="运算后再加减，可为负">
+                      <NumberInput min={-50} max={50} value={draft.adjust} onChange={(v) => setDraft({ ...draft, adjust: v === '' ? 0 : v })} />
+                    </Field>
+                  </>
+                ) : null}
+
+                {draft.type === 'requireAttr' ? (
+                  <>
+                    <Field label="匹配目标">
+                      <Select value={draft.attr} onChange={(e) => setDraft({ ...draft, attr: e.target.value })}>
+                        {ALL_CHARS.map((k) => <option key={k} value={k}>{CHAR_LABEL[k] || k}</option>)}
+                      </Select>
+                    </Field>
+                    <Field label="最小数值" hint="0 = 不设下限">
+                      <NumberInput min={0} max={99} value={draft.min} onChange={(v) => setDraft({ ...draft, min: v === '' ? 0 : v })} />
+                    </Field>
+                    <Field label="最大数值" hint="0 = 不设上限">
+                      <NumberInput min={0} max={99} value={draft.max} onChange={(v) => setDraft({ ...draft, max: v === '' ? 0 : v })} />
+                    </Field>
+                  </>
+                ) : null}
+
+                {draft.type === 'requireSkill' ? (
+                  <>
+                    <div className="sm:col-span-2">
+                      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[13px] font-semibold tracking-[0.14em] text-ink-mute">匹配目标</span>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1.5 rounded-[2px] border border-amber-600/55 bg-amber-500/10 px-3.5 py-1.5 text-[14.5px] font-semibold tracking-[0.06em] text-amber-300 transition-colors hover:border-amber-500 hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                          disabled={draft.skills.length >= 8}
+                          onClick={() => setDraft({ ...draft, skills: [...draft.skills, ''] })}
+                        >
+                          <Plus className="h-4 w-4" />添加目标
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {draft.skills.map((v, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <Select
+                              value={v}
+                              className="w-full max-w-[16rem]"
+                              onChange={(e) => setDraft({ ...draft, skills: draft.skills.map((x, j) => (j === i ? e.target.value : x)) })}
+                            >
+                              <option value="">— 选择技能 —</option>
+                              {skillOptions.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
+                            </Select>
+                            {draft.skills.length > 1 ? (
+                              <button
+                                type="button"
+                                className="px-2 text-slate-500 transition-colors hover:text-red-500"
+                                aria-label="移除这个目标"
+                                onClick={() => setDraft({ ...draft, skills: draft.skills.filter((_, j) => j !== i) })}
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <Field label="匹配标准" hint="技能总值下限">
+                      <NumberInput min={1} max={99} value={draft.min} onChange={(v) => setDraft({ ...draft, min: v === '' ? 60 : v })} />
+                    </Field>
+                    {draft.skills.length > 1 ? (
+                      <>
+                        <Field label="匹配方式">
+                          <Select value={draft.mode} onChange={(e) => setDraft({ ...draft, mode: e.target.value })}>
+                            <option value="any">任选达标（or）</option>
+                            <option value="all">全部满足（and）</option>
+                          </Select>
+                        </Field>
+                        {draft.mode === 'any' ? (
+                          <Field label="达标数量">
+                            <NumberInput min={1} max={8} value={draft.count} onChange={(v) => setDraft({ ...draft, count: v === '' ? 1 : v })} />
+                          </Field>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <Button variant="ghost" onClick={addRule}><Plus className="w-4 h-4" />加入自定义规则</Button>
+                <span className="text-[13.5px] text-slate-500">
+                  例：取悦基础值 = 固定 30；或「侦查 / 聆听 任选一项 ≥ 60」。
+                </span>
+              </div>
+            </div>
+          </fieldset>
         </div>
-      </section>
+      </Panel>
     </div>
   );
 }

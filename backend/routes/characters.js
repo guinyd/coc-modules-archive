@@ -31,6 +31,7 @@ import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { requireAuth, requireAdmin, optionalAuth } from '../lib/auth.js';
 import {
   isChief, isCustodian, custodianIds, canManageCard, canReviewCard, auditRulesFor, keeperDirectory,
+  ruleSetById, ruleSetSummary, snapshotRuleSet, houseRulesFor, activeRuleSet, isKeeper,
 } from '../lib/roles.js';
 import { parseCharacter, parseReview, parseBatchReview, vArray, vEnum, vId, vStr } from '../lib/validate.js';
 import { audit } from '../lib/audit.js';
@@ -187,9 +188,44 @@ function knownModuleIds() {
   return new Set(db().modules.map((m) => m.id));
 }
 
-/** 规则引擎上下文：把 KP 自定义职业模板喂进去，前后端算法才会一致 */
-function rulesCtx() {
-  return { customOccupations: customOccupations() };
+/** 规则引擎上下文：把 KP 自定义职业模板与房规喂进去，前后端算法才会一致 */
+function rulesCtx(houseRules) {
+  return { customOccupations: customOccupations(), houseRules: Array.isArray(houseRules) ? houseRules : [] };
+}
+
+/** 某张卡适用的规则集：提交快照 > 卡上选择 > 审阅者当前规则集 */
+function cardRules(character, actor) {
+  const snap = character?.ruleSnapshot;
+  if (snap && typeof snap === 'object') {
+    return {
+      auditRules: { ...auditRulesFor(actor), ...(snap.auditRules || {}) },
+      houseRules: Array.isArray(snap.houseRules) ? snap.houseRules : [],
+      set: null,
+      snapshot: snap,
+    };
+  }
+  const set = character?.ruleSetId ? ruleSetById(character.ruleSetId) : null;
+  if (set) {
+    return {
+      auditRules: { ...auditRulesFor(actor), ...(set.auditRules || {}) },
+      houseRules: Array.isArray(set.houseRules) ? set.houseRules : [],
+      set,
+      snapshot: null,
+    };
+  }
+  return { auditRules: auditRulesFor(actor), houseRules: houseRulesFor(actor), set: null, snapshot: null };
+}
+
+/**
+ * 玩家/守秘人都可以选任意一套已发布的规则集（这正是「把卡交给哪个 KP 的房规」的语义）；
+ * 选择规则集不授予任何管理或审卡权限。
+ */
+function resolveChosenSet(actor, value) {
+  if (value === null || value === '' || value === undefined) return null;
+  if (typeof value !== 'string') throw badRequest('规则集参数不正确');
+  const set = ruleSetById(value);
+  if (!set) throw badRequest('选择的规则集不存在');
+  return set;
 }
 
 /** KP 当前的辅助审卡规则（首席用全局基准，普通 KP 叠加自己的差异项） */
@@ -227,7 +263,8 @@ function present(character, { actor, full = true }) {
     const m = findModuleById(l.moduleId);
     return { ...l, moduleTitle: m ? m.title : '（模组已删除）', moduleRegion: m?.region || '', moduleEra: m?.era || '' };
   });
-  const ctx = rulesCtx();
+  const rr = cardRules(character, actor);
+  const ctx = rulesCtx(rr.houseRules);
   const derived = computeSheet(character, ctx);
   const warnings = validateSheet(character, ctx);
   const chief = isChief(actor);
@@ -252,6 +289,13 @@ function present(character, { actor, full = true }) {
     // 通过即清空批复；仅驳回时把说明回显给玩家
     comment: reviewStatus === 'rejected' ? (latest?.comment || '') : '',
     targetKpName: character.reviewKpName || '',
+  };
+  // 审卡阈值属于守秘人的工作参数：玩家只看得到房规与发布者，看不到审卡阈值
+  const visibleRules = (obj) => {
+    if (!obj) return null;
+    const copy = { ...obj };
+    if (!isKeeper(actor)) delete copy.auditRules;
+    return copy;
   };
   const head = {
     id: character.id,
@@ -280,6 +324,25 @@ function present(character, { actor, full = true }) {
       : null,
     reviewStatus,
     review,
+    // 编辑器要靠这个字段回显玩家选过的规则集（present 里另外给 ruleSet 摘要）
+    ruleSetId: character.ruleSetId || null,
+    // 房规 / 规则集：编辑器与审卡页都要显示「这张卡按哪套规则」
+    ruleSet: visibleRules(rr.set ? ruleSetSummary(rr.set) : (rr.snapshot ? {
+      id: rr.snapshot.setId || null,
+      name: rr.snapshot.setName || '',
+      scope: rr.snapshot.scope || 'global',
+      ownerId: null,
+      ownerName: rr.snapshot.ownerName || '',
+      houseRules: Array.isArray(rr.snapshot.houseRules) ? rr.snapshot.houseRules : [],
+      auditRules: rr.snapshot.auditRules || {},
+    } : null)),
+    ruleSnapshot: rr.snapshot ? {
+      setId: rr.snapshot.setId || null,
+      setName: rr.snapshot.setName || '',
+      ownerName: rr.snapshot.ownerName || '',
+      at: rr.snapshot.at || 0,
+      houseRules: Array.isArray(rr.snapshot.houseRules) ? rr.snapshot.houseRules : [],
+    } : null,
   };
 
   if (!full) {
@@ -342,7 +405,7 @@ function present(character, { actor, full = true }) {
     moduleLinks: links,
     derived,
     warnings,
-    audit: canReview ? auditSheet(character, auditRules(actor), ctx) : null,
+    audit: canReview ? auditSheet(character, rr.auditRules, ctx) : null,
     reviewHistory: canReview ? history.slice(0, 10) : [],
   };
 }
@@ -473,9 +536,13 @@ router.post('/characters', (req, res) => {
     }
   }
   enforceCharacterQuota(ownerId);
+  // 建房时可直接选用一套房规（玩家自己的或全局的）
+  const chosen = resolveChosenSet(req.user, req.body?.ruleSetId);
   // 首次保存也要过教育增强守卫：防止建卡请求里夹带伪造的结算流水
   const data = stampLegendary(guardEduGrowth(guardKpOnlyFields(
-    parseCharacter(req.body, { knownModuleIds: knownModuleIds(), ctx: rulesCtx() }),
+    parseCharacter(req.body, {
+      knownModuleIds: knownModuleIds(), ctx: rulesCtx(chosen?.houseRules || []),
+    }),
     req.user,
     null,
   ), req.user, null), req.user);
@@ -486,6 +553,8 @@ router.post('/characters', (req, res) => {
     ...data,
     skills: data.skills && data.skills.length ? data.skills : blankSkills(),
     custody: [],
+    ruleSetId: chosen ? chosen.id : null,
+    ruleSnapshot: null,
     reviewStatus: 'none',
     reviewKpId: null,
     reviewKpName: null,
@@ -519,6 +588,12 @@ router.put('/characters/:id', (req, res) => {
   ), req.user, c), req.user);
   delete data.ownerId;
   Object.assign(c, data, { updatedAt: Date.now() });
+  // 玩家在「房规」页换规则集：清掉旧快照，等重新提交时再冻结
+  if (req.body && Object.hasOwn(req.body, 'ruleSetId')) {
+    const chosen = resolveChosenSet(req.user, req.body.ruleSetId);
+    c.ruleSetId = chosen ? chosen.id : null;
+    c.ruleSnapshot = null;
+  }
   // 卡片内容变了，已通过的审核即失效；驳回意见保留到玩家重新提交
   invalidateReview(c);
   save();
@@ -547,6 +622,11 @@ router.patch('/characters/:id', (req, res) => {
     c.ownerId = target;
   }
   Object.assign(c, data, { updatedAt: Date.now() });
+  if (req.body && Object.hasOwn(req.body, 'ruleSetId')) {
+    const chosen = resolveChosenSet(req.user, req.body.ruleSetId);
+    c.ruleSetId = chosen ? chosen.id : null;
+    c.ruleSnapshot = null;
+  }
   invalidateReview(c);
   save();
   audit(req, 'character.patch', { characterId: c.id, fields: Object.keys(data) });
@@ -652,6 +732,16 @@ router.post('/characters/:id/submit', (req, res) => {
   }
   c.reviewStatus = 'pending';
   c.submittedAt = Date.now();
+  // 冻结房规：以提交这一刻的规则集为准，之后 KP 改规则不影响已提交的卡
+  const chosenSet = (req.body?.ruleSetId !== undefined
+    ? resolveChosenSet(req.user, req.body.ruleSetId)
+    : (c.ruleSetId ? ruleSetById(c.ruleSetId) : null));
+  if (chosenSet) {
+    c.ruleSetId = chosenSet.id;
+    c.ruleSnapshot = snapshotRuleSet(chosenSet);
+  } else {
+    c.ruleSnapshot = snapshotRuleSet(activeRuleSet(req.user));
+  }
   c.reviewKpId = target?.id || null;
   c.reviewKpName = target?.username || '';
   c.updatedAt = Date.now();
@@ -739,9 +829,10 @@ router.post('/characters/:id/review', requireAdmin, (req, res) => {
     throw forbidden('这张角色卡不在你的审卡队列中');
   }
   const { verdict, comment } = parseReview(req.body);
-  const ctx = rulesCtx();
-  const rules = auditRules(req.user);
-  const result = auditSheet(c, rules, ctx);
+  // 审核以这张卡提交时冻结的规则集为准（房规 + 审卡规则同源）
+  const rr = cardRules(c, req.user);
+  const ctx = rulesCtx(rr.houseRules);
+  const result = auditSheet(c, rr.auditRules, ctx);
   const now = Date.now();
 
   db().reviews.push({
@@ -790,7 +881,6 @@ router.post('/admin/audit/batch', requireAdmin, (req, res) => {
   const ownerId = typeof req.body?.ownerId === 'string' && req.body.ownerId
     ? vId(req.body.ownerId, '所属玩家', { required: false }) : '';
   const rules = auditRules(req.user);
-  const ctx = rulesCtx();
 
   let list = db().characters.filter((c) => canReviewCard(req.user, c));
   if (scope === 'manual') {
@@ -807,14 +897,17 @@ router.post('/admin/audit/batch', requireAdmin, (req, res) => {
   }
   if (status && STATUSES.includes(status)) list = list.filter((c) => c.status === status);
 
-  const results = list.map((c) => ({
-    characterId: c.id,
-    name: c.name,
-    ownerName: ownerNameOf(c.ownerId),
-    reviewStatus: c.reviewStatus || 'none',
-    updatedAt: c.updatedAt,
-    ...auditSheet(c, rules, ctx),
-  }));
+  const results = list.map((c) => {
+    const rr = cardRules(c, req.user);
+    return {
+      characterId: c.id,
+      name: c.name,
+      ownerName: ownerNameOf(c.ownerId),
+      reviewStatus: c.reviewStatus || 'none',
+      updatedAt: c.updatedAt,
+      ...auditSheet(c, rr.auditRules, rulesCtx(rr.houseRules)),
+    };
+  });
   audit(req, 'admin.audit_batch', {
     scope, count: results.length, failed: results.filter((r) => !r.passed).length,
   });
@@ -855,7 +948,10 @@ router.post('/admin/reviews/batch', requireAdmin, (req, res) => {
       kpName: req.user.username,
       verdict,
       comment: verdict === 'rejected' ? comment : '',
-      stats: auditSheet(c, auditRules(req.user), rulesCtx()).stats,
+      stats: (() => {
+        const rr = cardRules(c, req.user);
+        return auditSheet(c, rr.auditRules, rulesCtx(rr.houseRules)).stats;
+      })(),
       findings: [],
       batch: true,
       createdAt: now,
@@ -877,13 +973,13 @@ router.post('/admin/audit/:id', requireAdmin, (req, res) => {
   const c = findCharacterById(id);
   if (!c) throw notFound('角色卡不存在');
   if (!canReviewCard(req.user, c)) throw forbidden('这张角色卡不在你的审卡队列中');
-  const rules = auditRules(req.user);
+  const rr = cardRules(c, req.user);
   res.json({
     characterId: c.id,
     name: c.name,
     ownerName: ownerNameOf(c.ownerId),
-    rules,
-    ...auditSheet(c, rules, rulesCtx()),
+    rules: rr.auditRules,
+    ...auditSheet(c, rr.auditRules, rulesCtx(rr.houseRules)),
   });
 });
 

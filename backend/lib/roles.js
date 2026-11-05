@@ -12,7 +12,7 @@
 import { audit } from './audit.js';
 import { db } from './db.js';
 import { forbidden } from './errors.js';
-import { CHIEF_KP_TITLE, DEFAULT_AUDIT_RULES, KP_TITLES } from '../../shared/coc7e.js';
+import { CHIEF_KP_TITLE, DEFAULT_AUDIT_RULES, KP_TITLES, normalizeHouseRules } from '../../shared/coc7e.js';
 
 /** 任何守秘人（含首席） */
 export function isKeeper(user) {
@@ -97,16 +97,106 @@ export function canReviewCard(actor, character) {
 }
 
 /**
- * 某个守秘人生效的辅助审卡规则。
- * 层级：内置默认值 < 全局基准（首席维护）< 该 KP 自己的覆盖项。
- * 玩家侧只看到全局基准（用于前端提示），不暴露任何人的私有覆盖。
+ * 审卡规则的三层结构（v10.3 起）：
+ *   1. 官方规则书基线 —— `DEFAULT_AUDIT_RULES`，代码内置、任何人都改不了；
+ *   2. 全局默认规则 —— `settings.auditRules`，由首席守秘人显式「保存为全局默认」；
+ *   3. 个人覆盖 —— `user.auditRules`，只影响本人的审卡判定（首席也一样）。
+ *
+ * 「重置为默认」= 清掉个人覆盖，回到全局默认（全局默认未设时即官方基线）；
+ * 首席编辑自己的规则不会自动写进全局默认，必须显式保存。
  */
+export function officialAuditRules() {
+  return { ...DEFAULT_AUDIT_RULES };
+}
+
+export function globalAuditRules() {
+  const legacy = db().settings?.auditRules || {};
+  const set = globalAuditSet();
+  return { ...DEFAULT_AUDIT_RULES, ...legacy, ...(set?.auditRules || {}) };
+}
+
 export function auditRulesFor(actor) {
-  const base = { ...DEFAULT_AUDIT_RULES, ...(db().settings?.auditRules || {}) };
-  if (isKeeper(actor) && !isChief(actor) && actor.auditRules && typeof actor.auditRules === 'object') {
-    return { ...base, ...actor.auditRules };
+  const base = globalAuditRules();
+  if (!actor) return base;
+  const set = activeRuleSet(actor);
+  // 选了规则集就只用这套；未选择时用「临时规则」（user.auditRules，只对自己生效）
+  if (set) return { ...base, ...(set.auditRules || {}) };
+  const draft = isKeeper(actor) && actor.auditRules && typeof actor.auditRules === 'object' ? actor.auditRules : null;
+  return { ...base, ...(draft || {}) };
+}
+
+// ------------------------------------------------------------------ 规则集
+/** 全部规则集（全局 + 各守秘人个人），按发布者与更新时间排序 */
+export function allRuleSets() {
+  const out = [];
+  for (const s of db().settings?.ruleSets || []) {
+    if (s && s.scope === 'global') out.push(s);
   }
-  return base;
+  for (const u of db().users) {
+    if (u.role !== 'admin') continue;
+    for (const s of u.ruleSets || []) {
+      if (s && s.scope !== 'global') out.push(s);
+    }
+  }
+  return out.filter((s) => s && typeof s.id === 'string');
+}
+
+export function ruleSetById(id) {
+  if (!id) return null;
+  return allRuleSets().find((s) => s.id === id) || null;
+}
+
+/** 某个守秘人当前启用的规则集；未选择时为 null（改用临时规则） */
+export function activeRuleSet(user) {
+  if (!isKeeper(user) || !user.activeRuleSetId) return null;
+  return ruleSetById(user.activeRuleSetId);
+}
+
+/** 该守秘人实际生效的房规（全局集 + 个人集叠加，同 id 以后者为准） */
+export function houseRulesFor(actor) {
+  const base = normalizeHouseRules(globalAuditSet()?.houseRules || []);
+  if (!actor || !isKeeper(actor)) return base;
+  const set = activeRuleSet(actor);
+  const extra = set ? (set.houseRules || []) : (actor.draftHouseRules || []);
+  const merged = new Map(base.map((r) => [r.id, r]));
+  for (const r of normalizeHouseRules(extra)) merged.set(r.id, r);
+  return [...merged.values()];
+}
+
+/** 全局规则集（第一套 scope=global；没有时退回旧的 settings.auditRules） */
+export function globalAuditSet() {
+  return (db().settings?.ruleSets || []).find((s) => s && s.scope === 'global') || null;
+}
+
+/** 给前端的规则集摘要（不含内部字段） */
+export function ruleSetSummary(set) {
+  if (!set) return null;
+  return {
+    id: set.id,
+    name: set.name,
+    scope: set.scope === 'global' ? 'global' : 'personal',
+    ownerId: set.ownerId || null,
+    ownerName: set.ownerName || '',
+    houseRules: normalizeHouseRules(set.houseRules || []),
+    auditRules: set.auditRules && typeof set.auditRules === 'object' ? set.auditRules : {},
+    createdAt: set.createdAt || 0,
+    updatedAt: set.updatedAt || 0,
+  };
+}
+
+/** 提交审核时冻结的规则快照 */
+export function snapshotRuleSet(set) {
+  const s = ruleSetSummary(set);
+  if (!s) return null;
+  return {
+    setId: s.id,
+    setName: s.name,
+    ownerName: s.ownerName,
+    scope: s.scope,
+    houseRules: s.houseRules,
+    auditRules: s.auditRules,
+    at: Date.now(),
+  };
 }
 
 /** 允许普通 KP 在托管卡上直接改的字段（其余一律拒绝） */

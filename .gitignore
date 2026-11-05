@@ -10,6 +10,10 @@ backend/data/
 backend/database.json
 *.log
 logs/
+.demo-data/
+.env
+.env.*
+!.env.example
 
 # 本地测试产物
 tools/_shots/
@@ -30,8 +34,8 @@ tools/_unmapped.txt
 # 本地运行目录（日志与 pid）
 .run/
 
-# 本地演示数据（tools/seed-demo.mjs 的默认落点之外的自定义目录）
-.demo-data/
-
-# 构建临时目录（esbuild/Chrome 的 TEMP）
-.tmp-build/
+# 临时构建 / 原子写残留 / 一次性产物
+.tmp-*/
+*.tmp
+*.bak
+_shots/

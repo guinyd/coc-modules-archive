@@ -28,7 +28,7 @@ const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const BACKUP_KEEP = 14;
 /** 写合并窗口：角色卡连续保存时只落一次盘；进程退出用 saveNow() 兜底。 */
 const SAVE_DEBOUNCE_MS = 120;
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 /** 每个账号默认的角色卡上限；管理员可在账号管理里逐个调整（0 表示暂停建卡）。 */
 export const DEFAULT_MAX_CHARACTERS = 30;
 
@@ -48,7 +48,7 @@ function emptyDB() {
     customOccupations: [],   // KP 自定义职业模板
     reviews: [],             // 角色卡审核记录（批复只存在这里，不进角色卡本体）
     keeperMarks: [],         // 守秘人的「可带团」标记（模组 × 守秘人）
-    settings: { auditRules: null }, // KP 辅助审卡规则（null = 使用内置默认值）
+    settings: { auditRules: null, ruleSets: [] }, // 审卡规则（旧字段）+ 规则集（全局 / 个人，多套）
   };
 }
 
@@ -58,8 +58,35 @@ function ensureShape(d) {
     'customOccupations', 'reviews', 'keeperMarks']) {
     if (!Array.isArray(out[key])) out[key] = [];
   }
-  if (!out.settings || typeof out.settings !== 'object') out.settings = { auditRules: null };
+  if (!out.settings || typeof out.settings !== 'object') out.settings = { auditRules: null, ruleSets: [] };
+  if (!Array.isArray(out.settings.ruleSets)) out.settings.ruleSets = [];
+  ensureGlobalRuleSet(out.settings);
   return out;
+}
+
+// 任何时刻都保留一套全局规则集：玩家在房规页始终能看到「全局默认规则」，
+// 首席也可以直接在它上面发布全局规则。
+function ensureGlobalRuleSet(settings) {
+  const now = new Date().toISOString();
+  const existing = settings.ruleSets.find((s) => s && s.scope === 'global');
+  if (existing) {
+    if (!Array.isArray(existing.houseRules)) existing.houseRules = [];
+    if (!existing.auditRules || typeof existing.auditRules !== 'object') existing.auditRules = {};
+    return existing;
+  }
+  const set = {
+    id: 'rs_global_default',
+    name: '全局默认规则',
+    scope: 'global',
+    ownerId: null,
+    ownerName: '首席守秘人',
+    auditRules: {},
+    houseRules: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  settings.ruleSets.push(set);
+  return set;
 }
 
 // ------------------------------------------------------------------ 迁移
@@ -258,10 +285,54 @@ function migrate(d) {
     if (name) { u.createdByName = name; changed = true; }
   }
 
+  // v9 -> v10：规则集（同一守秘人可保存多套房规 + 审卡规则）
+  //  - settings.ruleSets：全局规则集（首席发布，玩家可选用）
+  //  - users[].ruleSets / activeRuleSetId：个人规则集（任何守秘人可多套，随时切换）
+  //  - characters[].ruleSetId / ruleSnapshot：玩家选用的规则集与提交时冻结的快照
+  const now10 = Date.now();
+  if (!Array.isArray(d.settings.ruleSets)) { d.settings.ruleSets = []; changed = true; }
+  if (d.settings.auditRules && typeof d.settings.auditRules === 'object') {
+    // ensureShape 可能已经补了空的全局集；把旧版全局规则合并进去，别丢数据
+    let globalSet = d.settings.ruleSets.find((s) => s && s.scope === 'global');
+    if (!globalSet) {
+      globalSet = {
+        id: 'rs_global_default', name: '全局默认规则', scope: 'global',
+        ownerId: null, ownerName: '首席守秘人',
+        auditRules: {}, houseRules: [],
+        createdAt: now10, updatedAt: now10,
+      };
+      d.settings.ruleSets.push(globalSet);
+      changed = true;
+    }
+    if (!globalSet.auditRules || !Object.keys(globalSet.auditRules).length) {
+      globalSet.auditRules = { ...d.settings.auditRules };
+      changed = true;
+    }
+  }
+  for (const u of d.users) {
+    if (!Array.isArray(u.ruleSets)) { u.ruleSets = []; changed = true; }
+    if (u.activeRuleSetId === undefined) { u.activeRuleSetId = null; changed = true; }
+    if (u.role === 'admin' && u.auditRules && typeof u.auditRules === 'object' && !u.ruleSets.length) {
+      const set = {
+        id: `rs_${u.id}_default`, name: '我的规则集', scope: 'personal',
+        ownerId: u.id, ownerName: u.username,
+        auditRules: { ...u.auditRules }, houseRules: [],
+        createdAt: now10, updatedAt: now10,
+      };
+      u.ruleSets.push(set);
+      u.activeRuleSetId = set.id;
+      changed = true;
+    }
+  }
+  for (const c of d.characters) {
+    if (c.ruleSetId === undefined) { c.ruleSetId = null; changed = true; }
+    if (c.ruleSnapshot === undefined) { c.ruleSnapshot = null; changed = true; }
+  }
+
   if (!d.schemaVersion || d.schemaVersion < SCHEMA_VERSION) {
     d.schemaVersion = SCHEMA_VERSION;
     changed = true;
-    notes.push(`数据结构升级到 v${SCHEMA_VERSION}（角色卡审核状态 / 自定义职业 / 审卡规则 / 年龄补正分配 / 成长记录与传奇标记）`);
+    notes.push(`数据结构升级到 v${SCHEMA_VERSION}（审卡规则集 / 房规 / 多守秘人托管 / 成长记录与传奇标记）`);
   }
   return { changed, notes };
 }

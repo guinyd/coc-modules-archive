@@ -189,7 +189,8 @@ try {
 
   section('角色卡：年龄补正（分配式）');
   const mkAge = async (age, extra = {}) => (await api('POST', '/api/characters', {
-    token: A, body: { ...blank, name: `年龄补正测试${age}`, age, ...extra },
+    // 年龄补正默认关闭，本节用例需要显式打开
+    token: A, body: { ...blank, name: `年龄补正测试${age}`, age, applyAgeAdjust: true, ...extra },
   })).json;
   const young = await mkAge(30);
   ok('20-39 岁：不扣属性、需要 1 次教育增强检定',
@@ -374,6 +375,10 @@ try {
   await api('DELETE', `/api/characters/${eduCard.json.id}`, { token: A });
 
   section('审卡规则：混点严格化（v1.7）');
+  // 官方基线允许混点；本节显式打开严格化规则项，验证规则真实生效
+  await api('PUT', '/api/admin/audit-rules', {
+    token: A, body: { forbidMixedPoints: true, creditOccOnly: true },
+  });
   const mixedCard = await api('POST', '/api/characters', {
     token: A,
     body: {
@@ -390,13 +395,14 @@ try {
     mixedFindings.some((f) => f.id === 'forbidMixedPoints.sameSkill' && f.level === 'error'),
     JSON.stringify(mixedFindings.map((f) => f.id)));
   ok('信用评级投兴趣点 → 不合规',
-    mixedFindings.some((f) => f.id === 'forbidMixedPoints.credit' && f.level === 'error'));
+    mixedFindings.some((f) => f.id === 'creditOccOnly' && f.level === 'error'));
   ok('职业点投在非本职技能（潜行）→ 不合规',
     mixedFindings.some((f) => f.id === 'forbidMixedPoints' && f.level === 'error'));
   ok('编辑器警告里也能看到混点提示',
     mixedCard.json.warnings.some((w) => w.includes('同时吃职业点与兴趣点'))
-    && mixedCard.json.warnings.some((w) => w.includes('信用评级只能用职业点')));
+    && mixedCard.json.warnings.some((w) => w.includes('信用评级投入了兴趣点')));
   await api('DELETE', `/api/characters/${mixedCard.json.id}`, { token: A });
+  await api('DELETE', '/api/admin/audit-rules', { token: A });
 
   section('教育增强：首次结算后锁定（方案 C）');
   const settle = (extra = {}) => ({
@@ -909,6 +915,33 @@ try {
   const playerRules = await api('PUT', '/api/admin/audit-rules', { token: playerToken, body: { enabled: true } });
   ok('玩家改审卡规则 → 403', playerRules.status === 403);
 
+  // 未选择模式：临时规则只写在自己名下，不新建规则集，且不能改技能基础值
+  const aRulesBefore = await api('GET', '/api/admin/audit-rules', { token: A });
+  const setCountBefore = (await api('GET', '/api/rule-sets', { token: A })).json?.items?.length || 0;
+  const draftPut = await api('PUT', '/api/admin/audit-rules', {
+    token: A,
+    body: {
+      auditRules: { ...aRulesBefore.json.rules, charMax: 88 },
+      houseRules: [
+        { type: 'deriveBase', skill: 'charm', source: 'fixed', value: 30 },
+        { type: 'requireAttr', attr: 'INT', min: 70, max: 0 },
+      ],
+    },
+  });
+  const setsAfterDraft = await api('GET', '/api/rule-sets', { token: A });
+  ok('未选择模式保存规则不会新建规则集',
+    draftPut.status === 200 && draftPut.json.draft === true
+    && (setsAfterDraft.json?.items?.length || 0) === setCountBefore
+    && draftPut.json.activeSetId === null);
+  const aDraft = await api('GET', '/api/admin/audit-rules', { token: A });
+  ok('临时规则只保留审卡校验、丢弃技能基础值',
+    aDraft.json.draftHouseRules?.length === 1 && aDraft.json.draftHouseRules[0].type === 'requireAttr'
+    && aDraft.json.effective?.charMax === 88);
+  // 还原临时规则，避免影响后续断言
+  await api('PUT', '/api/admin/audit-rules', {
+    token: A, body: { auditRules: { ...(aDraft.json.rules || {}), charMax: 90 }, houseRules: [] },
+  });
+
   const auditOne = await api('POST', `/api/admin/audit/${usingTpl.json.id}`, { token: A });
   ok('单张审卡返回结论', auditOne.status === 200 && typeof auditOne.json.passed === 'boolean');
   ok('单张审卡返回规则统计', auditOne.json.stats && 'charTotal' in auditOne.json.stats);
@@ -958,6 +991,90 @@ try {
   ok('删除模板会报告受影响的角色卡数', typeof tplDel.json.affectedCharacters === 'number');
   await api('DELETE', `/api/characters/${usingTpl.json.id}`, { token: A });
 
+  section('规则集与房规（v10.4）');
+  const sets0 = await api('GET', '/api/rule-sets', { token: A });
+  ok('规则集列表含全局集', sets0.status === 200 && sets0.json.items.some((s) => s.scope === 'global'));
+  const mkSet = await api('POST', '/api/rule-sets', {
+    token: A,
+    body: {
+      name: '冒烟房规集',
+      scope: 'personal',
+      auditRules: { enabled: true, charMax: 95 },
+      houseRules: [
+        { type: 'deriveBase', skill: 'charm', formula: { from: 'APP', div: 2, add: 0, round: 'round' } },
+        { type: 'requireAttr', attr: 'INT', min: 90, max: 0 },
+        { type: 'requireSkill', skills: ['charm', 'fastTalk'], min: 60, mode: 'any', count: 1 },
+      ],
+    },
+  });
+  ok('守秘人可保存多套规则集', mkSet.status === 201 && mkSet.json.item.houseRules.length === 3);
+  const rsId = mkSet.json.item.id;
+  const act = await api('PUT', `/api/rule-sets/${rsId}/active`, { token: A });
+  ok('可切换当前使用的规则集', act.status === 200 && act.json.activeId === rsId);
+
+  const houseCard = await api('POST', '/api/characters', {
+    token: A,
+    body: {
+      ...blank, name: '房规基础值卡', occupationId: 2, ruleSetId: rsId,
+      chars: { STR: 50, CON: 50, SIZ: 50, DEX: 50, APP: 80, INT: 60, POW: 50, EDU: 60, Luck: 50 },
+    },
+  });
+  const houseCharm = houseCard.json?.derived?.skills?.find((s) => s.key === 'charm');
+  ok('房规改写技能基础值（APP÷2）', houseCard.status === 200 && houseCharm?.base === 40);
+  ok('房规属性门槛进入审卡结论', houseCard.json.audit.findings.some((f) => f.id.startsWith('house.') && f.detail.includes('智力')));
+  ok('房规技能组按 or 判定', houseCard.json.audit.findings.some((f) => f.id.startsWith('house.') && f.detail.includes('至少')));
+
+  const subHouse = await api('POST', `/api/characters/${houseCard.json.id}/submit`, { token: A, body: { ruleSetId: rsId } });
+  ok('提交时冻结规则快照', subHouse.status === 200 && subHouse.json.ruleSnapshot?.setId === rsId);
+  await api('PUT', `/api/rule-sets/${rsId}`, {
+    token: A,
+    body: {
+      name: '冒烟房规集（已改）',
+      auditRules: { charMax: 99 },
+      houseRules: [{ type: 'deriveBase', skill: 'charm', formula: { from: 'APP', div: 4 } }],
+    },
+  });
+  const houseAudit = await api('POST', `/api/admin/audit/${houseCard.json.id}`, { token: A });
+  ok('审卡沿用提交时冻结的规则', houseAudit.json.rules?.charMax === 95
+    && houseAudit.json.findings.some((f) => f.detail.includes('智力至少 90')));
+
+  // 新房规形态：固定值 / 属性乘法 / 多目标技能组；并验证卡上 ruleSetId 与 houseBase 标记
+  const mkSet2 = await api('POST', '/api/rule-sets', {
+    token: A,
+    body: {
+      name: '冒烟新房规',
+      scope: 'personal',
+      houseRules: [
+        { type: 'deriveBase', skill: 'charm', source: 'fixed', value: 30, adjust: 2 },
+        { type: 'deriveBase', skill: 'listen', source: 'attr', from: 'INT', op: 'mul', value: 2, adjust: -5 },
+        { type: 'requireSkill', skills: ['charm', 'fastTalk'], min: 60, mode: 'any', count: 2 },
+      ],
+    },
+  });
+  const rs2 = mkSet2.json?.item?.id;
+  ok('新房规结构（固定值/乘法）可保存', mkSet2.status === 201 && mkSet2.json.item.houseRules.length === 3);
+  const card2 = await api('POST', '/api/characters', {
+    token: A,
+    body: {
+      ...blank, name: '新房规卡', occupationId: 2, ruleSetId: rs2,
+      chars: { STR: 50, CON: 50, SIZ: 50, DEX: 50, APP: 80, INT: 60, POW: 50, EDU: 60, Luck: 50 },
+    },
+  });
+  const sk2 = (k) => card2.json?.derived?.skills?.find((s) => s.key === k);
+  ok('房规固定值覆盖技能基础值', card2.status === 200 && sk2('charm')?.base === 32);
+  ok('房规属性乘法改写基础值', sk2('listen')?.base === 115);
+  ok('房规改写的技能带 houseBase 标记', sk2('charm')?.houseBase === true && sk2('fastTalk')?.houseBase !== true);
+  ok('角色卡回显所选规则集', card2.json.ruleSetId === rs2 && card2.json.ruleSet?.name === '冒烟新房规');
+  await api('DELETE', `/api/rule-sets/${rs2}`, { token: A });
+  await api('DELETE', `/api/characters/${card2.json.id}`, { token: A });
+
+  const pSet = await api('POST', '/api/rule-sets', { token: playerToken, body: { name: '玩家房规' } });
+  ok('玩家不能创建规则集 → 403', pSet.status === 403);
+  const pAct = await api('PUT', `/api/rule-sets/${rsId}/active`, { token: playerToken });
+  ok('玩家不能启用规则集 → 403', pAct.status === 403);
+  await api('DELETE', `/api/rule-sets/${rsId}`, { token: A });
+  await api('DELETE', `/api/characters/${houseCard.json.id}`, { token: A });
+
   section('多 KP 权限（v10.1）');
   const suffix = Date.now().toString(36);
   const keeperName = `smoke_kp_${suffix}`;
@@ -987,6 +1104,47 @@ try {
     token: K, body: { username: `smoke_kp3_${suffix}`, password: 'Kp3-Smoke-1920', role: 'admin' },
   });
   ok('普通守秘人不能任命守秘人 → 403', kMakeKp.status === 403);
+
+  // 规则集权限：普通守秘人只能管理自己的个人集
+  const kSets = await api('GET', '/api/rule-sets', { token: K });
+  const globalSet = (kSets.json?.items || []).find((s) => s.scope === 'global');
+  ok('普通守秘人能看到全局规则集', Boolean(globalSet));
+  const kPutGlobal = await api('PUT', `/api/rule-sets/${globalSet.id}`, {
+    token: K, body: { name: '越权改全局', auditRules: {}, houseRules: [] },
+  });
+  ok('普通守秘人不能改全局规则集 → 403', kPutGlobal.status === 403);
+  const kPostGlobal = await api('POST', '/api/rule-sets', {
+    token: K, body: { name: '越权全局', scope: 'global', auditRules: {}, houseRules: [] },
+  });
+  ok('普通守秘人不能发布全局规则集 → 403', kPostGlobal.status === 403);
+  const chiefSet = await api('POST', '/api/rule-sets', {
+    token: A, body: { name: `首席房规_${suffix}`, scope: 'personal', auditRules: {}, houseRules: [] },
+  });
+  const kPutOther = await api('PUT', `/api/rule-sets/${chiefSet.json.item.id}`, {
+    token: K, body: { name: '越权改名', auditRules: {}, houseRules: [] },
+  });
+  ok('普通守秘人不能改别人的规则集 → 403', kPutOther.status === 403);
+  const kMine = await api('POST', '/api/rule-sets', {
+    token: K, body: { name: `我的房规_${suffix}`, scope: 'personal', auditRules: {}, houseRules: [] },
+  });
+  ok('普通守秘人可建自己的规则集',
+    (kMine.status === 200 || kMine.status === 201) && kMine.json?.item?.scope === 'personal');
+  const kActChief = await api('PUT', '/api/rule-sets/active', {
+    token: K, body: { id: chiefSet.json.item.id },
+  });
+  ok('普通守秘人可把首席发布的规则集设为当前',
+    kActChief.status === 200 && kActChief.json?.activeId === chiefSet.json.item.id);
+  const kActNone = await api('PUT', '/api/rule-sets/active', { token: K, body: { id: null } });
+  ok('设为未选择会清空当前规则集', kActNone.status === 200 && kActNone.json?.activeId === null);
+  const kDelOther = await api('DELETE', `/api/rule-sets/${chiefSet.json.item.id}`, { token: K });
+  ok('普通守秘人不能删别人的规则集 → 403', kDelOther.status === 403);
+  const delGlobal = await api('DELETE', `/api/rule-sets/${globalSet.id}`, { token: A });
+  ok('全局默认规则集不能被删除 → 403', delGlobal.status === 403);
+  const chiefDelKp = await api('DELETE', `/api/rule-sets/${kMine.json.item.id}`, { token: A });
+  ok('首席可删普通守秘人的个人规则集', chiefDelKp.status === 200);
+  const kSetsAfter = await api('GET', '/api/rule-sets', { token: K });
+  ok('被首席删掉的规则集不再出现', !(kSetsAfter.json?.items || []).some((s) => s.id === kMine.json.item.id));
+  await api('DELETE', `/api/rule-sets/${chiefSet.json.item.id}`, { token: A });
 
   const issuedName = `smoke_p_${suffix}`;
   const kIssue = await api('POST', '/api/admin/users', {

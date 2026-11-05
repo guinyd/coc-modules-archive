@@ -66,12 +66,12 @@ const mixed = {
   skills: blankSkills().map((s) => (s.id === 'spotHidden' ? { ...s, occ: 15, interest: 15 }
     : s.id === 'credit' ? { ...s, occ: 30, interest: 10 } : s)),
 };
-const findings = auditSheet(mixed, {}).findings.map((f) => f.id);
+const findings = auditSheet(mixed, { forbidMixedPoints: true, creditOccOnly: true }).findings.map((f) => f.id);
 ok('同技能双点 → error', findings.includes('forbidMixedPoints.sameSkill'));
-ok('信用评级投兴趣点 → error', findings.includes('forbidMixedPoints.credit'));
+ok('信用评级投兴趣点 → error', findings.includes('creditOccOnly'));
 ok('玩家端警告同步', (() => {
   const w = validateSheet(mixed);
-  return w.some((x) => x.includes('同时吃职业点与兴趣点')) && w.some((x) => x.includes('信用评级只能用职业点'));
+  return w.some((x) => x.includes('同时吃职业点与兴趣点')) && w.some((x) => x.includes('信用评级投入了兴趣点'));
 })());
 const cleanMixed = {
   ...base,

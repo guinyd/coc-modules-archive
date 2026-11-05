@@ -66,6 +66,7 @@ export default function CharacterDetail({
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitKpId, setSubmitKpId] = useState('');
   const [custodyPick, setCustodyPick] = useState([]);
+  const [showAllSkills, setShowAllSkills] = useState(false);
 
   // 托管是多选：custody 为 [{kpId,kpName,grantedAt}]，这里派生已授权与可选名单
   const custodyList = Array.isArray(c?.custody) ? c.custody : [];
@@ -200,7 +201,8 @@ export default function CharacterDetail({
   if (!c) return null;
 
   const d = c.derived;
-  const usedSkills = d.skills.filter((s) => s.used || s.occ > 0 || s.interest > 0 || s.growth > 0);
+  const usedSkills = d.skills.filter((s) => s.used || s.occ > 0 || s.interest > 0 || s.growth > 0 || s.houseBase);
+  const shownSkills = showAllSkills ? d.skills : usedSkills;
   const review = c.review || { status: 'none' };
   const canReview = c.canReview && review.status === 'pending';
   const legendary = c.legendary || { enabled: false };
@@ -230,6 +232,7 @@ export default function CharacterDetail({
                 <span>{c.era}</span>
                 {c.gender ? <span>{c.gender}</span> : null}
                 {c.residence ? <span>住地 {c.residence}</span> : null}
+                {c.ruleSet?.name ? <span className="flex items-center gap-1"><ScrollText className="w-3.5 h-3.5" />规则集 {c.ruleSet.name}</span> : null}
               </p>
             </div>
           </div>
@@ -267,6 +270,7 @@ export default function CharacterDetail({
         {review.status === 'pending' ? (
           <div className="mt-5 flex items-center gap-2 border-l-2 border-ochre/50 bg-ochre/[0.06] px-4 py-3 text-[14px] text-ochre">
             <ClipboardCheck className="w-4 h-4" />已提交审核，等待 {review.targetKpName || 'KP'} 批复。
+            <span className="ml-auto text-ink-mute">提交时规则：{c.ruleSnapshot?.setName || c.ruleSet?.name || '官方规则书'}</span>
           </div>
         ) : null}
 
@@ -320,6 +324,9 @@ export default function CharacterDetail({
               </div>
             ) : null}
             <p className="mt-2 text-ink-mute">托管后该守秘人只能调整传奇、年龄豁免与教育增强，可随时逐个撤销。</p>
+            <p className="mt-1 flex items-center gap-1.5 text-ink-mute">
+              <ScrollText className="h-3.5 w-3.5" />当前规则集：{c.ruleSet?.name || '官方规则书'}
+            </p>
           </div>
         ) : null}
       </Panel>
@@ -548,8 +555,13 @@ export default function CharacterDetail({
 
           <Panel className="p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-              <h3 className="flex items-center font-serif text-[17px] font-bold text-ink"><Wand2 className="mr-2 h-4 w-4 text-forest" />技能（{usedSkills.length}）</h3>
-              <span className="text-[14px] text-ink-mute">★ = 本职技能 · ✎ = 自定义技能 · 打印时会列出全部技能与基础值</span>
+              <h3 className="flex items-center font-serif text-[17px] font-bold text-ink"><Wand2 className="mr-2 h-4 w-4 text-forest" />技能（{shownSkills.length}）</h3>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-[14px] text-ink-mute">★ = 本职技能 · ✎ = 自定义技能 · 打印时会列出全部技能与基础值</span>
+                <Button variant="subtle" onClick={() => setShowAllSkills((v) => !v)}>
+                  {showAllSkills ? '只看已调整' : `展开全部技能（${d.skills.length}）`}
+                </Button>
+              </div>
             </div>
             <div className="overflow-x-auto rounded-[2px] border border-line-strong">
               <table className="w-full min-w-[620px] text-[14.5px] leading-[1.65]">
@@ -565,7 +577,7 @@ export default function CharacterDetail({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line-strong">
-                  {usedSkills.map((s) => (
+                  {shownSkills.map((s) => (
                     <tr
                       key={s.id}
                       className={cx(
@@ -588,7 +600,7 @@ export default function CharacterDetail({
                       <td className="p-3 text-center font-mono text-[14px] text-ink-soft">{s.half} / {s.fifth}</td>
                     </tr>
                   ))}
-                  {usedSkills.length === 0 && (
+                  {shownSkills.length === 0 && (
                     <tr><td colSpan={7} className="p-8 text-center text-[14.5px] text-ink-mute">还没有分配任何技能点</td></tr>
                   )}
                 </tbody>
@@ -756,6 +768,10 @@ export default function CharacterDetail({
         <div className="space-y-4">
           <p className="text-[16px] leading-[1.75] text-ink-soft">
             选择一位守秘人经办这张卡的审核。提交后只有该守秘人（与首席守秘人）会看到它并给出批复。
+          </p>
+          <p className="flex items-center gap-2 border-l-2 border-moon/50 bg-moon/[0.06] px-3 py-2 text-[14px] text-ink-soft">
+            <ScrollText className="h-4 w-4 shrink-0 text-moon" />
+            本次提交会冻结当前规则集：{c.ruleSet?.name || '官方规则书'}（之后 KP 改规则不影响这张卡）。
           </p>
           <div className="space-y-2">
             {keepers.map((k) => (

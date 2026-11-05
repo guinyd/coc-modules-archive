@@ -60,6 +60,10 @@ export const btn = {
   subtle: `${base} text-ink-soft bg-paper-deep border border-line-strong text-[14px] `
     + 'hover:bg-paper-raised hover:text-ink hover:border-ink-mute '
     + 'disabled:opacity-40 disabled:cursor-not-allowed',
+  /** 正向操作（如「设为当前」）：墨绿描边 + 半透明底，不用朱砂印章底 */
+  success: `${base} border border-emerald-600/70 bg-emerald-600/15 text-emerald-300 `
+    + 'hover:bg-emerald-600/25 hover:border-emerald-500/80 '
+    + 'disabled:opacity-40 disabled:cursor-not-allowed',
 };
 
 export function Button({ variant = 'primary', size = 'md', className, children, ...rest }) {
@@ -339,15 +343,18 @@ export function Select({ className, children, ...rest }) {
   );
 }
 
-export function Toggle({ checked, onChange, label, hint }) {
+export function Toggle({ checked, onChange, label, hint, compact = false, ariaLabel }) {
+  const showText = Boolean(label || hint);
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={showText ? undefined : ariaLabel}
       onClick={() => onChange(!checked)}
       className={cx(
-        'group flex w-full items-center gap-3 rounded-[2px] border p-3 text-left transition-all duration-300 ease-[var(--ease-soft)]',
+        'group flex items-center gap-3 rounded-[2px] border p-3 text-left transition-all duration-300 ease-[var(--ease-soft)]',
+        compact ? 'w-auto shrink-0' : 'w-full',
         checked
           ? 'border-vermilion/45 bg-vermilion/[0.06]'
           : 'border-line-strong bg-paper-raised hover:border-ink-mute',
@@ -362,10 +369,12 @@ export function Toggle({ checked, onChange, label, hint }) {
           style={{ transform: `translate3d(${checked ? 16 : 0}px, -50%, 0)` }}
         />
       </span>
-      <span className="min-w-0">
-        <span className="block text-[14px] font-semibold text-ink">{label}</span>
-        {hint ? <span className="mt-0.5 block text-[14px] leading-relaxed text-ink-mute">{hint}</span> : null}
-      </span>
+      {showText ? (
+        <span className="min-w-0">
+          <span className="block text-[14px] font-semibold text-ink">{label}</span>
+          {hint ? <span className="mt-0.5 block text-[14px] leading-relaxed text-ink-mute">{hint}</span> : null}
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -563,7 +572,7 @@ export function EmptyState({ icon: Icon, title, desc, action }) {
   );
 }
 
-export function WarningList({ items, title = '规则提示' }) {
+export function WarningList({ items, title = '规则提示', note = '当前提示为系统校验，不代 KP 的审核结果' }) {
   if (!items || items.length === 0) {
     return (
       <div className="flex items-center gap-2 text-[14px] text-emerald-600">
@@ -573,8 +582,9 @@ export function WarningList({ items, title = '规则提示' }) {
   }
   return (
     <div className="rounded-[2px] border border-amber-500/45 bg-amber-500/[0.07] p-4">
-      <p className="mb-2 flex items-center text-[14px] font-bold tracking-[0.06em] text-amber-300">
-        <AlertCircle className="mr-1.5 h-4 w-4" />{title}（{items.length}）
+      <p className="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[14px] font-bold tracking-[0.06em] text-amber-300">
+        <span className="flex items-center"><AlertCircle className="mr-1.5 h-4 w-4" />{title}（{items.length}）</span>
+        {note ? <span className="text-[12px] font-normal tracking-normal text-slate-500">{note}</span> : null}
       </p>
       <ul className="space-y-1">
         {items.map((w, i) => (

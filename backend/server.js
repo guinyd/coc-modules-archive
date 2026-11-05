@@ -30,6 +30,7 @@ import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/users.js';
 import contentRoutes from './routes/modules.js';
 import characterRoutes from './routes/characters.js';
+import ruleRoutes from './routes/rules.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.COCOC_HOST || '0.0.0.0';
@@ -95,6 +96,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', contentRoutes);
+app.use('/api', ruleRoutes);
 app.use('/api', characterRoutes);
 
 app.use('/api', notFoundHandler);

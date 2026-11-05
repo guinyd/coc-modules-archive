@@ -12,7 +12,7 @@ import {
   GraduationCap, LogIn, Plus, Printer, RefreshCw, Search, Share2, Shield, ShieldOff,
   Trash2, Upload, User as UserIcon, Users,
 } from 'lucide-react';
-import { REVIEW_LABEL, STATUS_LABEL, computeSheet, eduGrowthLabel, validateSheet } from '../../../shared/coc7e.js';
+import { REVIEW_LABEL, STATUS_LABEL, computeSheet, validateSheet } from '../../../shared/coc7e.js';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api.js';
 import {
   deleteGuestSheet, listGuestSheets, guestCapacity, saveGuestSheet,
@@ -98,6 +98,9 @@ function CharacterCard({
               {!guest && item.reviewStatus === 'pending' && item.reviewTarget?.kpName ? (
                 <Badge tone="amber" className="!text-[14px] !tracking-[0.08em]">指定 · {item.reviewTarget.kpName}</Badge>
               ) : null}
+              {!guest && item.ruleSet?.name ? (
+                <Badge tone="indigo" className="!text-[14px] !tracking-[0.08em]">规则 · {item.ruleSet.name}</Badge>
+              ) : null}
             </div>
           </div>
         </div>
@@ -123,15 +126,6 @@ function CharacterCard({
               {item.legendary?.enabled ? <span className="rounded-[2px] border border-vermilion/40 px-1.5 py-0.5 font-mono text-[14px] leading-none tracking-[0.08em] text-vermilion">传奇 +{item.legendaryBonusTotal || 0}</span> : null}
               {item.agePenaltyWaived ? <span className="rounded-[2px] border border-forest/45 px-1.5 py-0.5 font-mono text-[14px] leading-none tracking-[0.08em] text-forest">免年龄减益</span> : null}
             </span>
-          ) : null}
-          {!guest && item.eduGrowth ? (
-            item.eduGrowth.settled
-              ? <span className="flex items-center gap-1.5 text-ink-soft">
-                <GraduationCap className="h-4 w-4 text-ink-mute" />教育 +{item.eduGrowth.gain}
-                （{eduGrowthLabel(item.eduGrowth)}）
-                {(item.eduGrowth.rerolls || 0) > 0 ? ` · 重掷 ${item.eduGrowth.rerolls} 次` : ''}
-              </span>
-              : <span className="flex items-center gap-1.5 text-ochre"><GraduationCap className="h-4 w-4" />教育未结算</span>
           ) : null}
         </div>
 

@@ -388,6 +388,24 @@ try {
       `root=${rootKids} len=${reviewText.length}`);
     ok('审卡队列显示教育增强状态', /教育 \+\d+（|教育未结算/.test(reviewText), reviewText.slice(0, 120));
 
+    if (seedUser.user.role === 'admin') {
+      console.log('\n== 审卡规则：规则集与房规同页（v10.4） ==');
+      await page.eval(`(() => {
+        const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('审卡规则'));
+        if (b) b.click();
+        return Boolean(b);
+      })()`);
+      await sleep(1600);
+      const rulesText = await page.eval('document.body.innerText');
+      ok('审卡规则页渲染规则集与同源说明',
+        rulesText.includes('规则集') && rulesText.includes('房规与审卡规则同源'), rulesText.slice(0, 120));
+      ok('审卡规则页保留核心开关', rulesText.includes('启用自定义规则审卡'));
+      ok('规则集栏改为「设为当前」，未选择时保存临时规则',
+        rulesText.includes('设为当前') && rulesText.includes('保存临时规则') && rulesText.includes('临时规则'));
+      ok('房规改名「自定义规则」并保留编辑入口',
+        rulesText.includes('自定义规则') && rulesText.includes('加入自定义规则'));
+    }
+
     console.log('\n== 访客模式 ==');
     await page.eval(`localStorage.removeItem('token'); localStorage.removeItem('user'); localStorage.removeItem('coc.guest.sheets.v1'); 'ok'`);
     await page.send('Page.navigate', { url: BASE });
@@ -412,6 +430,14 @@ try {
     ok('访客可打开车卡编辑器', guestEditor.includes('属性明细与年龄补正'));
     ok('访客编辑器提示仅存本机', guestEditor.includes('本机浏览器'));
     ok('访客保存按钮为「保存到本机」', guestEditor.includes('保存到本机'));
+    await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === '房规');
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(900);
+    const guestHouse = await page.eval('document.body.innerText');
+    ok('访客也能打开房规页且不联网', guestHouse.includes('访客草稿不联网'));
 
     console.log('\n== 技能页（默认全部技能 / 高亮 / 自定义技能） ==');
     await page.eval(`(() => {
@@ -507,6 +533,17 @@ try {
       return label ? label.querySelector('input[type=number]').value : '';
     })()`);
     ok('失焦后年龄保留为 45', ageApplied === '45', `实际 ${ageApplied}`);
+    // 年龄补正默认关闭：本节用例显式打开
+    const ageToggle = await page.eval(`(() => {
+      const btn = [...document.querySelectorAll('button[role="switch"]')]
+        .find(b => (b.textContent || '').includes('自动套用年龄补正'));
+      if (!btn) return { ok: false };
+      const before = btn.getAttribute('aria-checked');
+      if (before !== 'true') btn.click();
+      return { ok: true, before };
+    })()`);
+    await sleep(600);
+    ok('年龄补正开关默认关闭、可手动打开', ageToggle.ok === true && ageToggle.before === 'false', JSON.stringify(ageToggle));
     const allocUi = await page.eval(`document.body.innerText.includes('年龄补正分配') && document.body.innerText.includes('已分配')`);
     ok('40+ 岁出现「年龄补正分配」面板（合计减点由玩家分配）', allocUi === true);
     const freeSearch = await page.eval(`[...document.querySelectorAll('input')].some(i => i.placeholder === '搜索特长…')`);
