@@ -19,7 +19,7 @@ const NOTES = [
   '档案发布后可随时回到详情页修改，旧编号不会改变。',
 ];
 
-export default function ModuleFormView({ isEditing, formData, setFormData, uniqueSeries, onSubmit, onBack }) {
+export default function ModuleFormView({ isEditing, formData, setFormData, uniqueSeries, currentUser, onSubmit, onBack }) {
   const pinned = !!formData.isPinned;
 
   return (
@@ -152,7 +152,11 @@ export default function ModuleFormView({ isEditing, formData, setFormData, uniqu
             <div className="flex flex-wrap items-end justify-between gap-4 border-t border-line pt-5">
               <div>
                 <p className="text-[16px] text-ink-mute">提交后仍可在档案详情页修改。</p>
-                <p className="mt-2 font-kai text-[14px] tracking-[0.14em] text-ink-mute">经办人 <span className="ml-2 inline-block w-24 border-b border-dotted border-ink/40 align-middle" /></p>
+                <p className="mt-2 flex items-baseline gap-2 font-kai text-[14px] tracking-[0.14em] text-ink-mute">
+                  经办人
+                  <span className="font-serif text-[15px] font-bold tracking-[0.04em] text-ink">[{currentUser?.username || '归档守秘人'}]</span>
+                  <span className="font-mono text-[14px] tracking-[0.1em] text-ink-mute/70">发布后署名不可改</span>
+                </p>
               </div>
               <Button size="lg" type="submit" className="!px-6">
                 {isEditing ? '保存修改' : '发布至档案馆'}

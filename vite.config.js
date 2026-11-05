@@ -16,6 +16,27 @@ const apiProxy = {
   },
 }
 
+/**
+ * 禁止 dev server 通过 URL 直接读取仓库内的运行期数据与敏感文件。
+ * Vite 默认只限制 workspace root，但根目录下的 backend/、.demo-data/、database.json
+ * 仍可能被 /@fs/ 或直接路径访问；显式 deny 后统一拒绝。public/ 与 src/ 不受影响。
+ */
+const fsDeny = [
+  '.env',
+  '.env.*',
+  '*.{crt,pem}',
+  '**/.git/**',
+  '**/.demo-data/**',
+  '**/backend/**',
+  '**/data/**',
+  '**/database.json',
+  '**/database.json.*',
+  '**/*.jsonl',
+  '**/.run/**',
+  '**/.tmp-build/**',
+  '**/tools/**',
+]
+
 export default defineConfig({
   plugins: [
     react(),
@@ -23,6 +44,7 @@ export default defineConfig({
   ],
   server: {
     proxy: apiProxy,
+    fs: { deny: fsDeny },
     // 有的编辑器（含 DSH 的 edit 工具）用「临时目录 + 改名」原子写文件。
     // Vite 的 chokidar 偶尔会在改名瞬间锁住临时文件并抛 EBUSY，把 dev server 带崩；
     // 这类 *.tmpdir 不是源码，直接忽略。

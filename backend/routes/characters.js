@@ -29,11 +29,14 @@ import {
 } from '../lib/db.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { requireAuth, requireAdmin, optionalAuth } from '../lib/auth.js';
+import {
+  isChief, isCustodian, canManageCard, canReviewCard, auditRulesFor, keeperDirectory,
+} from '../lib/roles.js';
 import { parseCharacter, parseReview, parseBatchReview, vArray, vEnum, vId, vStr } from '../lib/validate.js';
 import { audit } from '../lib/audit.js';
 import {
   ALL_CHARS, CHARS, STATUSES, REVIEW_STATUSES, computeSheet, validateSheet, blankSkills, auditSheet,
-  DEFAULT_AUDIT_RULES, blankLegendary, blankLegendaryBonus,
+  blankLegendary, blankLegendaryBonus,
 } from '../../shared/coc7e.js';
 
 const router = Router();
@@ -44,6 +47,14 @@ const router = Router();
  * 否则玩家可以自己给自己开传奇标记、免掉年龄减益。
  */
 const KP_ONLY_FIELDS = ['legendary', 'legendaryBonus', 'agePenaltyWaived'];
+
+/**
+ * 托管 KP 通过 PATCH 允许调整的字段（对应「角色卡管理」里的传奇 / 豁免 / 教育快捷操作）。
+ * 其余内容字段仍然只有卡主本人与首席能改。
+ */
+const CUSTODIAN_PATCH_FIELDS = [
+  'legendary', 'legendaryBonus', 'agePenaltyWaived', 'eduBonus', 'eduGrowth', 'applyAgeAdjust',
+];
 
 function defaultKpOnly(field) {
   if (field === 'legendary') return blankLegendary();
@@ -77,20 +88,27 @@ function stampLegendary(data, actor) {
  * 这样玩家即使绕过界面直接发请求，也无法自助重掷或清零；重置只能由 KP 执行。
  */
 function guardEduGrowth(data, actor, current) {
+  // 首席不受限制；托管 KP 只允许通过快捷操作（grant / reset）改，整卡保存时仍走同一套守卫
   if (actor?.role === 'admin') return data;
   const cur = current?.eduGrowth;
   const curBonus = Number(current?.eduBonus) || 0;
   const settled = cur?.settled === true || curBonus > 0;
   if (!settled) {
-    // 首次结算：不允许夹带「授权」或伪造历史流水
+    // 首次结算：不允许夹带「授权」或伪造历史流水，结算状态由提交内容推导
     if (data.eduGrowth) {
-      data.eduGrowth.granted = 0;
-      data.eduGrowth.attempts = (data.eduGrowth.attempts || []).slice(-1);
-      if (data.eduGrowth.attempts[0]) {
-        data.eduGrowth.attempts[0].via = data.eduGrowth.manual ? 'manual' : 'roll';
-      }
-      data.eduGrowth.lastGrant = null;
-      data.eduGrowth.lastReset = null;
+      const g = data.eduGrowth;
+      const attempts = (Array.isArray(g.attempts) ? g.attempts : []).slice(-1);
+      const claimedGain = Number(data.eduBonus) || 0;
+      g.settled = attempts.length > 0 || g.manual === true || claimedGain > 0;
+      g.count = attempts.length;
+      g.gain = g.settled ? claimedGain : 0;
+      g.rerolls = 0;
+      g.granted = 0;
+      g.locked = false;
+      g.attempts = attempts;
+      if (attempts[0]) attempts[0].via = g.manual ? 'manual' : 'roll';
+      g.lastGrant = null;
+      g.lastReset = null;
     }
     return data;
   }
@@ -130,6 +148,19 @@ function guardKpOnlyFields(data, actor, current) {
 router.get('/characters/meta', optionalAuth, (req, res) => {
   const database = db();
   const me = req.user || null;
+  // 可代建的玩家列表：首席看全站；普通守秘人只看自己与我托管卡的玩家
+  let owners = [];
+  if (me && isChief(me)) {
+    owners = database.users.map((u) => publicUser(u));
+  } else if (me) {
+    const ids = new Set([me.id]);
+    if (me.role === 'admin') {
+      for (const c of database.characters) {
+        if (c.custody?.kpId === me.id) ids.add(c.ownerId);
+      }
+    }
+    owners = [...ids].map((id) => findUserById(id)).filter(Boolean).map((u) => publicUser(u));
+  }
   res.json({
     statuses: STATUSES,
     reviewStatuses: REVIEW_STATUSES,
@@ -138,7 +169,9 @@ router.get('/characters/meta', optionalAuth, (req, res) => {
     moduleOptions: database.modules.map((m) => ({
       id: m.id, title: m.title, region: m.region, era: m.era, series: m.series || '',
     })),
-    owners: me && me.role === 'admin' ? database.users.map((u) => publicUser(u)) : (me ? [publicUser(me)] : []),
+    owners,
+    keepers: me ? keeperDirectory() : [],
+    canCreateForOthers: Boolean(me && isChief(me)),
     stats: me ? {
       total: database.characters.length,
       mine: database.characters.filter((c) => c.ownerId === me.id).length,
@@ -147,7 +180,7 @@ router.get('/characters/meta', optionalAuth, (req, res) => {
   });
 });
 
-router.use(requireAuth);
+router.use('/characters', requireAuth);
 
 // ------------------------------------------------------------------ 工具
 function knownModuleIds() {
@@ -159,9 +192,9 @@ function rulesCtx() {
   return { customOccupations: customOccupations() };
 }
 
-/** KP 当前的辅助审卡规则 */
-function auditRules() {
-  return { ...DEFAULT_AUDIT_RULES, ...(db().settings?.auditRules || {}) };
+/** KP 当前的辅助审卡规则（首席用全局基准，普通 KP 叠加自己的差异项） */
+function auditRules(actor) {
+  return auditRulesFor(actor);
 }
 
 /** 某账号的角色卡配额与已用数量 */
@@ -197,12 +230,18 @@ function present(character, { actor, full = true }) {
   const ctx = rulesCtx();
   const derived = computeSheet(character, ctx);
   const warnings = validateSheet(character, ctx);
-  const canEdit = actor.role === 'admin' || actor.id === character.ownerId;
-  const isAdmin = actor.role === 'admin';
+  const chief = isChief(actor);
+  const owner = actor.id === character.ownerId;
+  const custodian = isCustodian(actor, character);
+  // 「编辑」= 整卡内容（仅卡主与首席）；「管理」= 出现在角色卡管理页并可执行 KP 快捷操作（含托管 KP）
+  const canEdit = chief || owner;
+  const canManage = canManageCard(actor, character);
+  const canKpOps = chief || custodian;
+  const canReview = canReviewCard(actor, character);
   const customSkillCount = (character.customSkills || []).length;
 
   // 审核信息：批复只存在 reviews 集合里，**不属于角色卡本体**，因此不会被打印导出。
-  const history = (isAdmin || canEdit) ? reviewsOf(character.id) : [];
+  const history = (canEdit || canReview) ? reviewsOf(character.id) : [];
   const latest = history[0] || null;
   const reviewStatus = character.reviewStatus || 'none';
   const review = {
@@ -212,6 +251,7 @@ function present(character, { actor, full = true }) {
     reviewedByName: latest?.kpName || null,
     // 通过即清空批复；仅驳回时把说明回显给玩家
     comment: reviewStatus === 'rejected' ? (latest?.comment || '') : '',
+    targetKpName: character.reviewKpName || '',
   };
   const head = {
     id: character.id,
@@ -227,8 +267,17 @@ function present(character, { actor, full = true }) {
     createdAt: character.createdAt,
     updatedAt: character.updatedAt,
     canEdit,
-    isOwner: actor.id === character.ownerId,
-    canReview: isAdmin,
+    canManage,
+    canKpOps,
+    canReview,
+    isOwner: owner,
+    isCustodian: custodian,
+    custody: character.custody
+      ? { kpId: character.custody.kpId, kpName: character.custody.kpName || '', grantedAt: character.custody.grantedAt || 0 }
+      : null,
+    reviewTarget: character.reviewKpId
+      ? { kpId: character.reviewKpId, kpName: character.reviewKpName || '' }
+      : null,
     reviewStatus,
     review,
   };
@@ -293,8 +342,8 @@ function present(character, { actor, full = true }) {
     moduleLinks: links,
     derived,
     warnings,
-    audit: isAdmin ? auditSheet(character, auditRules(), ctx) : null,
-    reviewHistory: isAdmin ? history.slice(0, 10) : [],
+    audit: canReview ? auditSheet(character, auditRules(actor), ctx) : null,
+    reviewHistory: canReview ? history.slice(0, 10) : [],
   };
 }
 
@@ -304,24 +353,52 @@ function loadReadable(req) {
   const c = findCharacterById(id);
   if (!c) throw notFound('角色卡不存在');
   const isOwner = c.ownerId === req.user.id;
-  const isAdmin = req.user.role === 'admin';
-  if (!isOwner && !isAdmin && !c.isPublic) {
+  const chief = isChief(req.user);
+  const manageable = canManageCard(req.user, c);
+  const reviewable = canReviewCard(req.user, c);
+  if (!isOwner && !chief && !manageable && !reviewable && !c.isPublic) {
     audit(req, 'character.read_denied', { characterId: id });
     throw forbidden('该角色卡未公开');
   }
-  return { c, isOwner, isAdmin };
+  return { c, isOwner, isAdmin: chief, canManage: manageable, canReview: reviewable };
 }
 
-/** 写入权限判定 */
+/** 写入权限判定（整卡内容）：卡主本人或首席守秘人 */
 function loadWritable(req) {
   const id = vId(req.params.id, '角色卡');
   const c = findCharacterById(id);
   if (!c) throw notFound('角色卡不存在');
-  if (req.user.role !== 'admin' && c.ownerId !== req.user.id) {
+  if (!isChief(req.user) && c.ownerId !== req.user.id) {
     audit(req, 'character.write_denied', { characterId: id });
     throw forbidden('只能修改自己的角色卡');
   }
   return c;
+}
+
+/**
+ * 局部写入判定：托管 KP 可以改 KP 快捷字段（传奇 / 豁免 / 教育），但不能碰卡面内容。
+ * 返回上下文，供 PATCH 判断是否允许附带 ownerId 转移。
+ */
+function loadPatchable(req) {
+  const id = vId(req.params.id, '角色卡');
+  const c = findCharacterById(id);
+  if (!c) throw notFound('角色卡不存在');
+  const chief = isChief(req.user);
+  const owner = c.ownerId === req.user.id;
+  const custodian = isCustodian(req.user, c);
+  if (!chief && !owner && !custodian) {
+    audit(req, 'character.write_denied', { characterId: id });
+    throw forbidden('只能修改自己的角色卡，或玩家托管的角色卡');
+  }
+  if (!chief && !owner) {
+    const keys = Object.keys(req.body || {}).filter((k) => k !== 'ownerId');
+    const bad = keys.filter((k) => !CUSTODIAN_PATCH_FIELDS.includes(k));
+    if (bad.length) {
+      audit(req, 'character.custody_denied', { characterId: id, fields: bad.slice(0, 8) });
+      throw forbidden('托管的守秘人只能调整传奇、年龄豁免与教育增强');
+    }
+  }
+  return { c, chief, owner, custodian };
 }
 
 /** 派生字段摘要，用于审计留痕（不记录整张卡，避免日志膨胀） */
@@ -330,18 +407,37 @@ function digest(c) {
   return { name: c.name, occupation: d.occupation?.name || '', hp: d.hp, san: d.san, mov: d.mov };
 }
 
+/**
+ * 卡面内容变动 → 已通过的审核失效（SEC-15）。
+ * 审核目标一并清空，玩家重新提交时可以重新选择收件守秘人。
+ */
+function invalidateReview(c) {
+  if (c.reviewStatus === 'approved') {
+    c.reviewStatus = 'none';
+    c.reviewKpId = null;
+    c.reviewKpName = null;
+  }
+}
+
 // ------------------------------------------------------------------ 列表
 router.get('/characters', (req, res) => {
   const database = db();
-  const isAdmin = req.user.role === 'admin';
-  const mineOnly = req.query.scope !== 'all' || !isAdmin;
-
+  const chief = isChief(req.user);
+  const wantsAll = req.query.scope === 'all';
+  // 首席：全站；守秘人：只看玩家托管给我的卡；玩家：只看自己
+  let scope = 'mine';
   let list = database.characters;
-  if (mineOnly) {
+  if (wantsAll && chief) {
+    scope = 'all';
+    if (typeof req.query.ownerId === 'string' && req.query.ownerId) {
+      const ownerId = vId(req.query.ownerId, '所属玩家', { required: false });
+      list = list.filter((c) => c.ownerId === ownerId);
+    }
+  } else if (wantsAll && req.user.role === 'admin') {
+    scope = 'custody';
+    list = list.filter((c) => canManageCard(req.user, c));
+  } else {
     list = list.filter((c) => c.ownerId === req.user.id);
-  } else if (typeof req.query.ownerId === 'string' && req.query.ownerId) {
-    const ownerId = vId(req.query.ownerId, '所属玩家', { required: false });
-    list = list.filter((c) => c.ownerId === ownerId);
   }
   if (typeof req.query.status === 'string' && req.query.status) {
     const status = vEnum(req.query.status, '状态', STATUSES, 'active');
@@ -358,32 +454,41 @@ router.get('/characters', (req, res) => {
   const sorted = [...list].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   res.json({
     total: sorted.length,
-    scope: mineOnly ? 'mine' : 'all',
+    scope,
     items: sorted.map((c) => present(c, { actor: req.user, full: false })),
   });
 });
 
 // ------------------------------------------------------------------ 新建
 router.post('/characters', (req, res) => {
-  // 管理员可以代玩家建卡（用于面团代录），但 ownerId 必须真实存在
+  // 只有首席可以代玩家建卡；普通守秘人只能建自己的卡；玩家传 ownerId 一律忽略
   let ownerId = req.user.id;
-  if (req.user.role === 'admin' && req.body?.ownerId) {
-    const target = vId(req.body.ownerId, '所属玩家');
-    if (!findUserById(target)) throw badRequest('指定的玩家不存在');
-    ownerId = target;
+  if (typeof req.body?.ownerId === 'string' && req.body.ownerId && req.body.ownerId !== req.user.id) {
+    if (isChief(req.user)) {
+      const target = vId(req.body.ownerId, '所属玩家');
+      if (!findUserById(target)) throw badRequest('指定的玩家不存在');
+      ownerId = target;
+    } else if (req.user.role === 'admin') {
+      throw forbidden('只有首席守秘人才能代玩家建卡');
+    }
   }
   enforceCharacterQuota(ownerId);
-  const data = guardKpOnlyFields(
+  // 首次保存也要过教育增强守卫：防止建卡请求里夹带伪造的结算流水
+  const data = stampLegendary(guardEduGrowth(guardKpOnlyFields(
     parseCharacter(req.body, { knownModuleIds: knownModuleIds(), ctx: rulesCtx() }),
     req.user,
     null,
-  );
+  ), req.user, null), req.user);
   const now = Date.now();
   const character = {
     id: newId('c'),
     ownerId,
     ...data,
     skills: data.skills && data.skills.length ? data.skills : blankSkills(),
+    custody: null,
+    reviewStatus: 'none',
+    reviewKpId: null,
+    reviewKpName: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -395,10 +500,8 @@ router.post('/characters', (req, res) => {
 
 // ------------------------------------------------------------------ 详情
 router.get('/characters/:id', (req, res) => {
-  const { c, isAdmin, isOwner } = loadReadable(req);
-  const out = present(c, { actor: req.user });
-  out.canEdit = isAdmin || isOwner;
-  res.json(out);
+  const { c } = loadReadable(req);
+  res.json(present(c, { actor: req.user }));
 });
 
 // ------------------------------------------------------------------ 更新
@@ -417,7 +520,7 @@ router.put('/characters/:id', (req, res) => {
   delete data.ownerId;
   Object.assign(c, data, { updatedAt: Date.now() });
   // 卡片内容变了，已通过的审核即失效；驳回意见保留到玩家重新提交
-  if (c.reviewStatus === 'approved') c.reviewStatus = 'none';
+  invalidateReview(c);
   save();
   audit(req, 'character.update', { characterId: c.id, ownerId: c.ownerId, ...digest(c) });
   res.json(present(c, { actor: req.user }));
@@ -425,7 +528,11 @@ router.put('/characters/:id', (req, res) => {
 
 // PATCH = 局部更新（列表里切换状态/公开性、KP 批量改归属等轻量操作）
 router.patch('/characters/:id', (req, res) => {
-  const c = loadWritable(req);
+  const { c, chief } = loadPatchable(req);
+  // 归属转移是首席专属；托管者即使只带 ownerId 也不能静默通过
+  if (!chief && typeof req.body?.ownerId === 'string' && req.body.ownerId && req.body.ownerId !== c.ownerId) {
+    throw forbidden('只有首席守秘人才能更改角色卡归属');
+  }
   const data = stampLegendary(guardEduGrowth(guardKpOnlyFields(
     parseCharacter(req.body, {
       partial: true, knownModuleIds: knownModuleIds(), current: c, ctx: rulesCtx(),
@@ -434,13 +541,13 @@ router.patch('/characters/:id', (req, res) => {
     c,
   ), req.user, c), req.user);
   delete data.ownerId;
-  if (req.user.role === 'admin' && typeof req.body?.ownerId === 'string' && req.body.ownerId) {
+  if (chief && typeof req.body?.ownerId === 'string' && req.body.ownerId) {
     const target = vId(req.body.ownerId, '所属玩家');
     if (!findUserById(target)) throw badRequest('指定的玩家不存在');
     c.ownerId = target;
   }
   Object.assign(c, data, { updatedAt: Date.now() });
-  if (c.reviewStatus === 'approved') c.reviewStatus = 'none';
+  invalidateReview(c);
   save();
   audit(req, 'character.patch', { characterId: c.id, fields: Object.keys(data) });
   res.json(present(c, { actor: req.user }));
@@ -456,10 +563,10 @@ router.delete('/characters/:id', (req, res) => {
 });
 
 router.post('/characters/:id/duplicate', (req, res) => {
-  const { c, isOwner, isAdmin } = loadReadable(req);
-  if (!isOwner && !isAdmin) throw forbidden('只能复制自己的角色卡');
+  const { c, isOwner } = loadReadable(req);
+  if (!isOwner && !isChief(req.user)) throw forbidden('只能复制自己的角色卡');
   let ownerId = req.user.id;
-  if (req.user.role === 'admin' && req.body?.ownerId) {
+  if (isChief(req.user) && req.body?.ownerId) {
     ownerId = vId(req.body.ownerId, '所属玩家');
     if (!findUserById(ownerId)) throw badRequest('指定的玩家不存在');
   }
@@ -470,6 +577,14 @@ router.post('/characters/:id/duplicate', (req, res) => {
     id: newId('c'),
     ownerId,
     name: `${vStr(req.body?.name, '角色名', { max: 40 }) || c.name}（副本）`.slice(0, 40),
+    // 副本是全新的卡：审核状态、审核目标与托管关系都不继承（SEC-11）
+    reviewStatus: 'none',
+    submittedAt: null,
+    reviewedAt: null,
+    reviewedBy: null,
+    reviewKpId: null,
+    reviewKpName: null,
+    custody: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -496,6 +611,7 @@ router.post('/characters/:id/modules', (req, res) => {
   const exist = links.findIndex((l) => l.moduleId === moduleId);
   if (exist >= 0) links[exist] = item; else links.push(item);
   c.updatedAt = Date.now();
+  invalidateReview(c);
   save();
   audit(req, 'character.link_module', { characterId: c.id, moduleId, role: item.role });
   res.json(present(c, { actor: req.user }));
@@ -508,6 +624,7 @@ router.delete('/characters/:id/modules/:moduleId', (req, res) => {
   c.moduleLinks = (c.moduleLinks || []).filter((l) => l.moduleId !== moduleId);
   if (c.moduleLinks.length === before) throw notFound('该角色卡没有关联此模组');
   c.updatedAt = Date.now();
+  invalidateReview(c);
   save();
   audit(req, 'character.unlink_module', { characterId: c.id, moduleId });
   res.json(present(c, { actor: req.user }));
@@ -521,11 +638,27 @@ router.delete('/characters/:id/modules/:moduleId', (req, res) => {
 router.post('/characters/:id/submit', (req, res) => {
   const c = loadWritable(req);
   if ((c.reviewStatus || 'none') === 'pending') throw badRequest('这张角色卡已经在审核队列里了');
+  // 玩家可以选择收件守秘人；不传则默认发给首席（兼容旧客户端）
+  const database = db();
+  let target = null;
+  if (typeof req.body?.kpId === 'string' && req.body.kpId) {
+    const kpId = vId(req.body.kpId, '守秘人');
+    target = findUserById(kpId) || null;
+    if (!target || target.role !== 'admin') throw badRequest('指定的守秘人不存在');
+  } else {
+    target = database.users.find((u) => isChief(u))
+      || database.users.find((u) => u.role === 'admin')
+      || null;
+  }
   c.reviewStatus = 'pending';
   c.submittedAt = Date.now();
+  c.reviewKpId = target?.id || null;
+  c.reviewKpName = target?.username || '';
   c.updatedAt = Date.now();
   save();
-  audit(req, 'character.submit_review', { characterId: c.id, ownerId: c.ownerId, ...digest(c) });
+  audit(req, 'character.submit_review', {
+    characterId: c.id, ownerId: c.ownerId, kpId: c.reviewKpId, ...digest(c),
+  });
   res.json(present(c, { actor: req.user }));
 });
 
@@ -541,6 +674,39 @@ router.post('/characters/:id/withdraw', (req, res) => {
   res.json(present(c, { actor: req.user }));
 });
 
+// ------------------------------------------------------------------ 托管
+/**
+ * 玩家把角色卡托管给某位守秘人：只有被托管的卡才会出现在普通守秘人的「角色卡管理」里。
+ * 托管只授予「传奇 / 豁免 / 教育」这类 KP 快捷操作，不授予卡面内容的编辑权。
+ */
+router.post('/characters/:id/custody', (req, res) => {
+  const c = loadWritable(req);
+  const kpId = vId(req.body?.kpId, '守秘人');
+  const kp = findUserById(kpId);
+  if (!kp || kp.role !== 'admin') throw badRequest('指定的守秘人不存在');
+  c.custody = {
+    kpId: kp.id,
+    kpName: kp.username,
+    grantedAt: Date.now(),
+    grantedBy: req.user.id,
+  };
+  c.updatedAt = Date.now();
+  save();
+  audit(req, 'character.custody_grant', { characterId: c.id, kpId: kp.id });
+  res.json(present(c, { actor: req.user }));
+});
+
+router.delete('/characters/:id/custody', (req, res) => {
+  const c = loadWritable(req);
+  if (!c.custody) throw badRequest('这张角色卡没有设置托管守秘人');
+  const prev = c.custody.kpId;
+  c.custody = null;
+  c.updatedAt = Date.now();
+  save();
+  audit(req, 'character.custody_revoke', { characterId: c.id, kpId: prev });
+  res.json(present(c, { actor: req.user }));
+});
+
 /**
  * KP 批复：通过 / 驳回。
  *  - 通过：清空批复（不留意见），只记录审核人与时间。
@@ -550,9 +716,14 @@ router.post('/characters/:id/review', requireAdmin, (req, res) => {
   const id = vId(req.params.id, '角色卡');
   const c = findCharacterById(id);
   if (!c) throw notFound('角色卡不存在');
+  // 只有被玩家选中的守秘人（或首席）能批复这张卡
+  if (!canReviewCard(req.user, c)) {
+    audit(req, 'character.review_denied', { characterId: id });
+    throw forbidden('这张角色卡不在你的审卡队列中');
+  }
   const { verdict, comment } = parseReview(req.body);
   const ctx = rulesCtx();
-  const rules = auditRules();
+  const rules = auditRules(req.user);
   const result = auditSheet(c, rules, ctx);
   const now = Date.now();
 
@@ -585,6 +756,8 @@ router.get('/admin/reviews', requireAdmin, (req, res) => {
     : 'pending';
   const list = db().characters
     .filter((c) => (c.reviewStatus || 'none') === status)
+    // 普通守秘人只看玩家指定给自己的卡；首席看全站
+    .filter((c) => canReviewCard(req.user, c))
     .sort((a, b) => (a.submittedAt || a.updatedAt || 0) - (b.submittedAt || b.updatedAt || 0));
   res.json({
     status,
@@ -599,10 +772,10 @@ router.post('/admin/audit/batch', requireAdmin, (req, res) => {
   const status = typeof req.body?.status === 'string' ? req.body.status : '';
   const ownerId = typeof req.body?.ownerId === 'string' && req.body.ownerId
     ? vId(req.body.ownerId, '所属玩家', { required: false }) : '';
-  const rules = auditRules();
+  const rules = auditRules(req.user);
   const ctx = rulesCtx();
 
-  let list = db().characters;
+  let list = db().characters.filter((c) => canReviewCard(req.user, c));
   if (scope === 'manual') {
     // 手动勾选：只审 KP 指定的这些卡
     const ids = vArray(req.body?.characterIds, '角色卡', { max: 200 })
@@ -650,6 +823,10 @@ router.post('/admin/reviews/batch', requireAdmin, (req, res) => {
   for (const id of characterIds) {
     const c = findCharacterById(id);
     if (!c) { skipped.push({ id, reason: '角色卡不存在' }); continue; }
+    if (!canReviewCard(req.user, c)) {
+      skipped.push({ id, name: c.name, reason: '不在你的审卡队列' });
+      continue;
+    }
     if (verdict === 'approved' && (c.reviewStatus || 'none') === 'approved') {
       skipped.push({ id, name: c.name, reason: '已经是通过状态' });
       continue;
@@ -661,7 +838,7 @@ router.post('/admin/reviews/batch', requireAdmin, (req, res) => {
       kpName: req.user.username,
       verdict,
       comment: verdict === 'rejected' ? comment : '',
-      stats: auditSheet(c, auditRules(), rulesCtx()).stats,
+      stats: auditSheet(c, auditRules(req.user), rulesCtx()).stats,
       findings: [],
       batch: true,
       createdAt: now,
@@ -682,7 +859,8 @@ router.post('/admin/audit/:id', requireAdmin, (req, res) => {
   const id = vId(req.params.id, '角色卡');
   const c = findCharacterById(id);
   if (!c) throw notFound('角色卡不存在');
-  const rules = auditRules();
+  if (!canReviewCard(req.user, c)) throw forbidden('这张角色卡不在你的审卡队列中');
+  const rules = auditRules(req.user);
   res.json({
     characterId: c.id,
     name: c.name,

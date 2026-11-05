@@ -9,7 +9,7 @@
  *  - 输入校验、限流、令牌吊销
  *
  * 用法：
- *   node tools/smoke-test.mjs [原始database.json路径]
+ *   node tools/smoke-test.mjs [种子 database.json 路径]
  */
 
 import { spawn } from 'node:child_process';
@@ -21,8 +21,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 const LOCAL_DB = path.join(ROOT, 'database.json');
-const FIXTURE_DB = path.join(ROOT, 'tools', 'fixtures', 'legacy-v1-database.json');
-const SEED = process.argv[2] || (fs.existsSync(LOCAL_DB) ? LOCAL_DB : FIXTURE_DB);
+const FIXTURE_DB = path.join(ROOT, '..', 'tools', 'fixtures', 'legacy-v1-database.json');
+// 优先使用仓库内测试种子（测试专用口令），避免误用开发者本机的 legacy 明文库
+const SEED = process.argv[2] || (fs.existsSync(FIXTURE_DB) ? FIXTURE_DB : LOCAL_DB);
 const PORT = Number(process.env.SMOKE_PORT || 3199);
 const BASE = `http://127.0.0.1:${PORT}`;
 
@@ -956,6 +957,103 @@ try {
   ok('删除职业模板成功', tplDel.status === 200);
   ok('删除模板会报告受影响的角色卡数', typeof tplDel.json.affectedCharacters === 'number');
   await api('DELETE', `/api/characters/${usingTpl.json.id}`, { token: A });
+
+  section('多 KP 权限（v10.1）');
+  const suffix = Date.now().toString(36);
+  const keeperName = `smoke_kp_${suffix}`;
+  const keeperPwd = 'Keeper-Smoke-1920';
+  const pId = seed.users.find((u) => u.username === player.username).id;
+  const mkKeeper = await api('POST', '/api/admin/users', {
+    token: A, body: { username: keeperName, password: keeperPwd, role: 'admin', kpTitle: '精英守秘人' },
+  });
+  ok('首席可任命普通守秘人', mkKeeper.status === 200 && mkKeeper.json?.user?.kpRank === 'keeper');
+  const kLogin = await api('POST', '/api/login', { body: { username: keeperName, password: keeperPwd } });
+  const K = kLogin.json?.token;
+  const kMe = await api('GET', '/api/user/me', { token: K });
+  const kId = kMe.json?.id;
+  ok('守秘人带 kpRank / kpTitle', kMe.json?.kpRank === 'keeper' && kMe.json?.kpTitle === '精英守秘人');
+
+  const kUsers0 = await api('GET', '/api/admin/users', { token: K });
+  ok('普通守秘人看不到别人的账号', Array.isArray(kUsers0.json) && kUsers0.json.length === 0);
+  const kRename = await api('PUT', `/api/admin/users/${pId}/username`, { token: K, body: { username: 'hacked_name' } });
+  ok('普通守秘人不能改名 → 403', kRename.status === 403);
+  const kReset = await api('PUT', `/api/admin/users/${pId}/password`, { token: K });
+  ok('普通守秘人不能重置他人口令 → 403', kReset.status === 403);
+  const kDelete = await api('DELETE', `/api/admin/users/${pId}`, { token: K });
+  ok('普通守秘人不能删玩家 → 403', kDelete.status === 403);
+  const kTitle = await api('PUT', `/api/admin/users/${pId}/title`, { token: K, body: { title: '神话调查员' } });
+  ok('普通守秘人不能改别人头衔 → 403', kTitle.status === 403);
+  const kMakeKp = await api('POST', '/api/admin/users', {
+    token: K, body: { username: `smoke_kp3_${suffix}`, password: 'Kp3-Smoke-1920', role: 'admin' },
+  });
+  ok('普通守秘人不能任命守秘人 → 403', kMakeKp.status === 403);
+
+  const issuedName = `smoke_p_${suffix}`;
+  const kIssue = await api('POST', '/api/admin/users', {
+    token: K, body: { username: issuedName, password: 'Player-Smoke-1920', role: 'user' },
+  });
+  ok('普通守秘人可发放玩家账号', kIssue.status === 200 && kIssue.json?.user?.role === 'user');
+  const kUsers1 = await api('GET', '/api/admin/users', { token: K });
+  ok('发放记录可查且只看自己发的', Array.isArray(kUsers1.json) && kUsers1.json.length === 1
+    && kUsers1.json[0].username === issuedName && kUsers1.json[0].createdByName === keeperName);
+
+  const kCreateFor = await api('POST', '/api/characters', { token: K, body: { ...blank, name: '代建越权', ownerId: pId } });
+  ok('普通守秘人不能代玩家建卡 → 403', kCreateFor.status === 403);
+  const kOwn = await api('POST', '/api/characters', { token: K, body: { ...blank, name: '守秘人自己的卡' } });
+  ok('守秘人可建自己的卡', kOwn.status === 200);
+  const chiefCard = await api('POST', '/api/characters', { token: A, body: { ...blank, name: '首席未托管卡' } });
+  const kEditOther = await api('PATCH', `/api/characters/${chiefCard.json.id}`, { token: K, body: { agePenaltyWaived: true } });
+  ok('普通守秘人不能编辑未托管卡 → 403', kEditOther.status === 403);
+
+  const pCard = await api('POST', '/api/characters', { token: playerToken, body: { ...blank, name: '玩家托管卡' } });
+  const custody = await api('POST', `/api/characters/${pCard.json.id}/custody`, { token: playerToken, body: { kpId: kId } });
+  ok('玩家可授权守秘人托管', custody.status === 200 && custody.json?.custody?.kpId === kId);
+  const kScope = await api('GET', '/api/characters?scope=all', { token: K });
+  ok('托管卡进入守秘人管理页', kScope.json?.scope === 'custody'
+    && (kScope.json.items || []).some((c) => c.id === pCard.json.id));
+  const kRenameCard = await api('PATCH', `/api/characters/${pCard.json.id}`, { token: K, body: { name: '改名尝试' } });
+  ok('托管守秘人不能改玩家卡姓名 → 403', kRenameCard.status === 403);
+  const kWaive = await api('PATCH', `/api/characters/${pCard.json.id}`, { token: K, body: { agePenaltyWaived: true } });
+  ok('托管守秘人可豁免年龄', kWaive.status === 200 && kWaive.json?.agePenaltyWaived === true);
+  const kOwner = await api('PATCH', `/api/characters/${pCard.json.id}`, { token: K, body: { ownerId: kId } });
+  ok('托管守秘人不能改归属 → 403', kOwner.status === 403);
+
+  const submitK = await api('POST', `/api/characters/${pCard.json.id}/submit`, { token: playerToken, body: { kpId: kId } });
+  ok('玩家可指定守秘人审卡', submitK.status === 200 && submitK.json?.review?.targetKpName === keeperName);
+  const kQueue = await api('GET', '/api/admin/reviews', { token: K });
+  ok('指定后进入该守秘人队列', (kQueue.json?.items || []).some((c) => c.id === pCard.json.id));
+  const kApprove = await api('POST', `/api/characters/${pCard.json.id}/review`, { token: K, body: { verdict: 'approved' } });
+  ok('指定守秘人可批复', kApprove.status === 200 && kApprove.json?.review?.status === 'approved');
+
+  const kBase = await api('GET', '/api/admin/audit-rules', { token: K });
+  const kPutRules = await api('PUT', '/api/admin/audit-rules', {
+    token: K, body: { ...(kBase.json?.rules || {}), charMax: 77 },
+  });
+  ok('守秘人可保存个人规则', kPutRules.status === 200 && kPutRules.json?.scope === 'personal');
+  const kRules = await api('GET', '/api/admin/audit-rules', { token: K });
+  ok('个人规则只作用于自己', kRules.json?.effective?.charMax === 77);
+  const aRules = await api('GET', '/api/admin/audit-rules', { token: A });
+  ok('全局基准不被个人规则污染', aRules.json?.effective?.charMax === 90);
+
+  const kMod = await api('POST', '/api/modules', {
+    token: K, body: { title: `守秘人模组${suffix}`, era: '1920s', players: '2-4', duration: '4 小时', description: '测试' },
+  });
+  ok('模组发布署名守秘人', kMod.json?.createdByName === keeperName && kMod.json?.createdByTitle === '精英守秘人');
+  const chiefMod = await api('POST', '/api/modules', { token: A, body: { title: `首席模组${suffix}`, era: '1920s', players: '2-4', duration: '4 小时', description: '测试' } });
+  const kModEdit = await api('PUT', `/api/modules/${chiefMod.json.id}`, { token: K, body: { title: '越权改名' } });
+  ok('守秘人不能改别人发布的模组 → 403', kModEdit.status === 403);
+  const kModDel = await api('DELETE', `/api/modules/${chiefMod.json.id}`, { token: K });
+  ok('守秘人不能删别人发布的模组 → 403', kModDel.status === 403);
+
+  // 收尾：首席清理本轮产生的账号与模组
+  await api('DELETE', `/api/modules/${kMod.json.id}`, { token: A });
+  await api('DELETE', `/api/modules/${chiefMod.json.id}`, { token: A });
+  await api('DELETE', `/api/characters/${chiefCard.json.id}`, { token: A });
+  await api('DELETE', `/api/characters/${pCard.json.id}`, { token: A });
+  await api('DELETE', `/api/characters/${kOwn.json.id}`, { token: A });
+  await api('DELETE', `/api/admin/users/${kIssue.json.user.id}`, { token: A });
+  const delKeeper = await api('DELETE', `/api/admin/users/${kId}`, { token: A });
+  ok('首席可删除守秘人账号', delKeeper.status === 200);
 
   console.log(`\n================ 结果：${pass} 通过 / ${fail} 失败 ================`);
   if (fail) console.log('失败项：\n - ' + failures.join('\n - '));

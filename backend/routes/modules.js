@@ -11,8 +11,9 @@ import { Router } from 'express';
 import {
   db, save, findModuleById, newId,
 } from '../lib/db.js';
-import { badRequest, notFound } from '../lib/errors.js';
+import { badRequest, notFound, forbidden } from '../lib/errors.js';
 import { requireAdmin, requireAuth } from '../lib/auth.js';
+import { isChief, kpDisplayTitle } from '../lib/roles.js';
 import { parseModule, parseSession, vId } from '../lib/validate.js';
 import { audit } from '../lib/audit.js';
 
@@ -45,6 +46,9 @@ router.post('/modules', requireAdmin, (req, res) => {
     createdAt: now,
     updatedAt: now,
     createdBy: req.user.id,
+    // 发布署名：快照当时的 KP 名字，之后改名不影响历史署名的可读性
+    createdByName: req.user.username,
+    createdByTitle: kpDisplayTitle(req.user),
   };
   db().modules.push(mod);
   save();
@@ -56,6 +60,10 @@ router.put('/modules/:id', requireAdmin, (req, res) => {
   const id = vId(req.params.id, '模组');
   const mod = findModuleById(id);
   if (!mod) throw notFound('找不到该模组');
+  // 普通 KP 只能改自己发布的模组；首席不受限
+  if (!isChief(req.user) && mod.createdBy !== req.user.id) {
+    throw forbidden('只能修改自己发布的模组');
+  }
   const data = parseModule(req.body, { partial: true });
   Object.assign(mod, data, { updatedAt: Date.now() });
   save();
@@ -66,7 +74,11 @@ router.put('/modules/:id', requireAdmin, (req, res) => {
 router.delete('/modules/:id', requireAdmin, (req, res) => {
   const id = vId(req.params.id, '模组');
   const database = db();
-  if (!findModuleById(id)) throw notFound('找不到该模组');
+  const mod = findModuleById(id);
+  if (!mod) throw notFound('找不到该模组');
+  if (!isChief(req.user) && mod.createdBy !== req.user.id) {
+    throw forbidden('只能删除自己发布的模组');
+  }
   database.modules = database.modules.filter((m) => m.id !== id);
   const played = database.played_records.filter((r) => r.moduleId === id).length;
   database.played_records = database.played_records.filter((r) => r.moduleId !== id);
@@ -111,7 +123,11 @@ router.post('/played', requireAuth, (req, res) => {
 
 // ------------------------------------------------------------------ 带团记录
 router.get('/sessions', requireAdmin, (req, res) => {
-  const list = [...db().sessions].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const database = db();
+  const list = database.sessions
+    // 普通 KP 只看自己的带团记录；首席看全站（盘点用）
+    .filter((s) => isChief(req.user) || s.createdBy === req.user.id)
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   res.json(list);
 });
 
@@ -128,9 +144,12 @@ router.post('/sessions', requireAdmin, (req, res) => {
 router.delete('/sessions/:id', requireAdmin, (req, res) => {
   const id = vId(req.params.id, '记录');
   const database = db();
-  const before = database.sessions.length;
+  const session = database.sessions.find((s) => s.id === id);
+  if (!session) throw notFound('找不到该记录');
+  if (!isChief(req.user) && session.createdBy !== req.user.id) {
+    throw forbidden('只能删除自己的带团记录');
+  }
   database.sessions = database.sessions.filter((s) => s.id !== id);
-  if (database.sessions.length === before) throw notFound('找不到该记录');
   save();
   audit(req, 'session.delete', { sessionId: id });
   res.json({ success: true });

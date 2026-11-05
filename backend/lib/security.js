@@ -79,23 +79,47 @@ export function tokenExpiry(from = Date.now()) {
 }
 
 // ------------------------------------------------------------------ 限流
+/** 限流表默认键数上限：超过后按最久未更新淘汰，防止伪造 IP/用户名把内存撑大 */
+export const MAX_LIMITER_KEYS = 10_000;
+
 /**
  * 进程内滑动窗口限流器。
  * 单实例部署足够；若将来横向扩展，应替换为 Redis 等共享存储。
  */
 export class RateLimiter {
-  constructor({ windowMs, max, name = 'limiter' }) {
+  constructor({ windowMs, max, name = 'limiter', maxKeys = MAX_LIMITER_KEYS }) {
     this.windowMs = windowMs;
     this.max = max;
     this.name = name;
+    this.maxKeys = maxKeys;
     this.hits = new Map();
+    this.lastWarnAt = 0;
     this.timer = setInterval(() => this.sweep(), Math.min(windowMs, 60_000));
     if (this.timer.unref) this.timer.unref();
+  }
+
+  /**
+   * 写入并刷新键的 LRU 顺序（Map 按插入序保存）。
+   * 键数超过上限时淘汰队首（最久未更新）的键，并发限流告警避免刷屏。
+   */
+  touch(key, value) {
+    this.hits.delete(key);
+    this.hits.set(key, value);
+    if (this.hits.size <= this.maxKeys) return;
+    while (this.hits.size > this.maxKeys) {
+      const oldest = this.hits.keys().next().value;
+      this.hits.delete(oldest);
+    }
+    const now = Date.now();
+    if (now - this.lastWarnAt < 60_000) return;
+    this.lastWarnAt = now;
+    console.warn(`[security] 限流表 ${this.name} 键数超过 ${this.maxKeys}，已淘汰最旧键`);
   }
 
   sweep(now = Date.now()) {
     for (const [key, arr] of this.hits) {
       const keep = arr.filter((t) => now - t < this.windowMs);
+      // 这里只更新值、不调整顺序：sweep 是批量维护，不算一次"访问"
       if (keep.length) this.hits.set(key, keep);
       else this.hits.delete(key);
     }
@@ -106,11 +130,11 @@ export class RateLimiter {
     const arr = (this.hits.get(key) || []).filter((t) => now - t < this.windowMs);
     if (arr.length >= this.max) {
       const retryAfter = Math.ceil((this.windowMs - (now - arr[0])) / 1000);
-      this.hits.set(key, arr);
+      this.touch(key, arr);
       return { ok: false, remaining: 0, retryAfter };
     }
     arr.push(now);
-    this.hits.set(key, arr);
+    this.touch(key, arr);
     return { ok: true, remaining: this.max - arr.length, retryAfter: 0 };
   }
 
@@ -124,7 +148,7 @@ export class FailLimiter extends RateLimiter {
   fail(key, now = Date.now()) {
     const arr = this.hits.get(key) || [];
     arr.push(now);
-    this.hits.set(key, arr);
+    this.touch(key, arr);
     return arr.filter((t) => now - t < this.windowMs).length;
   }
   blocked(key, now = Date.now()) {

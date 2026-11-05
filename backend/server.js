@@ -104,11 +104,29 @@ const server = app.listen(PORT, HOST, () => {
   console.log(`[server] COC 档案馆后端已启动 http://${HOST}:${PORT}  (${new Date().toISOString()})`);
 });
 
+let shuttingDown = false;
+
 function shutdown(signal) {
+  // Ctrl+C 连按 / 同时收到 SIGINT 与 SIGTERM 时只执行一次
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log(`[server] 收到 ${signal}，正在关闭…`);
+
+  // 停止接收新连接；同时强制断开已有连接，避免 keep-alive 把 close 拖到兜底超时
+  server.close(() => {
+    console.log('[server] 已关闭');
+    process.exit(0);
+  });
+  server.closeAllConnections?.();
+
+  // 同步落盘：不能等 close 回调，否则兜底强退时最后一次写可能还没落盘
   try { saveNow(); } catch (err) { console.error('[server] 关闭前落盘失败:', err.message); }
-  server.close(() => process.exit(0));
-  setTimeout(() => process.exit(0), 5000).unref();
+
+  // 5s 兜底：非 0 退出码便于进程管理器识别「未正常关闭」
+  setTimeout(() => {
+    console.error('[server] 关闭超时，强制退出');
+    process.exit(1);
+  }, 5000);
 }
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));

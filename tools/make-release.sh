@@ -51,9 +51,12 @@ done
 rm -rf "$STAGE/backend/data" "$STAGE/backend/database.json" "$STAGE/backend/node_modules"
 
 cp -r shared "$STAGE/shared"
-mkdir -p "$STAGE/deploy"
-cp deploy/apply-update.sh deploy/update-guide.md "$STAGE/deploy/"
-chmod +x "$STAGE/deploy/apply-update.sh"
+# deploy/ 是服务器侧工具目录，公开仓库里可以没有（v2.2.0 起按需带）
+if [ -d deploy ]; then
+  mkdir -p "$STAGE/deploy"
+  cp deploy/*.sh deploy/*.md "$STAGE/deploy/" 2>/dev/null || true
+  chmod +x "$STAGE"/deploy/*.sh 2>/dev/null || true
+fi
 
 echo "==> 4/5 打包（仅 zip；zip 根就是四个目录，不套父目录）"
 rm -f "${OUT_DIR}/${NAME}.zip"
@@ -105,11 +108,16 @@ sys.exit(1 if bad else 0)
 else
   echo "  （没有 python，跳过包内数据自检）"
 fi
-echo "  ✓ 包内结构：backend/ deploy/ index/ shared/（zip 根，无父目录）"
+echo "  ✓ 包内结构：backend/ index/ shared/（zip 根，无父目录；deploy/ 随仓库存在与否）"
 echo
 echo "当前保留的包："
 ls -1t "$OUT_DIR"/coc-archive-update-*.zip 2>/dev/null | sed 's/^/  /'
 echo
 echo "服务器上执行（解压到独立目录，避免散落在当前目录）："
 echo "  unzip ${NAME}.zip -d ${NAME} && cd ${NAME}"
-echo "  sudo bash deploy/apply-update.sh --web <站点根>/index --app <后端目录> --port 3000"
+if [ -f deploy/apply-update.sh ]; then
+  echo "  sudo bash deploy/apply-update.sh --web <站点根>/index --app <后端目录> --port 3000"
+else
+  echo "  （本包不含 deploy/）先备份 index/ 与数据目录，再覆盖 index/ backend/ shared/，"
+  echo "  重启后端容器，最后 curl -sS http://127.0.0.1:3000/api/health 确认。"
+fi

@@ -21,7 +21,7 @@ import {
 } from '../../../shared/coc7e.js';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api.js';
 import {
-  Badge, Button, EmptyState, Field, Input, Panel, Select, Tabs, Textarea, WarningList, cx,
+  Badge, Button, EmptyState, Field, Input, Modal, Panel, Select, Tabs, Textarea, WarningList, cx,
 } from '../ui.jsx';
 import { ExportCardModal } from './CardTransferModal.jsx';
 
@@ -62,6 +62,10 @@ export default function CharacterDetail({
   const [rejectComment, setRejectComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [keepers, setKeepers] = useState([]);
+  const [submitOpen, setSubmitOpen] = useState(false);
+  const [submitKpId, setSubmitKpId] = useState('');
+  const [custodyKpId, setCustodyKpId] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,6 +83,9 @@ export default function CharacterDetail({
   useEffect(() => {
     apiGet('/api/characters/meta')
       .then((m) => setModuleOptions(m.moduleOptions || []))
+      .catch(() => { /* ignore */ });
+    apiGet('/api/keepers')
+      .then((m) => setKeepers(m.items || []))
       .catch(() => { /* ignore */ });
   }, []);
 
@@ -104,17 +111,39 @@ export default function CharacterDetail({
     } catch (err) { showToast(err.message, 'error'); }
   });
 
-  const submitReview = () => showConfirm(
-    review?.status === 'rejected' ? '重新提交给 KP 审核？' : '把这张角色卡提交给 KP 审核？',
-    async () => {
-      try {
-        setC(await apiPost(`/api/characters/${c.id}/submit`, {}));
-        showToast('已提交审核');
-        onChanged?.();
-      } catch (err) { showToast(err.message, 'error'); }
-    },
-    { detail: 'KP 会看到一张只读的角色卡，审核状态与批复不会写进卡里，也不会被打印。', danger: false },
-  );
+  const submitTo = async (kpId) => {
+    try {
+      setC(await apiPost(`/api/characters/${c.id}/submit`, kpId ? { kpId } : {}));
+      setSubmitOpen(false);
+      showToast('已提交审核');
+      onChanged?.();
+    } catch (err) { showToast(err.message, 'error'); }
+  };
+
+  const submitReview = () => {
+    if (!keepers.length) { submitTo(''); return; }
+    const chief = keepers.find((k) => k.isChief);
+    setSubmitKpId(chief?.id || keepers[0].id);
+    setSubmitOpen(true);
+  };
+
+  const grantCustody = async () => {
+    if (!custodyKpId) return;
+    try {
+      setC(await apiPost(`/api/characters/${c.id}/custody`, { kpId: custodyKpId }));
+      setCustodyKpId('');
+      showToast('已允许该守秘人托管这张角色卡');
+      onChanged?.();
+    } catch (err) { showToast(err.message, 'error'); }
+  };
+
+  const revokeCustody = async () => {
+    try {
+      setC(await apiDelete(`/api/characters/${c.id}/custody`));
+      showToast('已撤销托管');
+      onChanged?.();
+    } catch (err) { showToast(err.message, 'error'); }
+  };
 
   const withdrawReview = async () => {
     try {
@@ -229,7 +258,29 @@ export default function CharacterDetail({
         ) : null}
         {review.status === 'pending' ? (
           <div className="mt-5 flex items-center gap-2 border-l-2 border-ochre/50 bg-ochre/[0.06] px-4 py-3 text-[14px] text-ochre">
-            <ClipboardCheck className="w-4 h-4" />已提交审核，等待 KP 批复。
+            <ClipboardCheck className="w-4 h-4" />已提交审核，等待 {review.targetKpName || 'KP'} 批复。
+          </div>
+        ) : null}
+
+        {/* 托管授权：只有玩家主动允许，守秘人才能在角色卡管理里看到并做有限调整 */}
+        {c.isOwner ? (
+          <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3.5 text-[14px] text-ink-soft">
+            <span className="flex items-center gap-1.5 font-bold text-ink"><Shield className="w-4 h-4 text-moon" />托管授权</span>
+            {c.custody ? (
+              <>
+                <span>已允许 <b className="text-ink">{c.custody.kpName}</b> 托管</span>
+                <Button variant="ghost" className="!px-2.5 !py-1 !text-[14px]" onClick={revokeCustody}><Undo2 className="w-3.5 h-3.5" />撤销托管</Button>
+              </>
+            ) : (
+              <>
+                <Select value={custodyKpId} onChange={(e) => setCustodyKpId(e.target.value)} className="!w-auto !rounded-none !border-line-strong !py-1.5 !text-[14px]">
+                  <option value="">选择守秘人…</option>
+                  {keepers.map((k) => <option key={k.id} value={k.id}>{k.username}（{k.isChief ? '首席' : k.kpTitle}）</option>)}
+                </Select>
+                <Button variant="ghost" className="!px-2.5 !py-1 !text-[14px]" disabled={!custodyKpId} onClick={grantCustody}>允许托管</Button>
+                <span className="text-ink-mute">托管后该守秘人只能调整传奇、年龄豁免与教育增强。</span>
+              </>
+            )}
           </div>
         ) : null}
       </Panel>
@@ -661,6 +712,31 @@ export default function CharacterDetail({
         <span className="flex items-center gap-1"><Shield className="w-3.5 h-3.5" />归属 {c.ownerName}</span>
         {currentUser?.role === 'admin' ? <span className="flex items-center gap-1"><ExternalLink className="w-3.5 h-3.5" />KP 可见全部角色卡</span> : null}
       </div>
+
+      <Modal open={submitOpen} onClose={() => setSubmitOpen(false)} title="提交角色卡审核">
+        <div className="space-y-4">
+          <p className="text-[16px] leading-[1.75] text-ink-soft">
+            选择一位守秘人经办这张卡的审核。提交后只有该守秘人（与首席守秘人）会看到它并给出批复。
+          </p>
+          <div className="space-y-2">
+            {keepers.map((k) => (
+              <label key={k.id} className={cx('flex cursor-pointer items-center justify-between gap-3 border px-3.5 py-2.5 text-[16px] transition-colors', submitKpId === k.id ? 'border-ochre/60 bg-ochre/[0.07] text-ink' : 'border-line-strong text-ink-soft hover:border-ochre/40')}>
+                <span className="flex items-center gap-2">
+                  <input type="radio" name="submit-kp" value={k.id} checked={submitKpId === k.id} onChange={() => setSubmitKpId(k.id)} className="accent-[var(--color-ochre)]" />
+                  {k.username}
+                  {k.isChief ? <Badge tone="amber" className="!text-[14px]">首席</Badge> : <span className="text-[14px] text-ink-mute">{k.kpTitle}</span>}
+                </span>
+                {submitKpId === k.id ? <CheckCircle className="w-4 h-4 text-ochre" /> : null}
+              </label>
+            ))}
+          </div>
+          <p className="text-[14px] leading-[1.7] text-ink-mute">审核状态与批复不会写进卡里，也不会被打印。</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setSubmitOpen(false)}>取消</Button>
+            <Button onClick={() => submitTo(submitKpId)}><Send className="w-4 h-4" />确认提交</Button>
+          </div>
+        </div>
+      </Modal>
 
       <ExportCardModal
         open={exportOpen}

@@ -16,7 +16,7 @@ import {
   OCCUPATION_BY_ID, blankSkills, blankWeapons, DEFAULT_AUDIT_RULES, AUDIT_RULE_META,
   currenciesFor, DEFAULT_CURRENCY, BUILTIN_WEAPON, WEAPON_BY_NAME,
   blankEduGrowth, normalizeEduGrowth, blankLegendary, normalizeLegendary,
-  blankLegendaryBonus,
+  blankLegendaryBonus, PLAYER_TITLES, KP_TITLES,
 } from '../../shared/coc7e.js';
 
 const ID_RE = /^[A-Za-z0-9_-]{1,48}$/;
@@ -143,6 +143,7 @@ export function parseNewUser(body) {
     password: vStr(body?.password, '初始密码', { min: 1, max: 128, required: true }),
     role: vEnum(body?.role, '角色', ['user', 'admin'], 'user'),
     maxCharacters: vInt(body?.maxCharacters, '建卡上限', { min: 0, max: 200, def: DEFAULT_MAX_CHARACTERS }),
+    kpTitle: body?.kpTitle === undefined ? '' : vEnum(body.kpTitle, '守秘人称号', KP_TITLES, ''),
   };
 }
 
@@ -153,10 +154,24 @@ export function parseCharacterLimit(body) {
   };
 }
 
-const TITLES = ['见习调查员', '资深调查员', '精英调查员', '传奇调查员', '神话调查员'];
+const TITLES = PLAYER_TITLES;
 
 export function parseTitle(body) {
   return { title: vEnum(body?.title, '头衔', TITLES) };
+}
+
+/** 守秘人五级称号（与玩家称号并行，互不覆盖） */
+export function parseKpTitle(body) {
+  return { kpTitle: vEnum(body?.kpTitle, '守秘人称号', KP_TITLES) };
+}
+
+/** 任命 / 撤销守秘人：role=user 表示撤销，kpRank=chief 表示接任首席 */
+export function parseKpRank(body) {
+  const target = body?.role === 'user' ? 'user' : 'admin';
+  return {
+    role: target,
+    kpRank: vEnum(body?.kpRank, '守秘人等级', ['keeper', 'chief'], 'keeper'),
+  };
 }
 
 export function parsePasswordChange(body) {
@@ -214,9 +229,12 @@ export function parseOccupationId(value, ctx = {}) {
   if (value === undefined || value === null || value === '' || value === 0 || value === '0') return '';
   const raw = String(value).trim().slice(0, 40);
   if (!/^[A-Za-z0-9_]{1,40}$/.test(raw)) throw badRequest('职业标识不合法');
+  // 原型链上的键（__proto__ / constructor / prototype）不是职业，必须在查表前挡掉，
+  // 否则 `OCCUPATION_BY_ID['__proto__']` 会返回对象、真值判定被绕过（SEC-19）
+  if (raw === '__proto__' || raw === 'constructor' || raw === 'prototype') throw badRequest('职业不存在');
   const custom = (ctx.customOccupations || []).some((o) => String(o.id) === raw);
   if (custom) return raw;
-  if (OCCUPATION_BY_ID[raw]) return raw;
+  if (Object.hasOwn(OCCUPATION_BY_ID, raw) && OCCUPATION_BY_ID[raw]) return raw;
   throw badRequest('职业不存在');
 }
 

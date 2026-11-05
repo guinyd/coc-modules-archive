@@ -45,10 +45,16 @@ function ReaderRow({ label, value }) {
 }
 
 export default function ModuleDetailView({
-  module, isAdmin, played, currentUser, onBack, onCopy, onEdit, onDelete, onTogglePlayed, onGoCharacters,
+  module, isAdmin, isChief, played, currentUser, onBack, onCopy, onEdit, onDelete, onTogglePlayed, onGoCharacters,
 }) {
   const hasExtra = Boolean(module.charInfo || module.occupations || module.skills || module.notes);
   const minted = jitter(`${module.id}seal`, -5, 3, 1);
+  const canManage = Boolean(isAdmin && (isChief || (currentUser && module.createdBy === currentUser.id)));
+  const handler = module.createdByName || '';
+  const issuedOn = module.createdAt ? new Date(module.createdAt) : null;
+  const issuedText = issuedOn && !Number.isNaN(issuedOn.getTime())
+    ? `${issuedOn.getFullYear()}.${String(issuedOn.getMonth() + 1).padStart(2, '0')}.${String(issuedOn.getDate()).padStart(2, '0')}`
+    : '';
 
   const tiltNote = (event) => {
     const el = event.currentTarget;
@@ -108,7 +114,7 @@ export default function ModuleDetailView({
               {module.era || '年代不明'}
             </span>
             <div className="detail-actions ml-auto flex w-full flex-wrap items-center gap-2 sm:w-auto">
-              {isAdmin ? (
+              {canManage ? (
                 <>
                   <button type="button" onClick={(e) => onEdit(module, e)} className="record-act record-act--edit group w-full justify-center sm:w-auto">
                     <Edit className="h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:rotate-6" strokeWidth={1.9} />
@@ -226,10 +232,12 @@ export default function ModuleDetailView({
           <div className="mt-10 border-t border-line pt-4">
             <div className="flex items-end justify-between gap-4">
               <div className="min-w-0 flex-1">
-                <p className="font-mono text-[14px] tracking-[0.2em] text-ink-mute/85">BORROWER'S SIGNATURE</p>
-                <p className="mt-2 flex items-baseline gap-2 font-kai text-[14px] tracking-[0.1em] text-ink-mute">
-                  <span className="shrink-0">借阅人</span>
-                  <span aria-hidden="true" className="h-[13px] flex-1 border-b border-dotted border-line-strong" />
+                <p className="font-mono text-[14px] tracking-[0.2em] text-ink-mute/85">HANDLING KEEPER · 经办登记</p>
+                <p className="mt-2 flex flex-wrap items-baseline gap-x-2 font-kai text-[14px] tracking-[0.1em] text-ink-mute">
+                  <span className="shrink-0">经办人</span>
+                  <span className="shrink-0 font-serif text-[16px] font-bold tracking-[0.04em] text-ink">[{handler || '档案馆首席 KP'}]</span>
+                  {issuedText ? <span className="shrink-0 font-mono text-[14px] tracking-[0.12em] text-ink-mute/80">{issuedText}</span> : null}
+                  <span aria-hidden="true" className="h-[13px] min-w-[40px] flex-1 border-b border-dotted border-line-strong" />
                 </p>
               </div>
               <span

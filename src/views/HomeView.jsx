@@ -139,7 +139,7 @@ function DossierSkeleton({ index }) {
   );
 }
 /** 卷宗条目：封面是「印版」，文字像编目签条贴在纸面上，不再套一张卡片壳 */
-function DossierCard({ module, played, isAdmin, onOpen, onEdit, onDelete, onSeries, index }) {
+function DossierCard({ module, played, canManage, onOpen, onEdit, onDelete, onSeries, index }) {
   return (
     <Reveal variant="unseal" delay={Math.min(index, 4) * 40} className="dossier group/card relative flex h-full flex-col">
       <div
@@ -183,7 +183,7 @@ function DossierCard({ module, played, isAdmin, onOpen, onEdit, onDelete, onSeri
                 <span aria-hidden="true" className={cx('h-1.5 w-1.5 rounded-full', played ? 'bg-[#b7d8ac]' : 'bg-[#f3e7cd]/55')} />
                 {played ? '已调查' : '未调查'}
               </span>
-              {isAdmin ? (
+              {canManage ? (
                 <div className="pointer-events-none hidden gap-1 pt-0.5 opacity-0 transition-opacity duration-300 group-hover/card:pointer-events-auto group-hover/card:opacity-100 group-focus-within/card:pointer-events-auto group-focus-within/card:opacity-100 sm:flex">
                   <button
                     type="button"
@@ -212,6 +212,12 @@ function DossierCard({ module, played, isAdmin, onOpen, onEdit, onDelete, onSeri
         {/* 编目文字：不套白卡，直接落在纸面上 */}
         <div className="flex flex-1 flex-col px-0.5 pt-3">
           <p className="dossier-desc line-clamp-2 text-[16px] leading-[1.78] text-ink-soft">{module.description}</p>
+          {module.createdByName ? (
+            <p className="mt-1.5 flex items-center gap-1.5 font-mono text-[14px] tracking-[0.12em] text-ink-mute">
+              <span aria-hidden="true" className="h-[5px] w-[5px] rotate-45 bg-ochre/70" />
+              经办 / KEEPER · {module.createdByName}
+            </p>
+          ) : null}
 
           <div className="mt-auto pt-3">
             <span className="dossier-rule block h-px w-full bg-line-strong" />
@@ -230,7 +236,7 @@ function DossierCard({ module, played, isAdmin, onOpen, onEdit, onDelete, onSeri
 }
 
 export default function HomeView({
-  modules, loading = false, currentUser, playedModules, isAdmin,
+  modules, loading = false, currentUser, playedModules, isAdmin, isChief,
   homeTab, setHomeTab, searchTerm, setSearchTerm,
   filterRegion, setFilterRegion, filterPlayers, setFilterPlayers,
   filterDuration, setFilterDuration, filterPlayed, setFilterPlayed,
@@ -527,7 +533,7 @@ export default function HomeView({
                     module={module}
                     index={i}
                     played={playedModules.includes(module.id)}
-                    isAdmin={isAdmin}
+                    canManage={Boolean(isAdmin && (isChief || (currentUser && module.createdBy === currentUser.id)))}
                     onOpen={onOpenModule}
                     onEdit={(m, e) => onEditModule(m, e)}
                     onDelete={onDeleteModule}

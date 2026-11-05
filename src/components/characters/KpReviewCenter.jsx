@@ -108,7 +108,7 @@ export default function KpReviewCenter({ currentUser, showToast, showConfirm, on
         <QueueTab showToast={showToast} showConfirm={showConfirm} onOpenCharacter={onOpenCharacter} currentUser={currentUser} />
       )}
       {tab === 'batch' && <BatchTab showToast={showToast} onOpenCharacter={onOpenCharacter} />}
-      {tab === 'rules' && <RulesTab showToast={showToast} />}
+      {tab === 'rules' && <RulesTab showToast={showToast} currentUser={currentUser} />}
       {tab === 'occupations' && <OccupationsTab showToast={showToast} showConfirm={showConfirm} currentUser={currentUser} />}
     </div>
   );
@@ -163,20 +163,27 @@ function QueueTab({ showToast, showConfirm, onOpenCharacter, currentUser }) {
 
   return (
     <div className="space-y-4">
-      <Panel className="flex flex-wrap items-center gap-3 px-5 py-3.5">
-        <span className="caption mr-1 hidden !text-[14px] sm:inline">阅卷台 / QUEUE</span>
-        <Select value={status} onChange={(e) => setStatus(e.target.value)} className="!w-auto !py-2 !text-[16px]">
-          <option value="pending">待审核</option>
-          <option value="rejected">已驳回</option>
-          <option value="approved">已通过</option>
-          <option value="none">未提交</option>
-        </Select>
-        <Button variant="ghost" className={MINI} onClick={load}>
-          <RefreshCw className={cx('h-4 w-4', loading && 'animate-spin')} />刷新
-        </Button>
-        <span className="ml-auto border border-line-strong bg-paper px-2.5 py-1 font-mono text-[14px] tracking-[0.14em] text-slate-500 tabular">
-          共 {items.length} 张
-        </span>
+      <Panel className="px-5 py-3.5">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="caption mr-1 hidden !text-[14px] sm:inline">阅卷台 / QUEUE</span>
+          <Select value={status} onChange={(e) => setStatus(e.target.value)} className="!w-auto !py-2 !text-[16px]">
+            <option value="pending">待审核</option>
+            <option value="rejected">已驳回</option>
+            <option value="approved">已通过</option>
+            <option value="none">未提交</option>
+          </Select>
+          <Button variant="ghost" className={MINI} onClick={load}>
+            <RefreshCw className={cx('h-4 w-4', loading && 'animate-spin')} />刷新
+          </Button>
+          <span className="ml-auto border border-line-strong bg-paper px-2.5 py-1 font-mono text-[14px] tracking-[0.14em] text-slate-500 tabular">
+            共 {items.length} 张
+          </span>
+        </div>
+        <p className="mt-2.5 border-t border-line-soft pt-2 font-kai text-[14px] leading-relaxed tracking-[0.06em] text-slate-500">
+          {currentUser?.kpRank === 'chief'
+            ? '全站角色卡审核队列：任何玩家提交的角色卡都会出现在这里，由你统一复核。'
+            : '只显示玩家指定发给你的角色卡：未指定给你的角色卡由首席守秘人或其他守秘人处理。'}
+        </p>
       </Panel>
 
       <EduQuickModal
@@ -210,6 +217,9 @@ function QueueTab({ showToast, showConfirm, onOpenCharacter, currentUser }) {
                       {it.legendary?.enabled ? <Badge className={BADGE_LG} tone="red">传奇 +{it.legendaryBonusTotal || 0}</Badge> : null}
                       {it.agePenaltyWaived ? <Badge className={BADGE_LG} tone="emerald">免年龄减益</Badge> : null}
                       {it.customSkillCount > 0 ? <Badge className={BADGE_LG} tone="cyan">自建技能 {it.customSkillCount}</Badge> : null}
+                      {it.reviewTarget?.kpName ? (
+                        <Badge className={BADGE_LG} tone="amber">指定：{it.reviewTarget.kpName}</Badge>
+                      ) : null}
                     </div>
 
                     <dl className="mt-4 grid grid-cols-3 gap-px border border-line bg-line sm:grid-cols-6">
@@ -546,8 +556,10 @@ function BatchTab({ showToast, onOpenCharacter }) {
 }
 
 // ------------------------------------------------------------------ 审卡规则
-function RulesTab({ showToast }) {
+function RulesTab({ showToast, currentUser }) {
   const [rules, setRules] = useState(DEFAULT_AUDIT_RULES);
+  const [base, setBase] = useState(null);
+  const [scope, setScope] = useState(currentUser?.kpRank === 'chief' ? 'global' : 'personal');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -556,6 +568,9 @@ function RulesTab({ showToast }) {
     try {
       const res = await apiGet('/api/admin/audit-rules');
       setRules({ ...DEFAULT_AUDIT_RULES, ...(res.rules || {}) });
+      // PUT 的响应不带 base，必须留一份 GET 时拿到的最新全局基准
+      setBase({ ...DEFAULT_AUDIT_RULES, ...(res.base || res.rules || {}) });
+      if (res.scope) setScope(res.scope);
     } catch (err) { showToast(err.message, 'error'); } finally { setLoading(false); }
   }, [showToast]);
 
@@ -566,7 +581,20 @@ function RulesTab({ showToast }) {
     try {
       const res = await apiPut('/api/admin/audit-rules', rules);
       setRules({ ...DEFAULT_AUDIT_RULES, ...res.rules });
-      showToast('审卡规则已保存');
+      if (res.scope) setScope(res.scope);
+      showToast(res.scope === 'global' ? '全局审卡规则已保存' : '个人审卡规则已保存');
+    } catch (err) { showToast(err.message, 'error'); } finally { setBusy(false); }
+  };
+
+  /** 普通守秘人放弃个人覆盖，回到首席维护的全局基准 */
+  const restoreGlobal = async () => {
+    if (!base) return showToast('还没有读到全局基准，请先点「重新读取」', 'error');
+    setBusy(true);
+    try {
+      const res = await apiPut('/api/admin/audit-rules', base);
+      setRules({ ...DEFAULT_AUDIT_RULES, ...(res.rules || base) });
+      if (res.scope) setScope(res.scope);
+      showToast('已恢复为全局基准');
     } catch (err) { showToast(err.message, 'error'); } finally { setBusy(false); }
   };
 
@@ -582,12 +610,18 @@ function RulesTab({ showToast }) {
             <h3 className="flex items-center gap-2 font-serif text-[19px] font-bold tracking-[0.02em] text-slate-100">
               <Shield className="h-4 w-4 text-amber-500" strokeWidth={1.7} />辅助审卡规则
             </h3>
+            <Badge className={BADGE_LG} tone={scope === 'global' ? 'amber' : 'cyan'}>
+              {scope === 'global' ? '全局基准' : '个人规则'}
+            </Badge>
           </div>
           <Button variant="ghost" className={MINI} onClick={load}><RefreshCw className={cx('w-3.5 h-3.5', loading && 'animate-spin')} />重新读取</Button>
         </div>
         <div className="space-y-5 p-5">
           <p className="text-[16px] leading-relaxed text-slate-500">
             所有规则都是<b className="text-slate-300">可选</b>的：数字填 0、开关关掉即表示不检查这一条。规则由服务端判定，玩家端改不了。
+          </p>
+          <p className="border-l-2 border-line-strong pl-3 text-[14px] leading-relaxed text-slate-500">
+            首席守秘人保存的规则是全站默认基准，普通守秘人的改动只影响自己的审卡判定。
           </p>
 
           <Toggle
@@ -633,9 +667,19 @@ function RulesTab({ showToast }) {
             </div>
           </div>
 
-          <div className="flex gap-2 border-t border-line pt-4">
+          <div className="flex flex-wrap gap-2 border-t border-line pt-4">
             <Button onClick={save} disabled={busy}><Save className="w-4 h-4" />{busy ? '保存中…' : '保存规则'}</Button>
             <Button variant="ghost" onClick={() => setRules(DEFAULT_AUDIT_RULES)}>恢复默认</Button>
+            {scope === 'personal' ? (
+              <Button
+                variant="ghost"
+                onClick={restoreGlobal}
+                disabled={busy}
+                title="丢弃个人覆盖，回到首席守秘人维护的全局基准"
+              >
+                <RefreshCw className="w-4 h-4" />恢复为全局基准
+              </Button>
+            ) : null}
           </div>
         </div>
       </Panel>
@@ -683,6 +727,10 @@ function OccupationsTab({ showToast, showConfirm, currentUser }) {
     } catch (err) { showToast(err.message, 'error'); }
   });
 
+  const isChief = currentUser?.kpRank === 'chief';
+  /** 首席不限制；普通守秘人只能改自己发布的模板（与后端权限一致） */
+  const canManage = (occ) => isChief || Boolean(occ.createdBy && occ.createdBy === currentUser?.id);
+
   return (
     <div className="space-y-5">
       <Panel>
@@ -700,6 +748,7 @@ function OccupationsTab({ showToast, showConfirm, currentUser }) {
         <div className="p-5">
           <p className="mb-5 text-[16px] leading-relaxed text-slate-500">
             规则书没有、或本桌特有的职业：自己勾选本职技能、设定信用评级区间与技能点算法，玩家车卡时能直接选。
+            {isChief ? '' : '编辑与删除仅限自己发布的模板，其他守秘人发布的模板只读。'}
           </p>
 
           {items.length === 0 ? (
@@ -719,14 +768,16 @@ function OccupationsTab({ showToast, showConfirm, currentUser }) {
                           <span>{o.attr}</span>
                         </div>
                       </div>
-                      <div className="flex shrink-0 gap-1">
-                        <button type="button" onClick={() => setEditing({ ...o, crMin: o.cr[0], crMax: o.cr[1] })} className="border border-transparent p-2 text-slate-500 transition-colors hover:border-line-strong hover:bg-paper-deep hover:text-emerald-700">
-                          <Wand2 className="w-4 h-4" />
-                        </button>
-                        <button type="button" onClick={() => remove(o)} className="border border-transparent p-2 text-slate-500 transition-colors hover:border-red-500/40 hover:bg-red-500/[0.05] hover:text-red-600">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      {canManage(o) ? (
+                        <div className="flex shrink-0 gap-1">
+                          <button type="button" title="编辑模板" onClick={() => setEditing({ ...o, crMin: o.cr[0], crMax: o.cr[1] })} className="border border-transparent p-2 text-slate-500 transition-colors hover:border-line-strong hover:bg-paper-deep hover:text-emerald-700">
+                            <Wand2 className="w-4 h-4" />
+                          </button>
+                          <button type="button" title="删除模板" onClick={() => remove(o)} className="border border-transparent p-2 text-slate-500 transition-colors hover:border-red-500/40 hover:bg-red-500/[0.05] hover:text-red-600">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap gap-1.5 border-t border-line pt-2.5">
                       {o.keys.slice(0, 8).map((k) => (
@@ -737,7 +788,17 @@ function OccupationsTab({ showToast, showConfirm, currentUser }) {
                       {o.free ? <span className="border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-[14px] leading-none tracking-wide text-cyan-600">任意 ×{o.free}</span> : null}
                       {o.social ? <span className="border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-[14px] leading-none tracking-wide text-cyan-600">社交 ×{o.social}</span> : null}
                     </div>
-                    <div className="font-kai text-[14px] tracking-[0.06em] text-slate-500">{o.createdByName} · {new Date(o.createdAt).toLocaleDateString()}</div>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-kai text-[14px] tracking-[0.06em] text-slate-500">
+                      <span>发布：{o.createdByName || '—'} · {formatDay(o.createdAt)}</span>
+                      {canManage(o) ? null : (
+                        <span
+                          className="border border-line-strong px-1.5 py-0.5 text-[13px] tracking-[0.1em] text-slate-500"
+                          title="只有发布者本人或首席守秘人才能修改"
+                        >
+                          只读
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </article>
               ))}
@@ -757,6 +818,13 @@ function OccupationsTab({ showToast, showConfirm, currentUser }) {
       ) : null}
     </div>
   );
+}
+
+/** 职业模板的发布日期：老数据缺字段时显示破折号，避免 Invalid Date */
+function formatDay(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('zh-CN');
 }
 
 function blankTemplate() {

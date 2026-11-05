@@ -32,7 +32,7 @@ const DB_FILE = arg.endsWith('.json') ? arg : path.join(arg, 'database.json');
 
 // ------------------------------------------------------------------ 口令
 export const DEMO_ACCOUNTS = [
-  { username: 'keeper', password: 'Keeper-Demo-1920', role: 'admin', title: '首席守秘人' },
+  { username: 'keeper', password: 'Keeper-Demo-1920', role: 'admin', kpRank: 'chief', kpTitle: '神话守秘人', title: '见习调查员' },
   { username: '林晚照', password: 'Player-Demo-1920', role: 'user', title: '传奇调查员' },
   { username: '白鸦', password: 'Player-Demo-1920', role: 'user', title: '精英调查员' },
   { username: '周砚', password: 'Player-Demo-1920', role: 'user', title: '资深调查员' },
@@ -54,6 +54,11 @@ function makeUser(spec, index, id) {
     passwordParams: { N: rec.N, r: rec.r, p: rec.p },
     role: spec.role,
     title: spec.title,
+    kpRank: spec.role === 'admin' ? (spec.kpRank || 'keeper') : null,
+    kpTitle: spec.role === 'admin' ? (spec.kpTitle || '见习守秘人') : null,
+    auditRules: null,
+    createdBy: null,
+    createdByName: '',
     mustChangePassword: false,
     lastLoginAt: daysAgo(index),
     createdAt: daysAgo(120 - index * 7),

@@ -40,6 +40,13 @@ export const REVIEW_LABEL = {
   none: '未提交审核', pending: '待审核', approved: '已通过', rejected: '已驳回',
 };
 
+/** 调查员（玩家身份）五级荣誉头衔 */
+export const PLAYER_TITLES = ['见习调查员', '资深调查员', '精英调查员', '传奇调查员', '神话调查员'];
+/** 守秘人（KP 身份）五级称号 —— KP 同时也是玩家，两套称号并行 */
+export const KP_TITLES = ['见习守秘人', '资深守秘人', '精英守秘人', '传奇守秘人', '神话守秘人'];
+/** 首席守秘人：不算五级称号，是全局唯一的权限位 */
+export const CHIEF_KP_TITLE = '首席守秘人';
+
 /** 单技能点投入上限（克苏鲁神话除外，规则允许继续增长） */
 export const SKILL_CAP = 99;
 /** 角色属性合法区间 */

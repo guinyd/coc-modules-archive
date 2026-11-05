@@ -20,8 +20,9 @@ import {
 import {
   checkPasswordStrength, clientIp, FailLimiter, hashPassword, verifyPassword,
 } from '../lib/security.js';
-import { badRequest, tooMany, unauthorized } from '../lib/errors.js';
+import { badRequest, forbidden, tooMany, unauthorized } from '../lib/errors.js';
 import { issueToken, loginResponse, requireAuth, revokeToken } from '../lib/auth.js';
+import { keeperDirectory } from '../lib/roles.js';
 import { parseLogin, parsePasswordChange, parseRegister, parseUsernameChange } from '../lib/validate.js';
 import { audit } from '../lib/audit.js';
 
@@ -34,8 +35,15 @@ const userFail = new FailLimiter({ windowMs: 15 * 60_000, max: 8 });
 const pwdFail = new FailLimiter({ windowMs: 15 * 60_000, max: 5 });
 
 router.get('/kp-name', (req, res) => {
-  const admin = db().users.find((u) => u.role === 'admin');
-  res.json({ kpName: admin ? admin.username : '档案馆首席 KP' });
+  // 署名优先取首席守秘人；老数据没有 kpRank 时退化为第一个守秘人
+  const admins = db().users.filter((u) => u.role === 'admin');
+  const chief = admins.find((u) => u.kpRank === 'chief') || admins[0];
+  res.json({ kpName: chief ? chief.username : '档案馆首席 KP' });
+});
+
+/** 守秘人名单：玩家提交审核 / 授权托管时用来选人。只暴露公开身份信息。 */
+router.get('/keepers', requireAuth, (req, res) => {
+  res.json({ items: keeperDirectory() });
 });
 
 router.post('/register', async (req, res) => {
@@ -44,6 +52,13 @@ router.post('/register', async (req, res) => {
   if (database.users.length > 0) {
     audit(req, 'auth.register_rejected', { username });
     throw badRequest('系统已初始化，新账号请联系 KP 获取！');
+  }
+  // 生产部署可设置 COCOC_SETUP_TOKEN：首启注册必须带对初始化口令，
+  // 防止空库先到者直接变成首席守秘人。未设置时保持原有本地首启体验。
+  const setupToken = process.env.COCOC_SETUP_TOKEN;
+  if (setupToken && String(req.body?.setupToken || '') !== setupToken) {
+    audit(req, 'auth.register_rejected', { username, reason: 'setup_token' });
+    throw forbidden('初始化口令不正确');
   }
   const problem = checkPasswordStrength(password);
   if (problem) throw badRequest(problem);
@@ -58,7 +73,13 @@ router.post('/register', async (req, res) => {
     passwordAlgo: 'scrypt',
     passwordParams: { N: rec.N, r: rec.r, p: rec.p },
     role: 'admin',
-    title: '首席守秘人',
+    title: '见习调查员',
+    // 首个注册者成为全局唯一的首席守秘人
+    kpRank: 'chief',
+    kpTitle: '神话守秘人',
+    auditRules: null,
+    createdBy: null,
+    createdByName: '',
     tokenHash: null,
     tokenExpiresAt: 0,
     createdAt: now,

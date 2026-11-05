@@ -11,16 +11,26 @@ import { SealMark, SealWatermark } from '../components/Emblem.jsx';
 import PasswordChangeForm from '../components/PasswordChangeForm.jsx';
 import AccountRenameCard from '../components/AccountRenameCard.jsx';
 
-export default function ProfileView({ currentUser, isAdmin, modules, playedModules, onTogglePlayed, onPreviewCertificate, onGo, showToast, onLogout, onRenamed }) {
+export default function ProfileView({ currentUser, isAdmin, isChief, modules, playedModules, onTogglePlayed, onPreviewCertificate, onGo, showToast, onLogout, onRenamed }) {
   const played = modules.filter((m) => playedModules.includes(m.id));
   const initial = (currentUser?.username || '档').slice(0, 1);
   const cardNo = `NO.${String(currentUser?.id || currentUser?.username || '0000').replace(/[^0-9a-z]/gi, '').slice(-5).toUpperCase().padStart(5, '0')}`;
   const year = new Date().getFullYear();
+  const kpTitle = currentUser?.kpTitle || '见习守秘人';
+  const identityLine = isChief ? '首席守秘人' : (isAdmin ? `守秘人 · ${kpTitle}` : (currentUser?.title || '见习调查员'));
 
   const quickLinks = [
     { label: '我的角色卡', icon: Users, onClick: () => onGo('characters') },
     { label: '预览并下载证书', icon: FileText, onClick: onPreviewCertificate },
-    ...(isAdmin ? [{ label: '账号管理', icon: Settings, onClick: () => onGo('adminUsers') }] : []),
+    ...(isChief ? [
+      { label: '审卡中心', icon: FileText, onClick: () => onGo('kpReview') },
+      { label: '角色卡管理', icon: Users, onClick: () => onGo('kpCharacters') },
+      { label: '账号管理', icon: Settings, onClick: () => onGo('adminUsers') },
+    ] : (isAdmin ? [
+      { label: '审卡中心', icon: FileText, onClick: () => onGo('kpReview') },
+      { label: '角色卡管理（托管）', icon: Users, onClick: () => onGo('kpCharacters') },
+      { label: '发放账号', icon: Settings, onClick: () => onGo('adminUsers') },
+    ] : [])),
   ];
 
   return (
@@ -76,10 +86,15 @@ export default function ProfileView({ currentUser, isAdmin, modules, playedModul
                 </span>
                 <div className="min-w-0 pt-0.5">
                   <h2 className="truncate font-serif text-[25px] font-bold leading-tight tracking-[0.02em] text-[#f2f8ff]">{currentUser.username}</h2>
-                  <p className="mt-2 inline-flex items-center gap-1.5 border border-[#e8f3ff]/20 px-2 py-0.5 text-[14px] tracking-[0.16em] text-[#e8f3ff]/75">
+                  <p className="mt-2 inline-flex max-w-full items-center gap-1.5 whitespace-nowrap border border-[#e8f3ff]/20 px-2 py-0.5 text-[13px] tracking-[0.1em] text-[#e8f3ff]/75">
                     {isAdmin ? <Crown className="h-4 w-4" strokeWidth={1.8} /> : <User className="h-4 w-4" strokeWidth={1.8} />}
-                    {isAdmin ? '首席守秘人' : (currentUser?.title || '见习调查员')}
+                    {identityLine}
                   </p>
+                  {isAdmin ? (
+                    <p className="mt-1.5 text-[14px] tracking-[0.14em] text-[#e8f3ff]/45">
+                      玩家称号 · {currentUser?.title || '见习调查员'}
+                    </p>
+                  ) : null}
                 </div>
               </div>
 
@@ -90,7 +105,7 @@ export default function ProfileView({ currentUser, isAdmin, modules, playedModul
                 </div>
                 <div className="bg-[#060d16] px-3 py-2.5">
                   <dt className="text-[14px] tracking-[0.2em] text-[#e8f3ff]/40">权限</dt>
-                  <dd className="mt-1.5 font-serif text-[16px] leading-none text-[#e8f3ff]">{isAdmin ? '守秘人' : '调查员'}</dd>
+                  <dd className="mt-1.5 font-serif text-[16px] leading-none text-[#e8f3ff]">{isChief ? '首席守秘人' : (isAdmin ? '守秘人' : '调查员')}</dd>
                 </div>
               </dl>
 

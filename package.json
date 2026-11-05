@@ -1,13 +1,14 @@
 {
   "name": "coc-modules",
   "private": true,
-  "version": "2.1.0",
+  "version": "2.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "check:secrets": "node tools/check-secrets.mjs",
     "smoke": "node backend/tools/smoke-test.mjs"
   },
   "dependencies": {

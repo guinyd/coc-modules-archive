@@ -56,7 +56,7 @@ const KP_ACT = 'inline-flex items-center gap-1.5 rounded-[2px] px-2 py-1.5 text-
 
 function CharacterCard({
   item, onOpen, onEdit, onPrint, onDelete, onDuplicate, showOwner, onPublish, guest,
-  onLegendary, onEdu, onExport, onToggleWaiveAge, exporting,
+  onLegendary, onEdu, onExport, onToggleWaiveAge, exporting, canEdit = true, canKpOps = true,
 }) {
   const kpAct = (on) => cx(
     KP_ACT,
@@ -64,7 +64,7 @@ function CharacterCard({
       ? 'bg-ochre/[0.14] text-ochre ring-1 ring-inset ring-ochre/40'
       : 'text-ink-soft hover:bg-paper-deep/60 hover:text-ink',
   );
-  const hasKpActions = Boolean(onLegendary || onEdu || onToggleWaiveAge);
+  const hasKpActions = Boolean(canKpOps && (onLegendary || onEdu || onToggleWaiveAge));
   return (
     <article className="char-card group relative flex flex-col overflow-hidden border border-line-strong bg-paper-raised">
       <span aria-hidden="true" className={cx('char-spine absolute inset-y-0 left-0 z-10', STATUS_SPINE[item.status] || 'bg-line-strong')} />
@@ -91,6 +91,12 @@ function CharacterCard({
                   : null)}
               {showOwner && item.customSkillCount > 0 ? (
                 <Badge tone="cyan" className="!text-[14px] !tracking-[0.08em]">自建技能 {item.customSkillCount}</Badge>
+              ) : null}
+              {!guest && item.custody?.kpName ? (
+                <Badge tone="indigo" className="!text-[14px] !tracking-[0.08em]">托管 · {item.custody.kpName}</Badge>
+              ) : null}
+              {!guest && item.reviewStatus === 'pending' && item.reviewTarget?.kpName ? (
+                <Badge tone="amber" className="!text-[14px] !tracking-[0.08em]">指定 · {item.reviewTarget.kpName}</Badge>
               ) : null}
             </div>
           </div>
@@ -139,7 +145,7 @@ function CharacterCard({
       <div className="char-actions border-t border-line px-2 py-2">
         <div className="flex flex-wrap items-center gap-1">
           <button type="button" className={ACT} onClick={() => onOpen(item)}><Eye className="h-4 w-4" strokeWidth={1.8} />查看</button>
-          <button type="button" className={ACT} onClick={() => onEdit(item)}><Edit className="h-4 w-4" strokeWidth={1.8} />编辑</button>
+          {canEdit ? <button type="button" className={ACT} onClick={() => onEdit(item)}><Edit className="h-4 w-4" strokeWidth={1.8} />编辑</button> : null}
           <button type="button" className={ACT} onClick={() => onPrint(item)}><Printer className="h-4 w-4" strokeWidth={1.8} />打印</button>
           <button
             type="button"
@@ -156,7 +162,7 @@ function CharacterCard({
               <CloudUpload className="h-4 w-4" strokeWidth={1.8} />
             </button>
           ) : null}
-          {!guest && (
+          {!guest && canEdit && (
           <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
             <button type="button" title="复制一张" onClick={() => onDuplicate(item)} className="rounded-[2px] p-2 text-ink-mute transition-colors hover:bg-paper-deep/60 hover:text-ink">
               <Copy className="h-4 w-4" strokeWidth={1.8} />
@@ -226,6 +232,8 @@ export default function CharacterList({
   mode = 'mine', currentUser, showToast, showConfirm, onOpen, onEdit, onPrint,
 }) {
   const isKp = mode === 'kp' && currentUser?.role === 'admin';
+  const isChief = Boolean(currentUser?.kpRank === 'chief');
+  const canBuildForOthers = !isKp || isChief;
   const isGuest = mode === 'guest' || !currentUser;
 
   const [items, setItems] = useState([]);
@@ -390,7 +398,9 @@ export default function CharacterList({
   const desc = isGuest
     ? '未登录也能完整车卡、打印与导出 PDF；数据保存在本机浏览器里，登录后可一键收录到自己的账号下。'
     : (isKp
-      ? '查看与管理全站调查员角色卡：代玩家修改、批量打印、按玩家 / 状态 / 审核进度检索。'
+      ? (isChief
+        ? '查看与管理全站调查员角色卡：代玩家修改、批量打印、按玩家 / 状态 / 审核进度检索。'
+        : '这里只显示玩家主动托管给你的角色卡：可调整传奇、年龄豁免与教育增强；其余修改需玩家本人操作。')
       : '在这里创建、编辑、打印你的调查员角色卡；KP 可以看到并协助管理。');
 
   return (
@@ -416,7 +426,9 @@ export default function CharacterList({
             <Button variant="ghost" className="!px-3 !py-1.5 !text-[14px]" onClick={() => setCardImportOpen(true)} disabled={quotaFull} title={quotaFull ? '角色卡已达上限' : undefined}>
               <Upload className="h-4 w-4" />导入角色卡
             </Button>
-            <Button className="!px-3.5 !py-1.5 !text-[14px]" onClick={() => onEdit(null)} disabled={quotaFull} title={quotaFull ? '角色卡已达上限' : undefined}><Plus className="h-4 w-4" />新建角色卡</Button>
+            {canBuildForOthers ? (
+              <Button className="!px-3.5 !py-1.5 !text-[14px]" onClick={() => onEdit(null)} disabled={quotaFull} title={quotaFull ? '角色卡已达上限' : undefined}><Plus className="h-4 w-4" />新建角色卡</Button>
+            ) : null}
           </div>
         )}
       />
@@ -481,7 +493,7 @@ export default function CharacterList({
             desc={isGuest
               ? '点击「新建角色卡」即可开始：一键掷骰、自动算派生值、自动标记本职技能，全程无需登录。'
               : (isKp ? '玩家创建角色卡后会出现在这里。' : '点击「新建角色卡」开始半自动车卡。')}
-            action={<Button onClick={() => onEdit(null)}><Plus className="w-4 h-4" />新建角色卡</Button>}
+            action={canBuildForOthers ? <Button onClick={() => onEdit(null)}><Plus className="w-4 h-4" />新建角色卡</Button> : undefined}
           />
         </Panel>
       ) : (
@@ -503,6 +515,8 @@ export default function CharacterList({
               onToggleWaiveAge={isKp ? toggleWaiveAge : null}
               onExport={openExport}
               exporting={exportingId === item.id}
+              canEdit={isGuest || item.canEdit !== false}
+              canKpOps={isKp ? item.canKpOps !== false : true}
             />
           ))}
         </div>

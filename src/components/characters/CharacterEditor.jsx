@@ -792,8 +792,8 @@ export default function CharacterEditor({
                 </Field>
               </div>
 
-              {currentUser?.role === 'admin' && !character?.id && !guest && (
-                <Field className={FIELD} label="归属玩家" hint="KP 可代玩家建卡">
+              {currentUser?.role === 'admin' && currentUser?.kpRank === 'chief' && !character?.id && !guest && (
+                <Field className={FIELD} label="归属玩家" hint="仅首席守秘人可代玩家建卡">
                   <Select value={ownerId} onChange={(e) => { setOwnerId(e.target.value); setDirty(true); }}>
                     {owners.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
                   </Select>
@@ -1651,6 +1651,9 @@ function OccupationPicker({ open, onClose, onPick, current, derived, occupations
                   </span>
                 </div>
                 {o.desc ? <p className="mt-1.5 text-[16px] leading-[1.75] text-ink-soft">{o.desc}</p> : null}
+                {o.isCustom && o.createdByName ? (
+                  <p className="mt-1 text-[14px] leading-[1.7] text-ink-mute">发布：{o.createdByName}</p>
+                ) : null}
                 <div className="flex flex-wrap gap-1 mt-2">
                   {[...new Set(o.keys)].slice(0, 10).map((k) => (
                     <span key={k} className="rounded-[2px] bg-paper-deep px-1.5 py-0.5 text-[14px] text-ink-soft">

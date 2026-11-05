@@ -18,6 +18,7 @@ import { toJpeg } from 'html-to-image';
 import { AlertCircle, CheckCircle, Download, X } from 'lucide-react';
 import { Button } from './ui.jsx';
 import { SealMark, SealWatermark } from './Emblem.jsx';
+import { CHIEF_KP_TITLE, KP_TITLES } from '../../shared/coc7e.js';
 
 const EXPORT_WIDTH = 800;
 
@@ -40,6 +41,26 @@ const INK = {
 };
 
 const today = () => new Date().toLocaleDateString('zh-CN');
+
+/* 称号显示：预览工具栏切换，选择记在 localStorage，导出与打印跟随 */
+const TITLE_MODE_KEY = 'cert-title-mode';
+const DEFAULT_PLAYER_TITLE = '见习调查员';
+
+const isKeeperUser = (user) => user?.role === 'admin';
+const isChiefKeeper = (user) => isKeeperUser(user) && user?.kpRank === 'chief';
+
+/** KP 称号：首席固定「首席守秘人」，其余取五级守秘人头衔；缺字段时按普通守秘人兜底 */
+const keeperTitleOf = (user) => (isChiefKeeper(user) ? CHIEF_KP_TITLE : (user?.kpTitle || KP_TITLES[0]));
+const playerTitleOf = (user) => user?.title || DEFAULT_PLAYER_TITLE;
+
+/** 读回上次的称号显示方式；无痕模式等取不到时回落「玩家称号」 */
+const readStoredTitleMode = () => {
+  try {
+    return window.localStorage.getItem(TITLE_MODE_KEY) === 'kp' ? 'kp' : 'player';
+  } catch {
+    return 'player';
+  }
+};
 
 /** 画布外框：双线 + 四角朱砂方点（纯静态） */
 function PaperFrame() {
@@ -199,13 +220,13 @@ function ArchiveSeal({ size = 92, label = '档案馆印' }) {
   );
 }
 
-/** 落款：左档案馆、中大印、右守秘人楷体签名 */
-function Footer({ kpName, signerLabel = '守秘人署名' }) {
+/** 落款：左档案馆说明、右签发行——只留签发印章与日期，不再设独立署名行 */
+function Footer({ signerLabel = '签发：', signerName = '', signerEn = 'ISSUED BY' }) {
   return (
     <div style={{ marginTop: 24 }}>
       <div style={{ borderTop: `2px solid ${INK.ink}`, boxShadow: `0 3px 0 -2px ${INK.ink}`, height: 0 }} />
       <div className="flex items-end justify-between gap-4" style={{ paddingTop: 15 }}>
-        <div style={{ maxWidth: 300 }}>
+        <div style={{ maxWidth: 300, minWidth: 0 }}>
           <p className="font-serif" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.14em', color: INK.ink }}>
             秘密调查档案馆 · 最高监督委员会
           </p>
@@ -215,21 +236,25 @@ function Footer({ kpName, signerLabel = '守秘人署名' }) {
             INTERNAL CIRCULATION ONLY · NOT FOR PUBLIC RELEASE
           </p>
         </div>
-        <div className="flex items-end gap-5">
-          <div style={{ textAlign: 'right', minWidth: 200 }}>
-            <p className="font-mono" style={{ fontSize: 9, letterSpacing: '0.22em', color: INK.soft }}>{signerLabel} / KEEPER</p>
-            <p className="font-kai" style={{ fontSize: 14, lineHeight: 1.35, color: INK.ink, marginTop: 7, letterSpacing: '0.1em' }}>
-              {kpName || '—'}
+        <div className="flex items-end" style={{ gap: 14 }}>
+          <div style={{ maxWidth: 200, paddingBottom: 34, textAlign: 'right' }}>
+            <p className="font-kai" style={{ fontSize: 13, lineHeight: 1.35, letterSpacing: '0.12em', color: INK.ink }}>
+              {signerLabel}
+              {signerName ? (
+                <span style={{ marginLeft: 4, fontWeight: 700, wordBreak: 'break-all' }}>{signerName}</span>
+              ) : null}
             </p>
-            <span
-              aria-hidden="true"
-              style={{ display: 'block', width: 186, height: 1, marginLeft: 'auto', marginTop: 4, backgroundColor: INK.rule }}
-            />
-            <p className="font-mono tabular" style={{ fontSize: 9, letterSpacing: '0.16em', color: INK.soft, marginTop: 6 }}>
-              {today()}
-            </p>
+            <p className="font-mono" style={{ fontSize: 8, letterSpacing: '0.2em', color: INK.soft, marginTop: 6 }}>{signerEn}</p>
           </div>
-          <ArchiveSeal size={80} />
+          <div style={{ width: 224 }}>
+            <div className="flex items-end justify-between" style={{ gap: 8 }}>
+              <ArchiveSeal size={72} />
+              <p className="font-mono tabular" style={{ fontSize: 9.5, letterSpacing: '0.14em', color: INK.body, paddingBottom: 24, whiteSpace: 'nowrap' }}>
+                {today()}
+              </p>
+            </div>
+            <span aria-hidden="true" style={{ display: 'block', height: 1, marginTop: 5, backgroundColor: INK.rule }} />
+          </div>
         </div>
       </div>
     </div>
@@ -269,6 +294,7 @@ export default function CertificatePreview({
   const [imgError, setImgError] = useState('');
   const canvasRef = useRef(null);
   const [fit, setFit] = useState({ scale: 1, height: 0 });
+  const [titleRequest, setTitleRequest] = useState(readStoredTitleMode);
 
   /* 窄屏：整张文书按可用宽度等比缩小（导出仍然是 800px 原始尺寸） */
   useEffect(() => {
@@ -333,8 +359,10 @@ export default function CertificatePreview({
   };
 
   /* 头衔：月光渐变等级字（导出画布内为静态 background-clip:text，不含动画） */
-  const titleColor = (title, role) => {
-    if (role === 'admin') return { gradient: 'linear-gradient(100deg, #142d2c 0%, #a52a1d 55%, #c9963f 100%)', letterSpacing: '0.22em' };
+  const titleColor = (title) => {
+    if (title === CHIEF_KP_TITLE || KP_TITLES.includes(title)) {
+      return { gradient: 'linear-gradient(100deg, #142d2c 0%, #a52a1d 55%, #c9963f 100%)', letterSpacing: '0.22em' };
+    }
     switch (title) {
       case '资深调查员': return { gradient: 'linear-gradient(100deg, #163f45 0%, #2f7d7a 100%)', letterSpacing: '0.14em' };
       case '精英调查员': return { gradient: 'linear-gradient(100deg, #4c2438 0%, #8a4a5f 100%)', letterSpacing: '0.16em' };
@@ -347,7 +375,19 @@ export default function CertificatePreview({
   const played = modules.filter((m) => playedModules.includes(m.id));
   const audit = previewMode === 'kp-all' && previewData ? auditTotals(previewData) : null;
   const docNo = `NO. A-${String(Date.now()).slice(-6)}`;
-  const tone = titleColor(currentUser?.title || '见习调查员', currentUser?.role);
+  /* 非 KP 账号即使本地残留 kp 选择也回落玩家称号 */
+  const titleMode = isKeeperUser(currentUser) ? titleRequest : 'player';
+  const shownTitle = titleMode === 'kp' ? keeperTitleOf(currentUser) : playerTitleOf(currentUser);
+  const tone = titleColor(shownTitle);
+  const selectTitleMode = (mode) => {
+    if (mode === 'kp' && !isKeeperUser(currentUser)) return;
+    setTitleRequest(mode);
+    try {
+      window.localStorage.setItem(TITLE_MODE_KEY, mode);
+    } catch {
+      /* 隐私模式写入失败时仅在本次预览生效，不打断导出 */
+    }
+  };
 
   return (
     <div className="min-h-screen w-full bg-paper pb-24">
@@ -383,13 +423,36 @@ export default function CertificatePreview({
         </div>
       </header>
 
+      {/* 预览工具栏：只切换预览 / 导出的称号显示，不进入导出画布 */}
+      <div className="mx-auto flex w-full max-w-[1180px] flex-wrap items-center justify-end gap-2 px-3 pt-[86px] sm:gap-3 sm:px-6 lg:px-8">
+        <span className="mr-auto hidden font-mono text-[10px] tracking-[0.22em] text-ink-mute sm:inline">称号显示 / TITLE SET</span>
+        <Button
+          variant={titleMode === 'player' ? 'primary' : 'ghost'}
+          className="!px-3 !py-1.5 !text-[12.5px]"
+          aria-pressed={titleMode === 'player'}
+          onClick={() => selectTitleMode('player')}
+        >
+          玩家称号
+        </Button>
+        <Button
+          variant={titleMode === 'kp' ? 'primary' : 'ghost'}
+          className="!px-3 !py-1.5 !text-[12.5px]"
+          aria-pressed={titleMode === 'kp'}
+          onClick={() => selectTitleMode('kp')}
+          disabled={!isKeeperUser(currentUser)}
+          title={isKeeperUser(currentUser) ? undefined : '仅守秘人账号可显示 KP 称号'}
+        >
+          KP 称号
+        </Button>
+      </div>
+
       {imgError ? (
         <p className="mx-auto mt-24 max-w-[460px] border-l-2 border-red-500 bg-red-50 px-3 py-2 font-mono text-[11px] text-red-500">
           导出失败：{imgError}
         </p>
       ) : null}
 
-      <div className="flex w-full justify-center px-3 pb-10 pt-[86px]">
+      <div className="flex w-full justify-center px-3 pb-10 pt-3">
         <div style={{ width: EXPORT_WIDTH * fit.scale, height: fit.height || undefined }} className="overflow-hidden">
           <div
             style={{
@@ -435,7 +498,7 @@ export default function CertificatePreview({
                       items={[
                         ['卷宗编号 / FILE NO.', docNo],
                         ['签发日期 / ISSUED', today()],
-                        ['归档类别 / CLASS', currentUser?.role === 'admin' ? '守秘人·首席' : '调查员'],
+                        ['归档类别 / CLASS', currentUser?.role === 'admin' ? '人事档案' : '调查员'],
                       ]}
                     />
 
@@ -496,7 +559,7 @@ export default function CertificatePreview({
                             : { color: tone.color }),
                         }}
                       >
-                        {currentUser?.role === 'admin' ? '首席守秘人' : (currentUser?.title || '见习调查员')}
+                        {shownTitle}
                       </p>
                     </div>
 
@@ -532,7 +595,7 @@ export default function CertificatePreview({
                       </tbody>
                     </table>
 
-                    <Footer kpName={kpName} />
+                    <Footer />
                   </>
                 )}
 
@@ -543,9 +606,9 @@ export default function CertificatePreview({
                     <TitleBar title="守秘人执导履历" mark="FORM K-02" />
                     <MetaRow
                       items={[
-                        ['守秘人 / KEEPER', currentUser?.username || '首席 KP'],
                         ['签发日期 / ISSUED', today()],
                         ['卷宗类别 / CLASS', '执导履历'],
+                        ['称号 / TITLE', shownTitle],
                       ]}
                     />
 
@@ -608,7 +671,7 @@ export default function CertificatePreview({
                       </tbody>
                     </table>
 
-                    <Footer kpName={currentUser?.username || kpName} />
+                    <Footer />
                   </>
                 )}
 
@@ -622,6 +685,7 @@ export default function CertificatePreview({
                         ['筛选条件 / FILTER', previewData.overviewFilter === 'all' ? '全部模组' : previewData.overviewFilter === 'unplayed' ? '从未带过' : '已带过'],
                         ['统计日期 / AS OF', today()],
                         ['收录条数 / ENTRIES', `${(previewData.filteredOverviewModules || []).length} 条`],
+                        ['称号 / TITLE', shownTitle],
                       ]}
                     />
 
@@ -694,7 +758,7 @@ export default function CertificatePreview({
                       </tfoot>
                     </table>
 
-                    <Footer kpName={currentUser?.username || kpName} signerLabel="盘点人署名" />
+                    <Footer signerLabel="盘点人：" signerName={currentUser?.username || kpName || '—'} signerEn="AUDITED BY" />
                   </>
                 )}
 

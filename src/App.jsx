@@ -158,6 +158,8 @@ export default function App() {
   }, []);
 
   const isAdmin = currentUser?.role === 'admin';
+  // 首席守秘人：全局最大权限；普通守秘人只做被授权的部分
+  const isChief = isAdmin && currentUser?.kpRank === 'chief';
 
   const showToast = useCallback((msg, type = 'success') => setToast({ msg, type, id: Date.now() }), []);
   const showConfirm = useCallback((msg, onConfirm, opts = {}) => setConfirmDialog({ msg, onConfirm, ...opts }), []);
@@ -752,7 +754,7 @@ export default function App() {
                     </span>
                     <span aria-hidden="true" className="absolute -bottom-[3px] -right-[3px] h-[6px] w-[6px] bg-vermilion" />
                     <span className="hidden max-w-[7rem] truncate text-[14px] font-semibold text-[var(--c-masthead-ink)]/90 sm:block">{currentUser.username}</span>
-                    {isAdmin ? <span className="hidden border border-ochre/45 px-1 py-0.5 font-kai text-[14px] tracking-[0.12em] text-ochre sm:block">守秘人</span> : null}
+                    {isAdmin ? <span className="hidden border border-ochre/45 px-1 py-0.5 font-kai text-[14px] tracking-[0.12em] text-ochre sm:block">{isChief ? '首席' : '守秘人'}</span> : null}
                   </button>
 
                   <button
@@ -788,6 +790,7 @@ export default function App() {
         view={view}
         currentUser={currentUser}
         isAdmin={isAdmin}
+        isChief={isChief}
         theme={theme}
         onToggleTheme={toggleTheme}
         onNavigate={(v) => { setNavOpen(false); go(v); }}
@@ -820,6 +823,7 @@ export default function App() {
               formData={formData}
               setFormData={setFormData}
               uniqueSeries={uniqueSeries}
+              currentUser={currentUser}
               onSubmit={handleSubmitModule}
               onBack={() => { go('home'); setFormData(EMPTY_MODULE); }}
             />
@@ -827,7 +831,13 @@ export default function App() {
 
           {/* ---------------------------------------------------- 管理面板 */}
           {view === 'adminUsers' && isAdmin && (
-            <AdminUsersPanel setView={(v) => go(v)} showToast={showToast} showConfirm={showConfirm} />
+            <AdminUsersPanel
+              currentUser={currentUser}
+              isChief={isChief}
+              setView={(v) => go(v)}
+              showToast={showToast}
+              showConfirm={showConfirm}
+            />
           )}
           {view === 'kpDashboard' && isAdmin && (
             <KpDashboardPanel
@@ -859,6 +869,7 @@ export default function App() {
               currentUser={currentUser}
               playedModules={playedModules}
               isAdmin={isAdmin}
+              isChief={isChief}
               homeTab={homeTab}
               setHomeTab={setHomeTab}
               searchTerm={searchTerm}
@@ -892,6 +903,7 @@ export default function App() {
             <ModuleDetailView
               module={selectedModule}
               isAdmin={isAdmin}
+              isChief={isChief}
               currentUser={currentUser}
               played={playedModules.includes(selectedModule.id)}
               onBack={() => go('home')}
@@ -916,6 +928,7 @@ export default function App() {
             <ProfileView
               currentUser={currentUser}
               isAdmin={isAdmin}
+              isChief={isChief}
               modules={modules}
               playedModules={playedModules}
               getTitleStyles={getTitleStyles}
@@ -963,7 +976,7 @@ export default function App() {
               </span>
               <span className="inline-flex min-w-0 items-center gap-2.5 sm:col-span-2">
                 <Mail className="h-[18px] w-[18px] shrink-0 text-[var(--c-masthead-ink)]/45" strokeWidth={1.6} />
-                <span className="tracking-[0.16em]">馆长邮箱 · cocyd@qq.com</span>
+                <span className="tracking-[0.16em]">馆长邮箱 · 站内联系</span>
               </span>
             </div>
           </div>
@@ -1163,7 +1176,7 @@ function ThemeToggle({ theme, onToggle, className }) {
  * 手机端导航抽屉：纸面从右侧滑入，Esc / 点遮罩关闭，打开时锁定页面滚动。
  * 桌面端隐藏（渲染也无妨，用 md:hidden 隐藏）。
  */
-function NavDrawer({ open, onClose, view, currentUser, isAdmin, theme, onToggleTheme, onNavigate, onNewModule, onLogout }) {
+function NavDrawer({ open, onClose, view, currentUser, isAdmin, isChief, theme, onToggleTheme, onNavigate, onNewModule, onLogout }) {
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -1183,7 +1196,7 @@ function NavDrawer({ open, onClose, view, currentUser, isAdmin, theme, onToggleT
       { key: 'characters', label: '我的角色卡', icon: Users },
       ...(isAdmin ? [
         { key: 'kpDashboard', label: 'KP 控制台', icon: LayoutDashboard },
-        { key: 'kpCharacters', label: '角色卡管理', icon: Shield },
+        { key: 'kpCharacters', label: isChief ? '角色卡管理' : '角色卡管理（托管）', icon: Shield },
         { key: 'kpReview', label: '审卡中心', icon: ClipboardCheck },
       ] : []),
       { key: 'profile', label: '个人中心', icon: User },
@@ -1242,7 +1255,7 @@ function NavDrawer({ open, onClose, view, currentUser, isAdmin, theme, onToggleT
             <span className="min-w-0">
               <span className="block truncate text-[14px] font-semibold text-ink">{currentUser.username}</span>
               <span className="mt-1 block text-[14px] tracking-[0.18em] text-moon">
-                {isAdmin ? '守秘人 · 馆藏管理' : '调查员 · 在册'}
+                {isAdmin ? (isChief ? '首席守秘人 · 馆藏管理' : '守秘人 · 馆藏管理') : '调查员 · 在册'}
               </span>
             </span>
           </button>

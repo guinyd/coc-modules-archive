@@ -14,7 +14,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { isVeryWeak, hashPasswordSync, hashToken, tokenExpiry } from './security.js';
-import { blankEduGrowth, blankLegendary, blankLegendaryBonus } from '../../shared/coc7e.js';
+import { blankEduGrowth, blankLegendary, blankLegendaryBonus, KP_TITLES, PLAYER_TITLES } from '../../shared/coc7e.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DATA_DIR = process.env.COCOC_DATA_DIR
@@ -28,7 +28,7 @@ const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const BACKUP_KEEP = 14;
 /** 写合并窗口：角色卡连续保存时只落一次盘；进程退出用 saveNow() 兜底。 */
 const SAVE_DEBOUNCE_MS = 120;
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 /** 每个账号默认的角色卡上限；管理员可在账号管理里逐个调整（0 表示暂停建卡）。 */
 export const DEFAULT_MAX_CHARACTERS = 30;
 
@@ -153,6 +153,62 @@ function migrate(d) {
   }
   if (changed && d.schemaVersion < 7) notes.push('账号增加角色卡上限（默认 30）');
 
+  // v7 -> v8：多 KP 体系
+  //  - 守秘人分「首席（全局唯一，权限最大）」与「普通 KP」，KP 另有五级称号
+  //  - 记录账号由哪位 KP 发放（createdBy / createdByName）
+  //  - 角色卡增加托管（custody）与指定审核人（reviewKpId / reviewKpName）
+  //  - 模组补发布者署名快照（createdByName）
+  // 升级时把「最早创建的管理员」立为首席，其余既有管理员降为普通 KP（历史上实际只有一位）。
+  const upgrading = !d.schemaVersion || d.schemaVersion < 8;
+  if (upgrading) {
+    const admins = d.users
+      .filter((u) => u.role === 'admin')
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    const chief = admins[0];
+    for (const u of admins) u.kpRank = u === chief ? 'chief' : 'keeper';
+    changed = true;
+  }
+  // 兜底：无论哪个版本，只要库里有人却没有首席，就把最早的管理员顶上（否则系统会没人能管）
+  if (d.users.some((u) => u.role === 'admin') && !d.users.some((u) => u.role === 'admin' && u.kpRank === 'chief')) {
+    const firstAdmin = d.users
+      .filter((u) => u.role === 'admin')
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))[0];
+    firstAdmin.kpRank = 'chief';
+    changed = true;
+  }
+  for (const u of d.users) {
+    if (u.role === 'admin') {
+      if (u.kpRank !== 'chief' && u.kpRank !== 'keeper') { u.kpRank = 'keeper'; changed = true; }
+      if (typeof u.kpTitle !== 'string' || !KP_TITLES.includes(u.kpTitle)) {
+        u.kpTitle = u.kpRank === 'chief' ? KP_TITLES[KP_TITLES.length - 1] : KP_TITLES[0];
+        changed = true;
+      }
+    } else {
+      if (u.kpRank !== undefined) { delete u.kpRank; changed = true; }
+      if (u.kpTitle !== undefined) { delete u.kpTitle; changed = true; }
+    }
+    if (u.createdBy === undefined) { u.createdBy = null; changed = true; }
+    if (typeof u.createdByName !== 'string') { u.createdByName = ''; changed = true; }
+    if (u.auditRules === undefined) { u.auditRules = null; changed = true; }
+    // 老库里管理员头衔是「首席守秘人」，现在管理员也走玩家五级称号
+    if (typeof u.title !== 'string' || !PLAYER_TITLES.includes(u.title)) {
+      u.title = PLAYER_TITLES[0]; changed = true;
+    }
+  }
+  // 模组署名：历史模组用发布者当前用户名回填（作者可能已改名，只能取现名）
+  for (const m of d.modules) {
+    if (typeof m.createdByName !== 'string' || !m.createdByName) {
+      const author = d.users.find((u) => u.id === m.createdBy);
+      m.createdByName = author ? author.username : '';
+      changed = true;
+    }
+  }
+  for (const c of d.characters) {
+    if (c.custody === undefined) { c.custody = null; changed = true; }
+    if (c.reviewKpId === undefined) { c.reviewKpId = null; changed = true; }
+    if (c.reviewKpName === undefined) { c.reviewKpName = null; changed = true; }
+  }
+
   if (!d.schemaVersion || d.schemaVersion < SCHEMA_VERSION) {
     d.schemaVersion = SCHEMA_VERSION;
     changed = true;
@@ -162,15 +218,48 @@ function migrate(d) {
 }
 
 // ------------------------------------------------------------------ 读写
+/**
+ * 清理上次进程被强杀时遗留的原子写临时文件。
+ * 只扫数据目录与备份目录顶层，避免每次启动递归遍历大目录。
+ */
+function cleanupStaleTmpFiles() {
+  for (const dir of [DATA_DIR, BACKUP_DIR]) {
+    let names;
+    try {
+      names = fs.readdirSync(dir);
+    } catch {
+      continue; // 目录不存在或不可读（首次启动）不算错误
+    }
+    for (const name of names) {
+      if (!/^database\.json\..*\.tmp$/.test(name)) continue;
+      try {
+        fs.unlinkSync(path.join(dir, name));
+        console.log(`[db] 已清理残留临时文件 ${path.join(dir, name)}`);
+      } catch (err) {
+        console.error(`[db] 清理残留临时文件失败 ${name}:`, err.message);
+      }
+    }
+  }
+}
+
 export function load() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  // 兼容旧版：数据文件最初放在 backend/database.json，首次运行时搬进 backend/data/
+  cleanupStaleTmpFiles();
+  // 安全（SEC-01）：旧版数据文件最初放在 backend/database.json，里面可能是明文口令。
+  // 不再自动复制到数据目录；数据目录没有库时直接拒绝启动，宁可让运维手动处理。
   const legacy = path.join(__dirname, '..', 'database.json');
-  if (!fs.existsSync(DB_FILE) && fs.existsSync(legacy) && path.resolve(legacy) !== path.resolve(DB_FILE)) {
-    fs.copyFileSync(legacy, DB_FILE);
-    console.log(`[db] 已从旧路径 ${legacy} 迁移数据文件`);
-    console.log('[db] ⚠️  旧文件里可能仍留有明文口令，确认新库可用后请手动删除它：');
-    console.log(`[db]     rm "${legacy}"`);
+  const hasLegacy = fs.existsSync(legacy) && path.resolve(legacy) !== path.resolve(DB_FILE);
+  if (!fs.existsSync(DB_FILE) && hasLegacy) {
+    const err = new Error(
+      `[db] 检测到旧版明文数据库 ${legacy}\n`
+      + '     出于安全考虑已拒绝启动，且不会把它复制到数据目录。\n'
+      + `     请确认 ${DB_FILE} 可用后删除或移出该文件；如确需迁移，请手动处理后重启。`
+    );
+    err.code = 'LEGACY_PLAINTEXT_DB';
+    throw err;
+  }
+  if (hasLegacy) {
+    console.warn(`[db] ⚠️  检测到旧版明文数据库 ${legacy}；当前使用 ${DB_FILE}，请尽快删除该旧文件`);
   }
   let raw = null;
   let existed = false;
@@ -221,10 +310,32 @@ export function saveNow() {
   writeAtomic(data);
 }
 
+/**
+ * 原子替换。
+ * 临时文件名带进程号 + 时间戳 + 随机串：两个进程（或重试）同时落盘时不会互相覆盖半个文件。
+ * Windows 上目标文件可能被杀毒/索引服务短暂占用，rename 对 EPERM/EACCES/EBUSY 做几次退避重试。
+ */
+function renameWithRetry(from, to) {
+  let lastErr = null;
+  for (let i = 0; i < 4; i += 1) {
+    try {
+      fs.renameSync(from, to);
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (!['EPERM', 'EACCES', 'EBUSY'].includes(err.code)) throw err;
+      // writeAtomic 是同步路径，这里只能同步退避；仅在异常分支发生，最多约 120ms
+      const until = Date.now() + 20 * (i + 1);
+      while (Date.now() < until) { /* spin */ }
+    }
+  }
+  throw lastErr;
+}
+
 function writeAtomic(obj) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   backupDailyOnce();
-  const tmp = `${DB_FILE}.${process.pid}.tmp`;
+  const tmp = `${DB_FILE}.${process.pid}-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}.tmp`;
   const payload = JSON.stringify(obj);
   const fd = fs.openSync(tmp, 'w');
   try {
@@ -233,7 +344,12 @@ function writeAtomic(obj) {
   } finally {
     fs.closeSync(fd);
   }
-  fs.renameSync(tmp, DB_FILE);
+  try {
+    renameWithRetry(tmp, DB_FILE);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch { /* 临时文件删不掉不影响主流程 */ }
+    throw err;
+  }
 }
 
 /** 每天只做一次 daily 备份：避免每次落盘都 readdir + 压缩。 */
@@ -298,11 +414,15 @@ export function reviewsOf(characterId) {
 /** 对外安全投影：任何情况下都不得把口令/令牌字段返回给客户端 */
 export function publicUser(u) {
   if (!u) return null;
+  const isKeeper = u.role === 'admin';
   return {
     id: u.id,
     username: u.username,
     role: u.role,
     title: u.title || '见习调查员',
+    // 多 KP：首席 = chief，其余守秘人 = keeper；玩家没有这两个字段
+    kpRank: isKeeper ? (u.kpRank === 'chief' ? 'chief' : 'keeper') : null,
+    kpTitle: isKeeper ? (u.kpTitle || '见习守秘人') : null,
     mustChangePassword: Boolean(u.mustChangePassword),
     characterLimit: Number.isInteger(u.maxCharacters) ? u.maxCharacters : DEFAULT_MAX_CHARACTERS,
   };
