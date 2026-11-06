@@ -79,7 +79,7 @@ function ensureGlobalRuleSet(settings) {
     name: '全局默认规则',
     scope: 'global',
     ownerId: null,
-    ownerName: '首席守秘人',
+    ownerName: '',
     auditRules: {},
     houseRules: [],
     createdAt: now,
@@ -297,7 +297,7 @@ function migrate(d) {
     if (!globalSet) {
       globalSet = {
         id: 'rs_global_default', name: '全局默认规则', scope: 'global',
-        ownerId: null, ownerName: '首席守秘人',
+        ownerId: null, ownerName: '',
         auditRules: {}, houseRules: [],
         createdAt: now10, updatedAt: now10,
       };

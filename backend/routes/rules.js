@@ -106,7 +106,7 @@ router.post('/rule-sets', (req, res) => {
   const set = {
     id: newId(), name, scope,
     ownerId: scope === 'global' ? null : req.user.id,
-    ownerName: isChief(req.user) ? '首席守秘人' : (req.user.username || ''),
+    ownerName: req.user.username || '',
     auditRules, houseRules,
     createdAt: now, updatedAt: now,
   };
@@ -146,6 +146,8 @@ router.put('/rule-sets/:id', (req, res) => {
   set.name = name;
   set.auditRules = auditRules;
   set.houseRules = houseRules;
+  // 记录真实用户名：首席改全局集时也刷新署名
+  if (set.scope === 'global' && isChief(req.user)) set.ownerName = req.user.username || '';
   set.updatedAt = Date.now();
   audit(req, 'ruleset.update', { setId: set.id, name });
   save();

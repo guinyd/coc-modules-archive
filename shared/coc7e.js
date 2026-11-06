@@ -666,6 +666,8 @@ export function computeSheet(sheet, ctx = {}) {
   const occ = resolveOccupation(s.occupationId, ctx);
   const picks = s.occPicks || { free: [], social: [], choices: [] };
   const allowed = occupationAllowed(occ, picks);
+  // 原本职（职业模板固定项 + 信用评级）与玩家在弹性槽位里自选的本职分开标记
+  const baseOcc = new Set([...(occ?.keys || []), 'credit']);
   const budget = { occupation: occupationBudget(occ, eff), interest: eff.INT * 2 };
 
   // 标准技能：以存档为准，但 id/key/基础值全部由本引擎重建，忽略存档里可能被篡改的重复项
@@ -695,7 +697,8 @@ export function computeSheet(sheet, ctx = {}) {
       id: slot.id, key: slot.key, custom, name: skillName(slot.key, custom),
       base, origBase: rawBase, occ: o, interest: i, growth: g, total,
       half: Math.floor(total / 2), fifth: Math.floor(total / 5),
-      isOccupation: allowed.has(slot.key), capExempt, spec: def.spec || null,
+      isOccupation: allowed.has(slot.key), pickedOccupation: allowed.has(slot.key) && !baseOcc.has(slot.key),
+      capExempt, spec: def.spec || null,
       special: SPECIAL_SKILLS.includes(slot.key) ? slot.key : null,
       kind: 'standard', houseBase: houseBase.has(slot.key),
       used: Boolean(src && (o > 0 || i > 0 || g > 0 || custom)),
@@ -720,7 +723,7 @@ export function computeSheet(sheet, ctx = {}) {
       id, key: `custom:${name}`, custom: '', name,
       base, occ: o, interest: i, growth: g, total,
       half: Math.floor(total / 2), fifth: Math.floor(total / 5),
-      isOccupation: Boolean(item.isOccupation) || allowed.has(`custom:${name}`),
+      isOccupation: Boolean(item.isOccupation) || allowed.has(`custom:${name}`), pickedOccupation: false,
       capExempt: false, spec: null, special: null,
       kind: 'custom',
       used: true,
@@ -1354,6 +1357,7 @@ export function blankSheet(ownerId = '') {
     skillMarks: {},
     weapons: blankWeapons(),
     equipment: '',
+    equipmentItems: [],
     currency: DEFAULT_CURRENCY['1920s'],
     extraAssets: '',
     assets: { spending: '', cash: '', assets: '' },

@@ -80,6 +80,7 @@ export function toEditableSheet(character) {
       ? character.weapons
       : blankSheet().weapons).map((w) => ({ ...w })),
     equipment: character.equipment || '',
+    equipmentItems: Array.isArray(character.equipmentItems) ? character.equipmentItems : [],
     currency: character.currency || DEFAULT_CURRENCY[character.era || '1920s'] || 'USD',
     extraAssets: character.extraAssets || '',
     background: { ...blankSheet().background, ...(character.background || {}) },
@@ -149,13 +150,13 @@ function SpecPicker({ skillKey, value, onChange }) {
   const [customMode, setCustomMode] = useState(() => Boolean(value) && !options.includes(value));
   if (customMode) {
     return (
-      <span className="flex items-center gap-1">
+      <span className="flex min-w-0 items-center gap-0.5">
         <input
           value={value}
           onChange={(e) => onChange(e.target.value.slice(0, 24))}
           maxLength={24}
-          placeholder="自定义方向"
-          className="w-32 rounded-[2px] border border-line-strong bg-paper-raised px-2 py-1.5 text-[14px] text-ink"
+          placeholder="自定义"
+          className="w-[5.4rem] rounded-[2px] border border-line-strong bg-paper-raised px-1.5 py-0.5 text-[12.5px] text-ink"
         />
         <button
           type="button"
@@ -174,7 +175,7 @@ function SpecPicker({ skillKey, value, onChange }) {
       onChange={(e) => {
         if (e.target.value === '__custom__') { setCustomMode(true); onChange(''); } else onChange(e.target.value);
       }}
-      className="w-36 cursor-pointer rounded-[2px] border border-line-strong bg-paper-raised px-2 py-1.5 text-[14px] text-ink"
+      className="w-[5.4rem] shrink-0 cursor-pointer rounded-[2px] border border-line-strong bg-paper-raised px-1 py-0.5 text-[12.5px] text-ink"
     >
       <option value="">（未选择）</option>
       {options.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -264,6 +265,7 @@ export default function CharacterEditor({
   const [importBlocks, setImportBlocks] = useState([]);
   const [skillFilter, setSkillFilter] = useState('all');
   const [skillQuery, setSkillQuery] = useState('');
+  const [gearDraft, setGearDraft] = useState({ part: '', name: '' });
   const [ownerId, setOwnerId] = useState(initialSheet?.ownerId || currentUser?.id || '');
   const [weaponPick, setWeaponPick] = useState('');
   // 守秘人发布的规则集（房规 + 审卡规则）：玩家在「房规」页选用
@@ -339,6 +341,25 @@ export default function CharacterEditor({
   );
 
   const patch = useCallback((partial) => { setSheet((prev) => ({ ...prev, ...partial })); setDirty(true); }, []);
+
+  /** 装备条目：结构化列表，同步一份纯文本给旧版打印 / Markdown 兜底 */
+  const setEquipmentItems = (items) => {
+    patch({
+      equipmentItems: items,
+      equipment: items.filter((it) => it.name)
+        .map((it) => `【${it.part || '随身'}】${it.name}`).join('\n'),
+    });
+  };
+  const gearItems = sheet.equipmentItems || [];
+  const addGear = () => {
+    const name = gearDraft.name.trim();
+    if (!name) return;
+    setEquipmentItems([...gearItems, {
+      id: `g${Date.now().toString(36)}`,
+      part: gearDraft.part.trim(), name,
+    }]);
+    setGearDraft({ part: gearDraft.part, name: '' });
+  };
 
   const setChar = (key, value) => {
     setSheet((prev) => ({ ...prev, chars: { ...prev.chars, [key]: value === '' ? '' : Number(value) } }));
@@ -746,6 +767,120 @@ export default function CharacterEditor({
     for (const h of occupationBranchHints(occ)) map.set(h.key, h);
     return map;
   }, [occ]);
+
+  const skillCols = useMemo(() => {
+    // 同一个技能的多行（例如两条「格斗」/两条「射击」专攻槽）必须留在同一栏；
+    // 再按顺序在组边界处尽量均分左右，避免同名分类被拆到两栏。
+    const groups = [];
+    for (const s of visibleSkills) {
+      const k = s.kind === 'custom' ? `custom:${s.id}` : (s.key || s.id);
+      const last = groups[groups.length - 1];
+      if (last && last.key === k) last.items.push(s);
+      else groups.push({ key: k, items: [s] });
+    }
+    const total = visibleSkills.length;
+    let cum = 0; let best = 0; let bestDiff = Infinity;
+    for (let i = 0; i < groups.length; i += 1) {
+      cum += groups[i].items.length;
+      const diff = Math.abs(cum - total / 2);
+      if (diff < bestDiff) { bestDiff = diff; best = i + 1; }
+    }
+    return [
+      groups.slice(0, best).flatMap((g) => g.items),
+      groups.slice(best).flatMap((g) => g.items),
+    ];
+  }, [visibleSkills]);
+
+  const renderSkillRow = (s) => {
+                  const isCredit = s.special === 'credit';
+                  const isMythos = s.special === 'cthulhu';
+                  const creditBad = isCredit && occ && !derived.creditInRange;
+                  return (
+                    <tr
+                      key={s.id}
+                      className={cx(
+                        'hover:bg-paper-deep/50',
+                        s.isOccupation && 'bg-forest/[0.04]',
+                        isCredit && (creditBad ? 'bg-vermilion/[0.06]' : 'bg-amber-500/[0.06]'),
+                        isMythos && 'bg-moon/[0.06]',
+                      )}
+                    >
+                      <td className="px-1.5 py-1.5">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          {s.kind === 'custom'
+                            ? <span className="shrink-0 font-bold text-moon" title="自定义技能">✎</span>
+                            : (s.isOccupation
+                              ? (s.pickedOccupation
+                                ? <span className="shrink-0 font-bold text-vermilion" title="自选本职（社交 / 任选）">❤</span>
+                                : <span className="shrink-0 font-bold text-ochre" title="原本职技能">★</span>)
+                              : <span className="shrink-0 text-ink-mute/60">·</span>)}
+                          <span className={cx('truncate text-ink-soft', (isCredit || isMythos) && 'font-bold text-ink')}>
+                            {SKILL_BY_KEY[s.key]?.name || s.name}
+                          </span>
+                          {s.spec ? (
+                            <SpecPicker skillKey={s.key} value={s.custom} onChange={(v) => setSkillCustom(s.id, v)} />
+                          ) : null}
+                          {isNamedSkill(s.key) ? (
+                            <input
+                              value={s.custom}
+                              onChange={(e) => setSkillCustom(s.id, e.target.value.slice(0, 24))}
+                              maxLength={24}
+                              placeholder={NAMED_SKILL_HINT[s.key]?.placeholder || '请填写'}
+                              className={cx('w-[5.5rem] shrink-0 rounded-[2px] border bg-paper-raised px-1.5 py-0.5 text-[12.5px] text-ink',
+                                s.custom ? 'border-line-strong' : 'border-amber-600/60')}
+                            />
+                          ) : null}
+                        </div>
+                        {(() => {
+                          const hint = s.isOccupation && s.spec ? branchHints.get(s.key) : null;
+                          const ok = hint ? Boolean(s.custom) && hint.options.includes(s.custom) : false;
+                          const bits = [];
+                          if (hint) bits.push(
+                            <span key="hint"
+                              className={cx('rounded-[2px] border px-1 py-[1px]',
+                                ok ? 'border-forest/40 bg-forest/10 text-forest' : 'border-amber-600/45 bg-ochre/10 text-ochre')}
+                              title="本职技能原文对该专攻方向的要求，请 KP 留意"
+                            >
+                              本职{hint.required ? '指定' : '建议'}：{hint.options.join('/')}{ok ? ' ✓' : ''}
+                            </span>,
+                          );
+                          if (isCredit) bits.push(
+                            <span key="credit"
+                              className={cx('rounded-[2px] border px-1 py-[1px] font-mono',
+                                occ ? (creditBad ? 'border-vermilion/50 bg-vermilion/10 text-vermilion' : 'border-amber-600/45 bg-ochre/10 text-ochre') : 'border-line-strong text-ink-soft')}
+                            >
+                              {occ ? `职业要求 ${occ.cr[0]}-${occ.cr[1]}%` : '选择职业后可校验区间'}
+                            </span>,
+                          );
+                          if (isMythos) bits.push(
+                            <span key="mythos" className="rounded-[2px] border border-amber-600/45 bg-amber-500/[0.08] px-1 py-[1px] text-ochre">
+                              神话知识 · 不可用点数提升
+                            </span>,
+                          );
+                          if (isNamedSkill(s.key) && !s.custom) bits.push(
+                            <span key="named" className="text-ochre">未选择{NAMED_SKILL_HINT[s.key]?.label || '名称'}</span>,
+                          );
+                          return bits.length ? <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11.5px]">{bits}</div> : null;
+                        })()}
+                      </td>
+                      <td className="px-1 py-1.5 text-center font-mono text-[14px] text-ink-mute">{s.base}</td>
+                      <td className="px-1 py-1.5">
+                        {isMythos
+                          ? <div className="text-center text-ink-mute">—</div>
+                          : <NumberInput blankZero value={s.occ} onChange={(v) => setSkill(s.id, 'occ', v)} className={cx('!px-1 !py-1.5 text-center text-[14.5px]', s.occ ? '!border-ochre/55 !bg-ochre/10 !text-ochre' : '!border-x-transparent !border-t-transparent !border-b-line-strong/50 !bg-transparent !text-ink-mute/45 !shadow-none')} />}
+                      </td>
+                      <td className="px-1 py-1.5">
+                        {isMythos
+                          ? <div className="text-center text-ink-mute">—</div>
+                          : <NumberInput blankZero value={s.interest} onChange={(v) => setSkill(s.id, 'interest', v)} className={cx('!px-1 !py-1.5 text-center text-[14.5px]', s.interest ? '!border-forest/55 !bg-forest/10 !text-forest' : '!border-x-transparent !border-t-transparent !border-b-line-strong/50 !bg-transparent !text-ink-mute/45 !shadow-none')} />}
+                      </td>
+                      <td className="px-1 py-1.5"><NumberInput blankZero value={s.growth} onChange={(v) => setSkill(s.id, 'growth', v)} className={cx('!px-1 !py-1.5 text-center text-[14.5px]', s.growth ? '!border-moon/55 !bg-moon/10 !text-moon' : '!border-x-transparent !border-t-transparent !border-b-line-strong/50 !bg-transparent !text-ink-mute/45 !shadow-none')} /></td>
+                      <td className="px-1 py-1.5 text-center font-mono text-[14px] font-bold text-forest">{s.total}%</td>
+                      <td className="px-1 py-1.5 text-center font-mono text-[13.5px] text-ink-soft">{s.half}</td>
+                      <td className="px-1 py-1.5 text-center font-mono text-[13.5px] text-ink-mute">{s.fifth}</td>
+                    </tr>
+                  );
+  };
 
   if (loading) {
     return <Panel><div className="p-12 text-center text-ink-soft">正在载入角色卡…</div></Panel>;
@@ -1333,131 +1468,69 @@ export default function CharacterEditor({
                 </b>
                 <span className="ml-1 text-ink-mute">（当前 {derived.creditRating}%）</span>
               </span>
-              <span className="text-ink-mute">★ = 本职技能，可用职业点提升</span>
+              <span className="text-ink-mute">★ = 原本职 · <span className="text-vermilion">❤</span> = 自选本职（社交 / 任选）· 可用职业点提升</span>
             </div>
           )}
 
           <p className="text-[14px] leading-relaxed text-ink-mute sm:hidden">← 左右滑动表格查看「职业点 / 兴趣点 / 成长」→</p>
-          <div className="overflow-x-auto rounded-[2px] border border-line-strong">
-            <table className="w-full min-w-[820px] text-[14.5px] leading-[1.6]">
-              <thead className="bg-paper-deep/70 text-[14px] text-ink-mute uppercase">
+          {visibleSkills.length === 0 ? (
+            <p className="rounded-[2px] border border-line-strong p-8 text-center text-[14.5px] text-ink-mute">没有符合条件的技能</p>
+          ) : (
+            <>
+              <div className="hidden xl:grid grid-cols-2 gap-3">
+                {[0, 1].map((col) => (
+                  <div key={col} className="overflow-x-auto rounded-[2px] border border-line-strong">
+                    <table className="w-full table-fixed text-[13.5px] leading-[1.5]">
+                      <colgroup>
+                        <col className="w-[34%]" />
+                        <col className="w-[8%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[9%]" />
+                        <col className="w-[9%]" />
+                      </colgroup>
+              <thead className="bg-paper-deep/70 text-[12.5px] text-ink-mute">
                 <tr>
-                  <th className="p-3 text-left">技能</th>
-                  <th className="p-3 w-16 text-center">基础</th>
-                  <th className="p-3 w-24 text-center">职业点</th>
-                  <th className="p-3 w-24 text-center">兴趣点</th>
-                  <th className="p-3 w-24 text-center">成长</th>
-                  <th className="p-3 w-20 text-center">合计</th>
-                  <th className="p-3 w-16 text-center">半值</th>
-                  <th className="p-3 w-16 text-center">五值</th>
+                  <th className="px-2 py-1.5 text-left">技能</th>
+                  <th className="px-0.5 py-1.5 text-center">基础</th>
+                  <th className="px-0.5 py-1.5 text-center">职业</th>
+                  <th className="px-0.5 py-1.5 text-center">兴趣</th>
+                  <th className="px-0.5 py-1.5 text-center">成长</th>
+                  <th className="px-0.5 py-1.5 text-center">合计</th>
+                  <th className="px-0.5 py-1.5 text-center">半值</th>
+                  <th className="px-0.5 py-1.5 text-center">五值</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-line-strong">
-                {visibleSkills.map((s) => {
-                  const isCredit = s.special === 'credit';
-                  const isMythos = s.special === 'cthulhu';
-                  const creditBad = isCredit && occ && !derived.creditInRange;
-                  return (
-                    <tr
-                      key={s.id}
-                      className={cx(
-                        'hover:bg-paper-deep/50',
-                        s.isOccupation && 'bg-forest/[0.04]',
-                        isCredit && (creditBad ? 'bg-vermilion/[0.06]' : 'bg-amber-500/[0.06]'),
-                        isMythos && 'bg-moon/[0.06]',
-                      )}
-                    >
-                      <td className="p-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {s.kind === 'custom'
-                            ? <span className="text-moon font-bold" title="自定义技能">✎</span>
-                            : (s.isOccupation
-                              ? <span className="text-ochre font-bold" title="本职技能">★</span>
-                              : <span className="text-ink-mute/60">·</span>)}
-                          <span className={cx('text-ink-soft', (isCredit || isMythos) && 'font-bold text-ink')}>
-                            {SKILL_BY_KEY[s.key]?.name || s.name}
-                          </span>
-                          {s.spec ? (
-                            <span className="flex items-center gap-1.5 flex-wrap">
-                              <SpecPicker skillKey={s.key} value={s.custom} onChange={(v) => setSkillCustom(s.id, v)} />
-                              {(() => {
-                                const hint = s.isOccupation ? branchHints.get(s.key) : null;
-                                if (!hint) return null;
-                                const ok = Boolean(s.custom) && hint.options.includes(s.custom);
-                                return (
-                                  <span
-                                    className={cx('whitespace-nowrap rounded-[2px] border px-1.5 py-0.5 text-[14px]',
-                                      ok
-                                        ? 'border-forest/40 text-forest bg-forest/10'
-                                        : 'border-amber-600/45 text-ochre bg-ochre/10')}
-                                    title={`官方本职技能原文要求该专攻方向${hint.required ? '（指定）' : '（建议从中选择）'}，请 KP 留意`}
-                                  >
-                                    本职{hint.required ? '指定' : '建议'}：{hint.options.join(' / ')}
-                                    {ok ? ' ✓' : ''}
-                                  </span>
-                                );
-                              })()}
-                            </span>
-                          ) : null}
-                          {isNamedSkill(s.key) ? (
-                            <span className="flex items-center gap-1.5">
-                              <input
-                                value={s.custom}
-                                onChange={(e) => setSkillCustom(s.id, e.target.value.slice(0, 24))}
-                                maxLength={24}
-                                placeholder={NAMED_SKILL_HINT[s.key]?.placeholder || '请填写'}
-                                className={cx('w-44 rounded-[2px] border border-line-strong bg-paper-raised px-2 py-1.5 text-[14px] text-ink',
-                                  s.custom ? 'border-line-strong' : 'border-amber-600/60')}
-                              />
-                              {!s.custom ? (
-                                <span className="whitespace-nowrap text-[14px] text-ochre">
-                                  未选择{NAMED_SKILL_HINT[s.key]?.label || '名称'}
-                                </span>
-                              ) : null}
-                            </span>
-                          ) : null}
-                          {isCredit ? (
-                            <span className={cx('rounded-[2px] border px-1.5 py-0.5 font-mono text-[14px]',
-                              occ
-                                ? (creditBad
-                                  ? 'border-vermilion/50 text-vermilion bg-vermilion/10'
-                                  : 'border-amber-600/45 text-ochre bg-ochre/10')
-                                : 'border-line-strong text-ink-soft')}
-                            >
-                              {occ ? `职业要求 ${occ.cr[0]}-${occ.cr[1]}%` : '选择职业后可校验区间'}
-                            </span>
-                          ) : null}
-                          {isMythos ? (
-                            <span className="rounded-[2px] border border-amber-600/45 bg-amber-500/[0.08] px-1.5 py-0.5 text-[14px] text-ochre">
-                              神话知识 · 不可用点数提升
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="p-2 text-center font-mono text-[14px] text-ink-mute">{s.base}</td>
-                      <td className="p-2">
-                        {isMythos
-                          ? <div className="text-center text-ink-mute">—</div>
-                          : <NumberInput value={s.occ} onChange={(v) => setSkill(s.id, 'occ', v)} className="!py-1.5 text-[14.5px]" />}
-                      </td>
-                      <td className="p-2">
-                        {isMythos
-                          ? <div className="text-center text-ink-mute">—</div>
-                          : <NumberInput value={s.interest} onChange={(v) => setSkill(s.id, 'interest', v)} className="!py-1.5 text-[14.5px]" />}
-                      </td>
-                      <td className="p-2"><NumberInput value={s.growth} onChange={(v) => setSkill(s.id, 'growth', v)} className="!py-1.5 text-[14.5px]" /></td>
-                      <td className="p-2 text-center font-mono text-[14px] font-bold text-forest">{s.total}%</td>
-                      <td className="p-2 text-center font-mono text-[14px] text-ink-soft">{s.half}</td>
-                      <td className="p-2 text-center font-mono text-[14px] text-ink-mute">{s.fifth}</td>
+                      <tbody className="divide-y divide-line-strong">
+                        {skillCols[col].map(renderSkillRow)}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+              <div className="overflow-x-auto rounded-[2px] border border-line-strong xl:hidden">
+                <table className="w-full min-w-[640px] text-[14.5px] leading-[1.55]">
+                  <thead className="bg-paper-deep/70 text-[13.5px] text-ink-mute">
+                    <tr>
+                      <th className="px-2 py-2 text-left">技能</th>
+                      <th className="px-1 py-2 w-14 text-center">基础</th>
+                      <th className="px-1 py-2 w-20 text-center">职业</th>
+                      <th className="px-1 py-2 w-20 text-center">兴趣</th>
+                      <th className="px-1 py-2 w-20 text-center">成长</th>
+                      <th className="px-1 py-2 w-16 text-center">合计</th>
+                      <th className="px-1 py-2 w-12 text-center">半值</th>
+                      <th className="px-1 py-2 w-12 text-center">五值</th>
                     </tr>
-                  );
-                })}
-                {visibleSkills.length === 0 && (
-                  <tr><td colSpan={8} className="p-8 text-center text-[14.5px] text-ink-mute">没有符合条件的技能</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody className="divide-y divide-line-strong">
+                    {visibleSkills.map(renderSkillRow)}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
 
           {/* 自定义技能 */}
           <div className="border-t border-line pt-4">
@@ -1692,7 +1765,7 @@ export default function CharacterEditor({
                           {set.isActive ? <Badge tone="emerald">守秘人当前在用</Badge> : null}
                         </span>
                         <span className="mt-0.5 block text-[13.5px] text-ink-mute">
-                          发布：{set.ownerName || '首席守秘人'}
+                          发布：{set.ownerName || '未登记'}
                           {set.updatedAt ? ` · ${new Date(set.updatedAt).toLocaleDateString('zh-CN')}` : ''}
                         </span>
                         {numeric.length ? (
@@ -1728,9 +1801,51 @@ export default function CharacterEditor({
         <div className="space-y-5">
           <Panel className="space-y-4 p-5 sm:p-6">
             <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink"><FileText className="h-4 w-4 text-ochre" />装备与资产</h3>
-            <Field className={FIELD} label="装备和物品">
-              <Textarea rows={5} maxLength={4000} value={sheet.equipment} onChange={(e) => patch({ equipment: e.target.value })} />
-            </Field>
+            <div>
+              <div className="mb-2 flex items-baseline justify-between gap-3">
+                <span className="text-[14.5px] font-bold text-ink">装备和物品</span>
+                <span className="text-[14px] text-ink-mute">已登记 {gearItems.length} 件</span>
+              </div>
+              {gearItems.length > 0 ? (
+                <ul className="divide-y divide-line-strong rounded-[2px] border border-line-strong">
+                  {gearItems.map((it) => (
+                    <li key={it.id} className="flex flex-wrap items-center gap-2 px-2 py-1.5">
+                      <Input
+                        value={it.part || ''}
+                        maxLength={40}
+                        placeholder="部位（背包 / 手上 / 口袋…）"
+                        onChange={(e) => setEquipmentItems(gearItems.map((x) => (x.id === it.id ? { ...x, part: e.target.value.slice(0, 40) } : x)))}
+                        className="!w-36 !py-1 !text-[14px]"
+                      />
+                      <Input
+                        value={it.name || ''}
+                        maxLength={120}
+                        placeholder="物品名称"
+                        onChange={(e) => setEquipmentItems(gearItems.map((x) => (x.id === it.id ? { ...x, name: e.target.value.slice(0, 120) } : x)))}
+                        className="!min-w-0 flex-1 !py-1 !text-[14px]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setEquipmentItems(gearItems.filter((x) => x.id !== it.id))}
+                        className="border-b border-transparent px-1 text-[14px] text-red-600 transition-colors hover:border-red-500"
+                      >
+                        移除
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-[2px] border border-dashed border-line-strong p-2">
+                <Input value={gearDraft.part} maxLength={40} placeholder="部位（背包 / 手上 / 口袋…）" onChange={(e) => setGearDraft({ ...gearDraft, part: e.target.value })} className="!w-40 !py-1.5 !text-[14px]" />
+                <Input value={gearDraft.name} maxLength={120} placeholder="物品名称" onChange={(e) => setGearDraft({ ...gearDraft, name: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') addGear(); }} className="!min-w-0 flex-1 !py-1.5 !text-[14px]" />
+                <Button variant="ghost" onClick={addGear} disabled={!gearDraft.name.trim()}><Plus className="w-4 h-4" />添加物品</Button>
+              </div>
+              {gearItems.length === 0 && sheet.equipment ? (
+                <p className="mt-2 whitespace-pre-wrap rounded-[2px] border border-line-strong bg-paper-deep/40 p-2.5 text-[14px] leading-[1.7] text-ink-soft">
+                  <span className="text-ink-mute">旧版文字：</span>{sheet.equipment}
+                </p>
+              ) : null}
+            </div>
             <div className="grid sm:grid-cols-2 gap-4">
               <Field className={FIELD} label="时代" hint="影响生活水平与物价表">
                 <Select value={sheet.era} onChange={(e) => {

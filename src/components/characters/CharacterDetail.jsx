@@ -205,6 +205,32 @@ export default function CharacterDetail({
   const shownSkills = showAllSkills ? d.skills : usedSkills;
   const attrSum = CHARS.reduce((n, k) => n + (Number(d.eff?.[k]) || 0), 0);
   const attrWithLuck = attrSum + (Number(d.eff?.Luck) || 0);
+  const skillCols = [shownSkills.filter((_, i) => i % 2 === 0), shownSkills.filter((_, i) => i % 2 === 1)];
+  const renderSkillRow = (s) => (
+                    <tr
+                      key={s.id}
+                      className={cx(
+                        s.isOccupation && 'bg-emerald-500/[0.03]',
+                        s.special === 'credit' && 'bg-amber-500/[0.06]',
+                        s.special === 'cthulhu' && 'bg-amber-500/[0.06]',
+                      )}
+                    >
+                      <td className="p-3 text-ink">
+                        {s.kind === 'custom'
+                          ? <span className="text-moon mr-1.5">✎</span>
+                          : (s.isOccupation
+                            ? (s.pickedOccupation ? <span className="text-vermilion mr-1.5">❤</span> : <span className="text-forest mr-1.5">★</span>)
+                            : <span className="text-ink-mute/70 mr-1.5">·</span>)}
+                        <span className={cx(s.special && 'font-bold text-ink')}>{s.name}</span>
+                      </td>
+                      <td className="px-1 py-1.5 text-center font-mono text-[14px] text-ink-mute">{s.base}</td>
+                      <td className={cx('px-1 py-1.5 text-center font-mono', s.occ ? 'text-ochre' : 'text-ink-mute/45')}>{s.occ || '-'}</td>
+                      <td className={cx('px-1 py-1.5 text-center font-mono', s.interest ? 'text-forest' : 'text-ink-mute/45')}>{s.interest || '-'}</td>
+                      <td className={cx('px-1 py-1.5 text-center font-mono', s.growth ? 'text-moon' : 'text-ink-mute/45')}>{s.growth || '-'}</td>
+                      <td className="tabular px-1 py-1.5 text-center text-[14px] font-bold text-forest">{s.total}%</td>
+                      <td className="px-1 py-1.5 text-center font-mono text-[13.5px] text-ink-soft">{s.half} / {s.fifth}</td>
+                    </tr>
+  );
   const review = c.review || { status: 'none' };
   const canReview = c.canReview && review.status === 'pending';
   const legendary = c.legendary || { enabled: false };
@@ -560,55 +586,67 @@ export default function CharacterDetail({
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <h3 className="flex items-center font-serif text-[17px] font-bold text-ink"><Wand2 className="mr-2 h-4 w-4 text-forest" />技能（{shownSkills.length}）</h3>
               <div className="flex flex-wrap items-center gap-3">
-                <span className="text-[14px] text-ink-mute">★ = 本职技能 · ✎ = 自定义技能 · 打印时会列出全部技能与基础值</span>
+                <span className="text-[14px] text-ink-mute">★ = 原本职 · <span className="text-vermilion">❤</span> = 自选本职 · ✎ = 自定义 · 打印时列出全部技能与基础值</span>
                 <Button variant="subtle" onClick={() => setShowAllSkills((v) => !v)}>
                   {showAllSkills ? '只看已调整' : `展开全部技能（${d.skills.length}）`}
                 </Button>
               </div>
             </div>
-            <div className="overflow-x-auto rounded-[2px] border border-line-strong">
-              <table className="w-full min-w-[620px] text-[14.5px] leading-[1.65]">
-                <thead className="bg-paper-deep/70 text-[14px] text-ink-mute">
-                  <tr>
-                    <th className="p-3 text-left">技能</th>
-                    <th className="p-3 w-20 text-center">基础</th>
-                    <th className="p-3 w-20 text-center">职业</th>
-                    <th className="p-3 w-20 text-center">兴趣</th>
-                    <th className="p-3 w-20 text-center">成长</th>
-                    <th className="p-3 w-24 text-center">成功率</th>
-                    <th className="p-3 w-24 text-center">困难/极难</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line-strong">
-                  {shownSkills.map((s) => (
-                    <tr
-                      key={s.id}
-                      className={cx(
-                        s.isOccupation && 'bg-emerald-500/[0.03]',
-                        s.special === 'credit' && 'bg-amber-500/[0.06]',
-                        s.special === 'cthulhu' && 'bg-amber-500/[0.06]',
-                      )}
-                    >
-                      <td className="p-3 text-ink">
-                        {s.kind === 'custom'
-                          ? <span className="text-moon mr-1.5">✎</span>
-                          : (s.isOccupation ? <span className="text-forest mr-1.5">★</span> : <span className="text-ink-mute/70 mr-1.5">·</span>)}
-                        <span className={cx(s.special && 'font-bold text-ink')}>{s.name}</span>
-                      </td>
-                      <td className="p-3 text-center font-mono text-[14px] text-ink-mute">{s.base}</td>
-                      <td className="p-3 text-center font-mono text-ink-soft">{s.occ || '-'}</td>
-                      <td className="p-3 text-center font-mono text-ink-soft">{s.interest || '-'}</td>
-                      <td className="p-3 text-center font-mono text-ink-soft">{s.growth || '-'}</td>
-                      <td className="tabular p-3 text-center text-[14px] font-bold text-forest">{s.total}%</td>
-                      <td className="p-3 text-center font-mono text-[14px] text-ink-soft">{s.half} / {s.fifth}</td>
+            {shownSkills.length === 0 ? (
+              <p className="rounded-[2px] border border-line-strong p-8 text-center text-[14.5px] text-ink-mute">还没有分配任何技能点</p>
+            ) : (
+              <>
+                <div className="hidden xl:grid grid-cols-2 gap-3">
+                  {[0, 1].map((col) => (
+                    <div key={col} className="overflow-x-auto rounded-[2px] border border-line-strong">
+                      <table className="w-full table-fixed text-[13.5px] leading-[1.5]">
+                        <colgroup>
+                          <col className="w-[26%]" />
+                          <col className="w-[8%]" />
+                          <col className="w-[10%]" />
+                          <col className="w-[10%]" />
+                          <col className="w-[10%]" />
+                          <col className="w-[18%]" />
+                          <col className="w-[18%]" />
+                        </colgroup>
+                  <thead className="bg-paper-deep/70 text-[12.5px] text-ink-mute">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left">技能</th>
+                      <th className="px-0.5 py-1.5 text-center">基础</th>
+                      <th className="px-0.5 py-1.5 text-center">职业</th>
+                      <th className="px-0.5 py-1.5 text-center">兴趣</th>
+                      <th className="px-0.5 py-1.5 text-center">成长</th>
+                      <th className="px-0.5 py-1.5 text-center">成功率</th>
+                      <th className="px-0.5 py-1.5 text-center">困难/极难</th>
                     </tr>
+                  </thead>
+                        <tbody className="divide-y divide-line-strong">
+                          {skillCols[col].map(renderSkillRow)}
+                        </tbody>
+                      </table>
+                    </div>
                   ))}
-                  {shownSkills.length === 0 && (
-                    <tr><td colSpan={7} className="p-8 text-center text-[14.5px] text-ink-mute">还没有分配任何技能点</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                </div>
+                <div className="overflow-x-auto rounded-[2px] border border-line-strong xl:hidden">
+                  <table className="w-full min-w-[560px] text-[14.5px] leading-[1.55]">
+                    <thead className="bg-paper-deep/70 text-[13.5px] text-ink-mute">
+                      <tr>
+                        <th className="px-2 py-2 text-left">技能</th>
+                        <th className="px-1 py-2 w-14 text-center">基础</th>
+                        <th className="px-1 py-2 w-14 text-center">职业</th>
+                        <th className="px-1 py-2 w-14 text-center">兴趣</th>
+                        <th className="px-1 py-2 w-14 text-center">成长</th>
+                        <th className="px-1 py-2 w-20 text-center">成功率</th>
+                        <th className="px-1 py-2 w-20 text-center">困难/极难</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line-strong">
+                      {shownSkills.map(renderSkillRow)}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </Panel>
 
           <Panel className="p-5 sm:p-6">
@@ -717,9 +755,20 @@ export default function CharacterDetail({
             <h3 className="flex items-center font-serif text-[17px] font-bold text-ink"><FileText className="mr-2 h-4 w-4 text-forest" />装备与资产</h3>
             <div>
               <div className="mb-2 text-[14.5px] font-bold text-ink">装备和物品</div>
-              <p className="whitespace-pre-wrap rounded-[2px] border border-line-strong bg-paper-deep/40 p-3.5 text-[16px] leading-[1.85] text-ink-soft">
-                {c.equipment || <span className="text-ink-mute">—</span>}
-              </p>
+              {(c.equipmentItems || []).length ? (
+                <ul className="divide-y divide-line-strong rounded-[2px] border border-line-strong bg-paper-deep/40">
+                  {c.equipmentItems.map((it) => (
+                    <li key={it.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3.5 py-2 text-[15px]">
+                      <span className="w-24 shrink-0 text-[14px] text-ink-mute">{it.part || '随身'}</span>
+                      <span className="min-w-0 flex-1 text-ink-soft">{it.name}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="whitespace-pre-wrap rounded-[2px] border border-line-strong bg-paper-deep/40 p-3.5 text-[16px] leading-[1.85] text-ink-soft">
+                  {c.equipment || <span className="text-ink-mute">—</span>}
+                </p>
+              )}
             </div>
             <div className="space-y-3 rounded-[2px] border border-line-strong bg-paper-deep/30 p-4">
               <div className="text-[14px] leading-[1.7] text-ink-mute">

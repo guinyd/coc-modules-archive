@@ -219,7 +219,19 @@ export default function CharacterPrint({ character }) {
           <div className="grid grid-cols-2 gap-3 mt-3">
             <div className="border border-ink/25 rounded-[3px] overflow-hidden">
               <div className="bg-paper-deep px-2 py-1 text-[12.5px] font-bold text-ink-soft tracking-[0.15em] shadow-[inset_0_-1px_0_0_var(--color-line)]">❖ 装备和物品</div>
-              <div className="p-2 text-[11.5px] leading-[1.65] whitespace-pre-wrap min-h-[5.5rem]">{character.equipment || ''}</div>
+              <div className="p-2 text-[11.5px] leading-[1.65] min-h-[5.5rem]">
+                {(character.equipmentItems || []).length ? (
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                    {character.equipmentItems.map((it) => (
+                      <div key={it.id} className="break-inside-avoid [overflow-wrap:anywhere]">
+                        <span className="text-ink-mute">【{it.part || '随身'}】</span>{it.name}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="whitespace-pre-wrap">{character.equipment || ''}</div>
+                )}
+              </div>
             </div>
             <div className="border border-ink/25 rounded-[3px] overflow-hidden">
               <div className="bg-paper-deep px-2 py-1 text-[12.5px] font-bold text-ink-soft tracking-[0.15em] shadow-[inset_0_-1px_0_0_var(--color-line)] flex justify-between">

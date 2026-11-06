@@ -20,7 +20,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Copy, Crown, RefreshCw, Search, Shield, User as UserIcon, UserPlus } from 'lucide-react';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../lib/api.js';
 import {
-  Badge, Button, EmptyState, Field, Input, Modal, NumberInput, PageHeader, Panel, Select, StatStrip, cx,
+  Badge, Button, EmptyState, Field, Input, Modal, NumberInput, PageHeader, Pager, Panel, Select, StatStrip, cx,
 } from './ui.jsx';
 import { usernameHint } from './AccountRenameCard.jsx';
 import { KP_TITLES, PLAYER_TITLES } from '../../shared/coc7e.js';
@@ -47,7 +47,7 @@ function RoleBadge({ user, className }) {
       className,
     )}>
       <Icon className="h-4 w-4" />
-      {chief ? '首席守秘人' : keeper ? '守秘人' : '调查员'}
+      {chief ? '首席' : keeper ? '守秘人' : '调查员'}
     </span>
   );
 }
@@ -291,6 +291,17 @@ export default function AdminUsersPanel({
   const keepers = users
     .filter(isKeeperAccount)
     .sort((a, b) => (isChiefAccount(a) ? 0 : 1) - (isChiefAccount(b) ? 0 : 1));
+  const ACCOUNT_PAGE = 8;
+  const KEEPER_PAGE = 4;
+  const [accountPage, setAccountPage] = useState(1);
+  const [keeperPage, setKeeperPage] = useState(1);
+  useEffect(() => { setAccountPage(1); }, [normalizedQuery]);
+  const accountPages = Math.max(1, Math.ceil(filteredUsers.length / ACCOUNT_PAGE));
+  const accountPageNow = Math.min(accountPage, accountPages);
+  const pagedUsers = filteredUsers.slice((accountPageNow - 1) * ACCOUNT_PAGE, accountPageNow * ACCOUNT_PAGE);
+  const keeperPages = Math.max(1, Math.ceil(keepers.length / KEEPER_PAGE));
+  const keeperPageNow = Math.min(keeperPage, keeperPages);
+  const pagedKeepers = keepers.slice((keeperPageNow - 1) * KEEPER_PAGE, keeperPageNow * KEEPER_PAGE);
   const players = users.filter((u) => u.role === 'user');
   const formatRegistered = (value) => {
     if (!value) return '—';
@@ -415,7 +426,7 @@ export default function AdminUsersPanel({
             </p>
 
             <div className="mt-4 border-y border-line">
-              {keepers.map((k) => (
+              {pagedKeepers.map((k) => (
                 <div key={k.id} className="flex flex-wrap items-center gap-x-4 gap-y-2.5 border-b border-line-soft py-3 last:border-b-0">
                   <div className="flex min-w-0 flex-1 items-center gap-2.5">
                     <span
@@ -435,7 +446,7 @@ export default function AdminUsersPanel({
 
                   {isChiefAccount(k) ? (
                     <span className="inline-flex items-center gap-1.5 border border-amber-500/45 bg-amber-500/[0.05] px-2 py-1 text-[14px] tracking-[0.06em] text-amber-500">
-                      <Crown className="h-4 w-4" />首席守秘人
+                      <Crown className="h-4 w-4" />首席
                     </span>
                   ) : (
                     <>
@@ -457,7 +468,7 @@ export default function AdminUsersPanel({
                       <button
                         type="button"
                         onClick={() => handleDemote(k)}
-                        className="border-b border-transparent pb-0.5 text-[14px] text-red-600 transition-colors hover:border-red-500 hover:text-red-500"
+                        className="whitespace-nowrap border-b border-transparent pb-0.5 text-[13.5px] text-red-600 transition-colors hover:border-red-500 hover:text-red-500"
                       >
                         降回玩家
                       </button>
@@ -465,6 +476,7 @@ export default function AdminUsersPanel({
                   )}
                 </div>
               ))}
+              <Pager page={keeperPageNow} total={keepers.length} pageSize={KEEPER_PAGE} onChange={setKeeperPage} label="位" />
             </div>
 
             <div className="mt-5 grid gap-4 border-t border-line pt-4 sm:grid-cols-[1fr_10rem_auto] sm:items-end">
@@ -553,35 +565,35 @@ export default function AdminUsersPanel({
         </div>
 
         <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[1080px] border-collapse text-left">
+          <table className="w-full min-w-[860px] border-collapse text-left">
             <thead>
               <tr className="bg-ink text-paper-raised">
                 <th className="w-12 px-3 py-3 font-mono text-[14px] font-medium tracking-[0.14em] text-paper-deep/70">NO.</th>
-                <th className="px-4 py-3 text-[14px] font-semibold tracking-[0.16em]">用户名</th>
-                <th className="px-4 py-3 text-[14px] font-semibold tracking-[0.16em]">权限角色</th>
-                <th className="px-4 py-3 text-[14px] font-semibold tracking-[0.16em]">荣誉头衔（显示在证书）</th>
-                <th className="px-4 py-3 text-center text-[14px] font-semibold tracking-[0.16em]">角色卡</th>
-                <th className="px-4 py-3 text-center text-[14px] font-semibold tracking-[0.16em]">建卡额度</th>
-                <th className="px-4 py-3 text-[14px] font-semibold tracking-[0.16em]">发放人</th>
+                <th className="px-2.5 py-2.5 text-[14px] font-semibold tracking-[0.16em]">用户名</th>
+                <th className="px-2.5 py-2.5 text-[14px] font-semibold tracking-[0.16em]">权限角色</th>
+                <th className="px-2.5 py-2.5 text-[14px] font-semibold tracking-[0.16em]">荣誉头衔</th>
+                <th className="px-2.5 py-2.5 text-center text-[14px] font-semibold tracking-[0.16em]">角色卡</th>
+                <th className="px-2.5 py-2.5 text-center text-[14px] font-semibold tracking-[0.16em]">建卡额度</th>
+                <th className="px-2.5 py-2.5 text-[14px] font-semibold tracking-[0.16em]">发放人</th>
                 {isChief && (
-                  <th className="px-4 py-3 text-right text-[14px] font-semibold tracking-[0.16em]">操作</th>
+                  <th className="px-2.5 py-2.5 text-right text-[14px] font-semibold tracking-[0.16em]">操作</th>
                 )}
               </tr>
             </thead>
             <tbody>
-              {filteredUsers.map((u, idx) => {
+              {pagedUsers.map((u, idx) => {
                 const canDelete = isChief && !isChiefAccount(u) && u.id !== currentUser?.id;
                 return (
                   <tr key={u.id} className="border-b border-line transition-colors hover:bg-paper-deep/60">
                     <td className="px-3 py-[13px] font-mono text-[14px] text-slate-500 tabular">
-                      {String(idx + 1).padStart(2, '0')}
+                      {String((accountPageNow - 1) * ACCOUNT_PAGE + idx + 1).padStart(2, '0')}
                     </td>
-                    <td className="px-4 py-[13px]">
-                      <span className="flex items-center gap-2.5">
+                    <td className="px-2.5 py-[10px]">
+                      <span className="flex items-center gap-2">
                         <span
                           aria-hidden="true"
                           className={cx(
-                            'flex h-7 w-7 shrink-0 items-center justify-center border font-serif text-[14px] font-bold',
+                            'flex h-6 w-6 shrink-0 items-center justify-center border font-serif text-[14px] font-bold',
                             isKeeperAccount(u)
                               ? 'border-red-500/50 bg-red-500/[0.04] text-red-600'
                               : 'border-indigo/35 bg-paper text-indigo',
@@ -589,20 +601,20 @@ export default function AdminUsersPanel({
                         >
                           {u.username.slice(0, 1)}
                         </span>
-                        <span className="text-[15px] font-medium text-slate-100">{u.username}</span>
+                        <span className="max-w-[9.5rem] truncate text-[14.5px] font-medium text-slate-100" title={u.username}>{u.username}</span>
                         {u.mustChangePassword ? <Badge tone="red" className="!text-[14px]">弱口令待改</Badge> : null}
                       </span>
                     </td>
-                    <td className="px-4 py-[13px]">
+                    <td className="px-2.5 py-[10px]">
                       <RoleBadge user={u} />
                     </td>
-                    <td className="px-4 py-[13px]">
+                    <td className="px-2.5 py-[10px]">
                       {isChief ? (
                         <Select
                           value={u.title || PLAYER_TITLES[0]}
                           onChange={(e) => handleUpdateTitle(u.id, e.target.value)}
                           aria-label={`${u.username} 的玩家头衔`}
-                          className="!w-auto !min-w-[10.25rem] !rounded-none !border-x-0 !border-t-0 !bg-transparent !py-1 !pl-0 !pr-8 !text-[14.5px] text-slate-300"
+                          className="!w-[8.25rem] !min-w-0 !max-w-none !rounded-none !border-x-0 !border-t-0 !bg-transparent !py-1 !pl-0 !pr-6 !text-[14px] text-slate-300"
                         >
                           {PLAYER_TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
                         </Select>
@@ -610,13 +622,13 @@ export default function AdminUsersPanel({
                         <span className="font-kai text-[14.5px] tracking-[0.08em] text-slate-400">{u.title || PLAYER_TITLES[0]}</span>
                       )}
                     </td>
-                    <td className="px-4 py-[13px] text-center">
+                    <td className="px-2.5 py-[10px] text-center">
                       <span className={cx('font-mono text-[16px] font-semibold tabular', u.characterCount ? 'text-emerald-700' : 'text-slate-500')}>
                         {u.characterCount || 0}
                       </span>
                       <span className="ml-1 text-[14px] text-slate-500">张</span>
                     </td>
-                    <td className="px-4 py-[13px] text-center">
+                    <td className="px-2.5 py-[10px] text-center">
                       {isChief ? (
                         <LimitInput
                           key={`${u.id}-${u.characterLimit}`}
@@ -628,23 +640,23 @@ export default function AdminUsersPanel({
                         <LimitText value={u.characterLimit} used={u.characterCount || 0} />
                       )}
                     </td>
-                    <td className="px-4 py-[13px]">
-                      <span className="font-kai text-[14.5px] tracking-[0.08em] text-slate-400">{issuerOf(u, chiefName)}</span>
+                    <td className="px-2.5 py-[10px]">
+                      <span className="block max-w-[7.5rem] truncate font-kai text-[14px] tracking-[0.06em] text-slate-400" title={issuerOf(u, chiefName)}>{issuerOf(u, chiefName)}</span>
                     </td>
                     {isChief && (
-                      <td className="px-4 py-[13px]">
-                        <div className="flex justify-end gap-3.5">
+                      <td className="px-2.5 py-[10px]">
+                        <div className="flex justify-end gap-2">
                           <button
                             type="button"
                             onClick={() => { setRenaming({ id: u.id, username: u.username }); setRenameTo(u.username); }}
-                            className="border-b border-transparent pb-0.5 text-[14px] text-slate-400 transition-colors hover:border-slate-400 hover:text-slate-100"
+                            className="whitespace-nowrap border-b border-transparent pb-0.5 text-[13.5px] text-slate-400 transition-colors hover:border-slate-400 hover:text-slate-100"
                           >
                             改名
                           </button>
                           <button
                             type="button"
                             onClick={() => handleResetPwd(u.id, u.username)}
-                            className="border-b border-transparent pb-0.5 text-[14px] text-emerald-700 transition-colors hover:border-emerald-700 hover:text-emerald-600"
+                            className="whitespace-nowrap border-b border-transparent pb-0.5 text-[13.5px] text-emerald-700 transition-colors hover:border-emerald-700 hover:text-emerald-600"
                           >
                             重置密码
                           </button>
@@ -652,7 +664,7 @@ export default function AdminUsersPanel({
                             <button
                               type="button"
                               onClick={() => handleDeleteUser(u.id, u.username, u.characterCount || 0, isKeeperAccount(u))}
-                              className="border-b border-transparent pb-0.5 text-[14px] text-red-600 transition-colors hover:border-red-500 hover:text-red-500"
+                              className="whitespace-nowrap border-b border-transparent pb-0.5 text-[13.5px] text-red-600 transition-colors hover:border-red-500 hover:text-red-500"
                             >
                               删除
                             </button>
@@ -675,10 +687,11 @@ export default function AdminUsersPanel({
               )}
             </tbody>
           </table>
+          <Pager page={accountPageNow} total={filteredUsers.length} pageSize={ACCOUNT_PAGE} onChange={setAccountPage} label="位" />
         </div>
 
         <div className="md:hidden">
-          {filteredUsers.map((u) => {
+          {pagedUsers.map((u) => {
             const canDelete = isChief && !isChiefAccount(u) && u.id !== currentUser?.id;
             return (
               <article key={u.id} className="border-b border-line px-4 py-[14px] last:border-b-0">
@@ -801,7 +814,7 @@ export default function AdminUsersPanel({
             {isChief ? `在册 ${users.length} 位` : `你发放的 ${users.length} 位`} · 名册随操作即时更新
           </span>
           <span className="font-kai text-[14px] tracking-[0.08em] text-slate-500">
-            登记 · {isChief ? '首席守秘人' : '守秘人'}
+            登记 · {isChief ? '首席' : '守秘人'}
           </span>
         </div>
       </Panel>

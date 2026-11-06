@@ -639,6 +639,7 @@ export default function HomeView({
                     名册还是空的。等第一位守秘人给模组做上「可带团」标记。
                   </p>
                 ) : (
+                  <>
                   <ul className="mt-4 grid gap-4 sm:grid-cols-2">
                     {keeperRoster.map((k, i) => (
                       <Reveal as="li" key={k.id} delay={Math.min(i, 8) * 35}>
@@ -670,6 +671,7 @@ export default function HomeView({
                       </Reveal>
                     ))}
                   </ul>
+                  </>
                 )}
               </div>
             ) : null}

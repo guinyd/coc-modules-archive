@@ -468,7 +468,7 @@ router.put('/audit-rules/global', requireChief, (req, res) => {
       name: '全局默认规则',
       scope: 'global',
       ownerId: null,
-      ownerName: '首席守秘人',
+      ownerName: req.user.username || '',
       auditRules: {}, houseRules: [],
       createdAt: now, updatedAt: now,
     };

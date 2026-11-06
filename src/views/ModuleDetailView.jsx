@@ -45,13 +45,13 @@ function ReaderRow({ label, value }) {
 }
 
 export default function ModuleDetailView({
-  module, isAdmin, isChief, played, currentUser, keeperName, keeperRoster = [],
+  module, isAdmin, isChief, played, currentUser, keeperRoster = [],
   onBack, onCopy, onEdit, onDelete, onTogglePlayed, onToggleKeeperMark, onGoCharacters,
 }) {
   const hasExtra = Boolean(module.charInfo || module.occupations || module.skills || module.notes);
   const minted = jitter(`${module.id}seal`, -5, 3, 1);
   const canManage = Boolean(isAdmin && (isChief || (currentUser && module.createdBy === currentUser.id)));
-  const handler = module.createdByName || keeperName || '';
+  const handler = module.createdByName || '';
   // 我（当前守秘人）是否已把这份卷宗标进自己的「可带团」书架
   const marked = Boolean(isAdmin && keeperRoster.some(
     (k) => k.id === currentUser?.id && (k.moduleIds || []).includes(module.id),
@@ -252,7 +252,7 @@ export default function ModuleDetailView({
                 <p className="font-mono text-[14px] tracking-[0.2em] text-ink-mute/85">HANDLING KEEPER · 经办登记</p>
                 <p className="mt-2 flex flex-wrap items-baseline gap-x-2 font-kai text-[14px] tracking-[0.1em] text-ink-mute">
                   <span className="shrink-0">经办人</span>
-                  <span className="shrink-0 font-serif text-[16px] font-bold tracking-[0.04em] text-ink">[{handler || '档案馆首席 KP'}]</span>
+                  <span className="shrink-0 font-serif text-[16px] font-bold tracking-[0.04em] text-ink">[{handler || '未登记'}]</span>
                   {issuedText ? <span className="shrink-0 font-mono text-[14px] tracking-[0.12em] text-ink-mute/80">{issuedText}</span> : null}
                   <span aria-hidden="true" className="h-[13px] min-w-[40px] flex-1 border-b border-dotted border-line-strong" />
                 </p>

@@ -605,9 +605,9 @@ export function WarningList({ items, title = '规则提示', note = '当前提�
  *  - 合法输入实时同步给父组件（合计/派生值照常即时刷新）；
  *  - 只输入了一半（如 15 的「1」）时保留原文，等失焦或回车再夹到合法区间。
  */
-export function NumberInput({ value, onChange, min = 0, max = 99, className, ...rest }) {
+export function NumberInput({ value, onChange, min = 0, max = 99, className, blankZero = false, ...rest }) {
   const [draft, setDraft] = useState(null);
-  const shown = draft !== null ? draft : (value === 0 || value ? String(value) : '');
+  const shown = draft !== null ? draft : (blankZero && !value ? '' : (value === 0 || value ? String(value) : ''));
 
   const commit = (raw) => {
     setDraft(null);
@@ -675,5 +675,22 @@ export function Reveal({ children, delay = 0, variant = 'fade', className, as: T
     >
       {children}
     </Tag>
+  );
+}
+
+/* ------------------------------------------------------------------ 分页 */
+/** 通用分页条：page 从 1 开始，total 为总条数；只有一页时不渲染。 */
+export function Pager({ page, total, pageSize = 8, onChange, label = '条' }) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  if (pages <= 1) return null;
+  const btn = 'border border-line px-3 py-1.5 text-[14px] tracking-[0.1em] text-ink-soft transition-colors hover:border-moon hover:text-moon disabled:pointer-events-none disabled:opacity-35';
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3 font-mono text-[14px] tracking-[0.14em] text-ink-mute">
+      <span>第 {page} / {pages} 页 · 共 {total} {label}</span>
+      <span className="flex gap-2">
+        <button type="button" className={btn} disabled={page <= 1} onClick={() => onChange(page - 1)}>上一页</button>
+        <button type="button" className={btn} disabled={page >= pages} onClick={() => onChange(page + 1)}>下一页</button>
+      </span>
+    </div>
   );
 }

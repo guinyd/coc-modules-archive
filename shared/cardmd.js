@@ -17,7 +17,7 @@ import {
 const FIELDS = [
   'name', 'playerName', 'occupationId', 'age', 'gender', 'residence', 'birthplace', 'era',
   'chars', 'eduBonus', 'eduGrowth', 'applyAgeAdjust', 'ageAlloc', 'armorPenalty',
-  'occPicks', 'skills', 'customSkills', 'weapons', 'equipment', 'currency', 'extraAssets',
+  'occPicks', 'skills', 'customSkills', 'weapons', 'equipment', 'equipmentItems', 'currency', 'extraAssets',
   'background', 'experience', 'notes', 'status',
 ];
 
@@ -113,6 +113,11 @@ export function unpackCard(obj) {
     })).filter((w) => w.name);
   }
   out.equipment = str(obj.equipment, 4000);
+  out.equipmentItems = (Array.isArray(obj.equipmentItems) ? obj.equipmentItems : []).slice(0, 100).map((it, i) => ({
+    id: typeof it?.id === 'string' && it.id ? it.id.slice(0, 32) : `g${i + 1}`,
+    part: str(it?.part, 40),
+    name: str(it?.name, 120),
+  })).filter((it) => it.name);
   out.currency = str(obj.currency, 8);
   out.extraAssets = str(obj.extraAssets, 400);
   if (obj.background && typeof obj.background === 'object') {
@@ -245,7 +250,9 @@ export function buildCardMarkdown(character, derived) {
   }
 
   lines.push('## 装备与资产', '');
-  lines.push('### 随身装备', '', body(s.equipment), '');
+  const gearLines = (s.equipmentItems || [])
+    .map((it) => `- 【${it.part || '随身'}】${it.name}`);
+  lines.push('### 随身装备', '', gearLines.length ? gearLines.join('\n') : body(s.equipment), '');
   lines.push('### 钱财', '');
   lines.push(`- 现金：${cell(d.wealth?.cashText || '—')}`);
   lines.push(`- 其他资产：${body(s.extraAssets)}`);
