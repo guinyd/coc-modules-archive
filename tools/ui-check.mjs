@@ -15,7 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { blankSheet } from '../shared/coc7e.js';
-import { exportCardCode } from '../shared/cardcode.js';
+import { buildCardBackup } from '../shared/cardmd.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -260,7 +260,7 @@ try {
     const hasWaiveBtn = await page.eval(`[...document.querySelectorAll('button')].some(b => /豁免年龄|恢复年龄/.test(b.textContent))`);
     ok('列表卡片上有「豁免年龄」快捷开关', hasWaiveBtn === true);
     const hasExportBtn = await page.eval(`[...document.querySelectorAll('button')].some(b => b.textContent.trim() === '导出')`);
-    ok('列表卡片上有「导出」（角色卡编码 / 骰娘指令）', hasExportBtn === true);
+    ok('列表卡片上有「导出」（角色卡 Markdown / 骰娘指令）', hasExportBtn === true);
     const waiveToggled = await page.eval(`(async () => {
       const before = document.body.innerText.includes('免年龄减益');
       const b = [...document.querySelectorAll('button')].find(x => /豁免年龄|恢复年龄/.test(x.textContent));
@@ -654,8 +654,8 @@ try {
     ok('编辑器提供「备注」栏并标明不打印', notesUi === true);
 
     console.log('\n== 角色卡导入 / 导出（v1.7） ==');
-    // Node 侧生成一段真实编码，再粘贴进页面，验证「编码 → 新卡」整条链路
-    const demoCode = await exportCardCode({
+    // Node 侧生成一份真实 Markdown，再粘贴进页面，验证「Markdown → 新卡」整条链路
+    const demoCode = buildCardBackup({
       ...blankSheet(),
       name: '导入测试员', occupationId: 2, age: 30, gender: '女', era: '1920s',
       chars: { STR: 55, CON: 60, SIZ: 50, DEX: 65, APP: 70, INT: 65, POW: 55, EDU: 75, Luck: 40 },
@@ -678,7 +678,7 @@ try {
     })()`);
     await sleep(700);
     await page.eval(`(() => {
-      const ta = [...document.querySelectorAll('textarea')].find(t => (t.placeholder || '').startsWith('COC7'));
+      const ta = [...document.querySelectorAll('textarea')].find(t => (t.placeholder || '').startsWith('# 调查员档案'));
       const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
       setter.call(ta, ${JSON.stringify(demoCode)});
       ta.dispatchEvent(new Event('input', { bubbles: true }));
@@ -692,7 +692,7 @@ try {
     })()`);
     await sleep(900);
     const parsedText = await page.eval('document.body.innerText');
-    ok('粘贴编码后解析成功并显示预览', parsedText.includes('解析成功') && parsedText.includes('导入测试员'));
+    ok('粘贴备份 JSON 后解析成功并显示预览', parsedText.includes('解析成功') && parsedText.includes('导入测试员'));
     await page.eval(`(() => {
       const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('创建为新角色卡'));
       if (b) b.click();
@@ -727,24 +727,24 @@ try {
     await sleep(700);
     ok('详情页有「备注」栏（不打印）', (await page.eval('document.body.innerText')).includes('不会出现在骰娘指令与打印件上'));
     await page.eval(`(() => {
-      const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('导出编码'));
+      const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('导出') && x.textContent.includes('骰娘'));
       if (b) b.click();
       return Boolean(b);
     })()`);
     await sleep(900);
     const exportText = await page.eval('document.body.innerText');
-    ok('导出弹窗同时给出角色卡编码与骰娘指令',
-      exportText.includes('角色卡编码') && exportText.includes('骰娘机器人导入指令'));
+    ok('导出弹窗同时给出角色卡 Markdown、JSON 备份与骰娘指令',
+      exportText.includes('角色卡 Markdown') && exportText.includes('下载备份 .json') && exportText.includes('骰娘机器人导入指令'));
     const botCmd = await page.eval(`(() => {
       const ta = [...document.querySelectorAll('textarea')].find(t => (t.value || '').startsWith('.st '));
       return ta ? ta.value.slice(0, 40) : '';
     })()`);
     ok('骰娘指令以 .st 开头并含属性别名', botCmd.startsWith('.st ') && botCmd.includes('力量'), botCmd);
-    const cardCode = await page.eval(`(() => {
-      const ta = [...document.querySelectorAll('textarea')].find(t => (t.value || '').startsWith('COC7'));
-      return ta ? ta.value.slice(0, 6) : '';
+    const cardMd = await page.eval(`(() => {
+      const ta = [...document.querySelectorAll('textarea')].find(t => (t.value || '').startsWith('# 调查员档案'));
+      return ta ? ta.value.slice(0, 40) : '';
     })()`);
-    ok('角色卡编码以 COC7 开头', cardCode.startsWith('COC7'), cardCode);
+    ok('导出内容是 Markdown 档案', cardMd.startsWith('# 调查员档案'), cardMd);
     await page.eval(`(() => {
       const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('关闭'));
       if (b) b.click();

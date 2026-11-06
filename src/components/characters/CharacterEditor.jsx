@@ -20,7 +20,7 @@ import {
   ScrollText, Search, Sword, Trash2, User as UserIcon, Wand2, X,
 } from 'lucide-react';
 import {
-  ALL_CHARS, BACKGROUND_FIELDS, BUILTIN_WEAPON, CHAR_LABEL, CUSTOM_SKILL_MAX, ERAS,
+  ALL_CHARS, BACKGROUND_FIELDS, BUILTIN_WEAPON, CHAR_LABEL, CHARS, CUSTOM_SKILL_MAX, ERAS,
   NAMED_SKILL_HINT, OCCUPATIONS, SKILL_BY_KEY, SOCIAL_SKILLS, STATUSES, STATUS_LABEL,
   WEAPONS, ageAdjust, agePoolKeys, agePoolPoints, defaultAgeAlloc, resolveAgeAlloc,
   occupationBranchHints, blankCustomSkill, blankSheet, blankSkills, computeSheet,
@@ -39,10 +39,10 @@ const FIELD = 'text-[16px] [&>span:first-child>span:first-child]:text-[14px] [&>
 
 const TABS = [
   { key: 'base', label: '属性与职业', icon: UserIcon },
+  { key: 'house', label: '房规', icon: ScrollText },
   { key: 'skills', label: '技能分配', icon: Wand2 },
   { key: 'combat', label: '战斗', icon: Sword },
   { key: 'story', label: '背景故事', icon: BookOpen },
-  { key: 'house', label: '房规', icon: ScrollText },
   { key: 'journal', label: '装备与经历', icon: FileText },
 ];
 
@@ -330,6 +330,8 @@ export default function CharacterEditor({
   }, [guest]);
 
   const derived = useMemo(() => computeSheet(sheet, ctx), [sheet, ctx]);
+  const attrSum = CHARS.reduce((n, k) => n + (Number(derived.eff?.[k]) || 0), 0);
+  const attrWithLuck = attrSum + (Number(derived.eff?.Luck) || 0);
   const warnings = useMemo(() => validateSheet(sheet, ctx), [sheet, ctx]);
   const occ = useMemo(
     () => occupations.find((o) => String(o.id) === String(sheet.occupationId)) || null,
@@ -1009,9 +1011,18 @@ export default function CharacterEditor({
           </div>
 
           <Panel className="p-5 sm:p-6">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
               <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink"><Info className="h-4 w-4 text-ochre" />属性明细与年龄补正</h3>
-              <span className="text-[14px] text-ink-mute">{derived.ageAdjust.label}</span>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="inline-flex items-baseline gap-2 rounded-[2px] border border-ochre/45 bg-ochre/[0.07] px-3 py-1.5 tabular text-ink">
+                  <span className="text-[12.5px] tracking-[0.08em] text-ink-mute">属性总和</span>
+                  <b className="font-mono text-[17px] font-bold">{attrSum}</b>
+                  <span className="font-mono text-[13px] text-ink-mute">/</span>
+                  <b className="font-mono text-[17px] font-bold text-ochre">{attrWithLuck}</b>
+                  <span className="text-[12px] text-ink-mute">不含运 / 含运</span>
+                </span>
+                <span className="text-[14px] text-ink-mute">{derived.ageAdjust.label}</span>
+              </div>
             </div>
             {currentUser?.role === 'admin' ? (
               <div className="mb-4 space-y-3 rounded-[2px] border border-amber-600/40 bg-amber-500/[0.06] p-4">

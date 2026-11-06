@@ -2,17 +2,17 @@
  * 角色卡「导入 / 导出」弹窗。
  *
  *  - 导出：两种格式
- *      ① 角色卡编码（COC7G1:…）—— 别人粘贴即可还原成一张可继续编辑的卡；
+ *      ① 角色卡 Markdown（.md）—— 可复制或下载留档，也能被「导入角色卡」还原成一张可继续编辑的卡；
  *      ② 骰娘机器人导入指令（.st …）—— 与官方 Excel「简化卡 骰娘导入」同格式，直接发到群里给骰娘。
- *  - 导入：粘贴编码 → 解析预览 → 交给上层创建（登录用户走接口，访客存本机）。
+ *  - 导入：粘贴 Markdown → 解析预览 → 交给上层创建（登录用户走接口，访客存本机）。
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { Check, ClipboardCopy, Download, FileCode2, Upload } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Check, ClipboardCopy, Download, FileText, Upload } from 'lucide-react';
 import { CHAR_LABEL, CHARS, computeSheet } from '../../../shared/coc7e.js';
 import { DICEBOT_FORMATS, buildDiceBotCommand } from '../../../shared/dicebot.js';
-import { exportCardCode, importCardCode } from '../../../shared/cardcode.js';
-import { Badge, Button, Field, Input, Modal, Panel, Textarea, cx } from '../ui.jsx';
+import { buildCardBackup, buildCardMarkdown, cardBackupFilename, cardMarkdownFilename, importCardData } from '../../../shared/cardmd.js';
+import { Badge, Button, Field, Modal, Panel, Textarea, cx } from '../ui.jsx';
 
 async function copyText(text) {
   try {
@@ -57,26 +57,34 @@ function CopyButton({ text, label = '复制', onToast }) {
   );
 }
 
-/** 导出：角色卡编码 + 骰娘指令 */
+/** 触发浏览器下载一段文本 */
+function downloadText(filename, content, type = 'text/markdown;charset=utf-8') {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+/** 导出：角色卡 Markdown + 骰娘指令 */
 export function ExportCardModal({ open, onClose, character, onToast }) {
-  const [codeState, setCodeState] = useState({ id: '', value: '' });
   const [bot, setBot] = useState('dice');
   const [dot, setDot] = useState('.');
 
-  useEffect(() => {
-    if (!open || !character?.id) return undefined;
-    let alive = true;
-    exportCardCode(character)
-      .then((v) => { if (alive) setCodeState({ id: character.id, value: v }); })
-      .catch(() => { if (alive) setCodeState({ id: character.id, value: '' }); });
-    return () => { alive = false; };
-  }, [open, character]);
-  // 编码是按卡缓存的：换一张卡时旧编码不再显示，等新编码算好
-  const code = codeState.id === character?.id ? codeState.value : '';
-  const busy = Boolean(open && character) && !code;
-
   const derived = useMemo(
     () => character?.derived || (character ? computeSheet(character) : null),
+    [character],
+  );
+  const markdown = useMemo(
+    () => (character && derived ? buildCardMarkdown(character, derived) : ''),
+    [character, derived],
+  );
+  const backup = useMemo(
+    () => (character ? buildCardBackup(character) : ''),
     [character],
   );
   const botText = useMemo(
@@ -90,22 +98,49 @@ export function ExportCardModal({ open, onClose, character, onToast }) {
         <Panel className="p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 className="font-bold text-slate-100 flex items-center gap-2">
-              <FileCode2 className="w-4 h-4 text-cyan-400" />角色卡编码
-              <span className="text-[14px] font-normal text-slate-500">别人粘贴这段编码即可还原成一张可编辑的卡</span>
+              <FileText className="w-4 h-4 text-cyan-400" />角色卡 Markdown
+              <span className="text-[14px] font-normal text-slate-500">复制或下载 .md 留档</span>
             </h4>
-            <CopyButton text={code} label="复制编码" onToast={onToast} />
+            <div className="flex items-center gap-2">
+              <Button
+                variant="subtle"
+                onClick={() => {
+                  downloadText(cardMarkdownFilename(character?.name), markdown);
+                  onToast?.('已开始下载 .md 文件');
+                }}
+              >
+                <Download className="w-4 h-4" />下载 .md
+              </Button>
+              <CopyButton text={markdown} label="复制 Markdown" onToast={onToast} />
+            </div>
           </div>
           <Textarea
-            rows={5}
+            rows={12}
             readOnly
-            value={busy ? '正在生成…' : code}
-            className="!font-mono !text-[16px] break-all"
+            value={markdown}
+            className="!font-mono !text-[15px]"
             onFocus={(e) => e.target.select()}
           />
           <p className="text-[14px] text-slate-500">
-            编码里只有「玩家输入」（属性、技能点、背景、备注等），不含归属账号、审核状态与模组经历；
-            导入方拿到后可以随意改，不会影响你的原卡。
+            Markdown 里只有玩家填写的内容（属性、全部技能、背景、装备、备注等），不含归属账号、审核状态与模组经历。
           </p>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
+            <div className="text-[14px] text-slate-500">
+              需要以后还原？请保存一份 <b className="text-slate-300">备份 .json</b>，导入时粘贴回来即可。
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="subtle"
+                onClick={() => {
+                  downloadText(cardBackupFilename(character?.name), backup, 'application/json;charset=utf-8');
+                  onToast?.('已开始下载 .json 备份');
+                }}
+              >
+                <Download className="w-4 h-4" />下载备份 .json
+              </Button>
+              <CopyButton text={backup} label="复制备份数据" onToast={onToast} />
+            </div>
+          </div>
         </Panel>
 
         <Panel className="p-4 space-y-3">
@@ -157,12 +192,11 @@ export function ExportCardModal({ open, onClose, character, onToast }) {
   );
 }
 
-/** 导入：粘贴编码 → 预览 → 交给上层创建 */
+/** 导入：粘贴 Markdown → 预览 → 交给上层创建 */
 export function ImportCardModal({ open, onClose, onImport, onToast }) {
   const [text, setText] = useState('');
   const [sheet, setSheet] = useState(null);
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
 
   // 关闭时清空（而不是打开时 setState，避免 effect 里同步 setState 造成级联渲染）
   const handleClose = () => {
@@ -174,38 +208,33 @@ export function ImportCardModal({ open, onClose, onImport, onToast }) {
 
   const parsed = useMemo(() => (sheet ? computeSheet(sheet) : null), [sheet]);
 
-  const doParse = async () => {
-    setBusy(true);
+  const doParse = () => {
     setError('');
-    try {
-      const res = await importCardCode(text);
-      if (!res.ok) {
-        setSheet(null);
-        setError(res.error || '解析失败');
-        onToast?.(res.error || '解析失败', 'error');
-        return;
-      }
-      setSheet(res.sheet);
-    } finally {
-      setBusy(false);
+    const res = importCardData(text);
+    if (!res.ok) {
+      setSheet(null);
+      setError(res.error || '解析失败');
+      onToast?.(res.error || '解析失败', 'error');
+      return;
     }
+    setSheet(res.sheet);
   };
 
   return (
     <Modal open={open} onClose={handleClose} title="导入角色卡" wide>
       <div className="space-y-4">
-        <Field label="粘贴角色卡编码" hint="以 COC7G1: 或 COC7C1: 开头的一整段文本">
+        <Field label="粘贴角色卡数据" hint="还原本地备份请粘贴 .json；旧版带数据块的 .md 也能导入。">
           <Textarea
-            rows={5}
+            rows={8}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="COC7G1:……"
-            className="!font-mono !text-[16px] break-all"
+            placeholder="# 调查员档案 · …… 或 JSON 备份"
+            className="!font-mono !text-[15px]"
           />
         </Field>
         <div className="flex items-center gap-2">
-          <Button onClick={doParse} disabled={busy || !text.trim()}>
-            <Upload className="w-4 h-4" />{busy ? '解析中…' : '解析'}
+          <Button onClick={doParse} disabled={!text.trim()}>
+            <Upload className="w-4 h-4" />解析
           </Button>
           {error ? <span className="text-[14px] text-red-400">{error}</span> : null}
           {sheet ? <Badge tone="emerald">解析成功</Badge> : null}

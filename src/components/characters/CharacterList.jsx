@@ -145,7 +145,7 @@ function CharacterCard({
             type="button"
             className={ACT}
             disabled={exporting}
-            title="导出角色卡编码（给别人导入）或骰娘机器人导入指令"
+            title="导出角色卡 Markdown（可下载 .md）或骰娘机器人导入指令"
             onClick={() => onExport(item)}
           >
             <Share2 className="h-4 w-4" strokeWidth={1.8} />{exporting ? '导出中…' : '导出'}

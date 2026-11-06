@@ -16,7 +16,7 @@ import {
   User as UserIcon, Wand2, XCircle,
 } from 'lucide-react';
 import {
-  ALL_CHARS, BACKGROUND_FIELDS, CHAR_LABEL, MODULE_ROLES, REVIEW_LABEL,
+  ALL_CHARS, BACKGROUND_FIELDS, CHAR_LABEL, CHARS, MODULE_ROLES, REVIEW_LABEL,
   SKILL_BY_KEY, STATUS_LABEL, grantEduReroll, resetEduGrowth,
 } from '../../../shared/coc7e.js';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api.js';
@@ -203,6 +203,8 @@ export default function CharacterDetail({
   const d = c.derived;
   const usedSkills = d.skills.filter((s) => s.used || s.occ > 0 || s.interest > 0 || s.growth > 0 || s.houseBase);
   const shownSkills = showAllSkills ? d.skills : usedSkills;
+  const attrSum = CHARS.reduce((n, k) => n + (Number(d.eff?.[k]) || 0), 0);
+  const attrWithLuck = attrSum + (Number(d.eff?.Luck) || 0);
   const review = c.review || { status: 'none' };
   const canReview = c.canReview && review.status === 'pending';
   const legendary = c.legendary || { enabled: false };
@@ -237,7 +239,7 @@ export default function CharacterDetail({
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="ghost" className="!px-3 !py-1.5 !text-[14px]" onClick={() => setExportOpen(true)}><Share2 className="h-4 w-4" />导出编码 / 骰娘指令</Button>
+            <Button variant="ghost" className="!px-3 !py-1.5 !text-[14px]" onClick={() => setExportOpen(true)}><Share2 className="h-4 w-4" />导出 / 骰娘指令</Button>
             <Button variant="ghost" className="!px-3 !py-1.5 !text-[14px]" onClick={() => onPrint(c)}><Printer className="h-4 w-4" />打印 / 导出 PDF</Button>
             {c.isOwner && (review.status === 'none' || review.status === 'rejected') ? (
               <Button variant="amber" className="!px-3 !py-1.5 !text-[14px]" onClick={submitReview}>
@@ -350,6 +352,7 @@ export default function CharacterDetail({
         <div className="grid gap-2 text-[14.5px] leading-[1.8] text-ink-soft sm:grid-cols-2">
           <div>职业技能点：<b className="font-mono text-[14px] font-bold tabular text-ink">{d.spent.occupation}</b> / {d.budget.occupation}</div>
           <div>兴趣技能点：<b className="font-mono text-[14px] font-bold tabular text-ink">{d.spent.interest}</b> / {d.budget.interest}（智力×2）</div>
+          <div className="sm:col-span-2">属性总和：<b className="font-mono text-[14px] font-bold tabular text-ink">{attrSum}</b> / {attrWithLuck}（不含运 / 含运）</div>
         </div>
         <WarningList items={c.warnings} />
       </Panel>

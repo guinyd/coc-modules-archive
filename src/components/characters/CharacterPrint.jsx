@@ -133,7 +133,7 @@ export default function CharacterPrint({ character }) {
           {/* 派生值 */}
           <div className="grid grid-cols-6 gap-1 mb-2">
             <Box label="生命值 HP" value={d.hp} />
-            <Box label="重伤值" value={Math.ceil(d.hp / 2)} />
+            <Box label="重伤值" value={Math.floor(d.hp / 2)} />
             <Box label="魔法点 MP" value={d.mp} />
             <Box label="理智 SAN" value={d.san} />
             <Box label="移动力 MOV" value={d.mov} />

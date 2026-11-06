@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 规则引擎 / 骰娘指令 / 角色卡编码的轻量自检（无框架，`node tools/check-shared.mjs`）。
+ * 规则引擎 / 骰娘指令 / 角色卡 Markdown 的轻量自检（无框架，`node tools/check-shared.mjs`）。
  *
  * 这些是**纯函数**，不依赖服务端；放一个独立脚本是为了在不启动服务的情况下也能快速回归，
  * 尤其是骰娘指令格式与编码导入导出这类"看起来对、其实错一位"的东西。
@@ -11,7 +11,7 @@ import {
   ageAdjust, effectiveChars, damageBonusBuild,
 } from '../shared/coc7e.js';
 import { buildDiceBotCommand, DICEBOT_FORMATS } from '../shared/dicebot.js';
-import { exportCardCode, importCardCode, checksum } from '../shared/cardcode.js';
+import { buildCardBackup, buildCardMarkdown, importCardData } from '../shared/cardmd.js';
 
 let pass = 0; const fails = [];
 const ok = (name, cond, extra = '') => {
@@ -97,16 +97,43 @@ ok('shiki 版带派生值与武器', (() => {
   return cmd.includes('&DB=') && cmd.includes('闪避:') && cmd.includes('&徒手=');
 })());
 
-section('角色卡编码');
-const code = await exportCardCode(base);
-ok('编码以 COC7 开头且带校验码', /^COC7[GC]1:[A-Za-z0-9_-]+:[A-Za-z0-9]+$/.test(code), code.slice(0, 20));
-const back = await importCardCode(code);
-ok('往返导入成功', back.ok && back.sheet.name === base.name && back.sheet.chars.STR === 60);
+section('角色卡 Markdown / JSON 备份');
+const md = buildCardMarkdown(base);
+ok('以调查员档案标题开头', md.startsWith('# 调查员档案 · 自检调查员'), md.slice(0, 30));
+ok('包含属性、全部技能与背景章节',
+  md.includes('## 属性') && md.includes('## 技能（全部）') && md.includes('## 背景故事'));
+ok('列出全部技能（不止已投点）', md.split(String.fromCharCode(10)).filter((l) => l.startsWith('| ') && !l.includes('---') && !l.startsWith('| 技能')).length > 40);
+ok('属性总和区分含运 / 不含运', md.includes('属性总和：480 / 525（不含运 / 含运）'));
+ok('Markdown 不再内嵌数据块', !md.includes('<details>') && !md.includes('```json'));
+ok('可读 Markdown 不再用于还原，提示改用 .json',
+  (() => { const r = importCardData(md); return !r.ok && r.error.includes('.json'); })());
+const backup = buildCardBackup(base);
+const back = importCardData(backup);
+ok('JSON 备份往返成功', back.ok && back.sheet.name === base.name && back.sheet.chars.STR === 60, back.error);
 ok('导入后是干净的新卡（无传奇/无模组经历/草稿）',
-  back.sheet.legendary.enabled === false && back.sheet.moduleLinks.length === 0 && back.sheet.status === 'draft');
-ok('篡改一个字符会被校验码拦下', !(await importCardCode(`${code.slice(0, -2)}zz`)).ok);
-ok('乱粘贴会给出友好错误', (await importCardCode('随便一段文字')).ok === false);
-ok('校验码稳定', checksum('abc') === checksum('abc') && checksum('abc') !== checksum('abd'));
+  back.ok && back.sheet.legendary.enabled === false && back.sheet.moduleLinks.length === 0 && back.sheet.status === 'draft');
+ok('旧版带数据块的 Markdown 仍可导入', (() => {
+  const legacy = '# 调查员档案 · 旧卡' + String.fromCharCode(10) + '```json' + String.fromCharCode(10)
+    + JSON.stringify({ name: '旧卡', chars: { STR: 50 } }) + String.fromCharCode(10) + '```';
+  const r = importCardData(legacy);
+  return r.ok && r.sheet.name === '旧卡';
+})());
+ok('旧角色卡编码提示已停用', (() => { const r = importCardData('COC7G1:abcd'); return !r.ok && r.error.includes('停用'); })());
+ok('空内容被拒绝', importCardData('   ').ok === false);
+
+section('房规除法取整');
+ok('属性 ÷ 2 向下取整（81 ÷ 2 = 40）', (() => {
+  const sheet = { ...blankSheet(), name: '房规取整', chars: { ...base.chars, APP: 81 } };
+  const d = computeSheet(sheet, { houseRules: [{ type: 'deriveBase', skill: 'charm', source: 'attr', from: 'APP', op: 'div', value: 2, adjust: 0 }] });
+  const charm = d.skills.find((x) => x.key === 'charm');
+  return charm?.base === 40;
+})());
+ok('乘法结果也向下取整（APP 81 × 1.5 = 121）', (() => {
+  const sheet = { ...blankSheet(), name: '房规取整2', chars: { ...base.chars, APP: 81 } };
+  const d = computeSheet(sheet, { houseRules: [{ type: 'deriveBase', skill: 'charm', source: 'attr', from: 'APP', op: 'mul', value: 1.5, adjust: 0 }] });
+  const charm = d.skills.find((x) => x.key === 'charm');
+  return charm?.base === 121;
+})());
 
 console.log(`\n================ 自检：${pass} 通过 / ${fails.length} 失败 ================`);
 if (fails.length) { console.log('失败项：\n - ' + fails.join('\n - ')); process.exit(1); }

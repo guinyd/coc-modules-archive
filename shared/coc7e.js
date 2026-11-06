@@ -1071,7 +1071,8 @@ export function applyHouseBase(key, base, eff, map) {
     const value = Number(f.value) || 1;
     raw = (f.op === 'mul' ? attr * value : attr / value) + (Number(f.adjust) || 0);
   }
-  const v = f.round === 'ceil' ? Math.ceil(raw) : f.round === 'round' ? Math.round(raw) : Math.floor(raw);
+  // 全站约定：除法/乘法结果一律向下取整，不做四舍五入（房规的 round 字段仅为兼容旧数据保留）。
+  const v = Math.floor(raw);
   return Math.max(0, Math.min(999, v));
 }
 
