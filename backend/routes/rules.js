@@ -85,10 +85,11 @@ router.get('/rule-sets', (req, res) => {
   res.json({
     items: allRuleSets().map((s) => {
       const item = summaryFor(req, s);
-      // 审卡阈值属于守秘人的工作参数，玩家只需要房规与发布者；不向前端泄露
-      if (item && !keeper) {
-        delete item.auditRules;
-        item.isActive = false;
+      // 发布出来的规则集对玩家透明：返回与官方基线合并后的完整审卡阈值，
+      // 玩家在「房规」页可展开查看自己将接受哪些校验。
+      if (item) {
+        item.auditRules = { ...DEFAULT_AUDIT_RULES, ...(s.auditRules || {}) };
+        if (!keeper) item.isActive = false;
       }
       return item;
     }),

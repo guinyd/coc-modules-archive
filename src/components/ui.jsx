@@ -557,6 +557,35 @@ export function Modal({ open, onClose, title, children, wide }) {
   );
 }
 
+export function Drawer({ open, onClose, title, children }) {
+  if (!open) return null;
+  return createPortal(
+    <div className="dialog-shell fixed inset-0 z-[100] bg-[#081311]/55 backdrop-blur-sm" onClick={onClose} role="presentation">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+        className="dialog-panel surface absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col overflow-hidden rounded-t-[6px] sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-[min(94vw,34rem)] sm:rounded-none sm:border-l sm:border-line-strong"
+      >
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line-strong px-5 py-4">
+          <h3 className="min-w-0 truncate font-serif text-[19px] font-bold tracking-wide text-slate-100">{title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[2px] border border-transparent text-slate-500 transition-colors hover:border-line-strong hover:bg-paper-deep hover:text-slate-100"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">{children}</div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 export function EmptyState({ icon: Icon, title, desc, action }) {
   return (
     <div className="px-4 py-16 text-center animate-in fade-in">

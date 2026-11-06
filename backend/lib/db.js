@@ -61,6 +61,16 @@ function ensureShape(d) {
   if (!out.settings || typeof out.settings !== 'object') out.settings = { auditRules: null, ruleSets: [] };
   if (!Array.isArray(out.settings.ruleSets)) out.settings.ruleSets = [];
   ensureGlobalRuleSet(out.settings);
+  // 全局规则集的「发布人」也落真实用户名：旧库把它写成头衔「首席守秘人」，
+  // 这里统一回填为当前首席的账号名（只处理缺失或旧头衔，不覆盖真实用户名）。
+  const chiefUser = (out.users || []).find((u) => u && u.role === 'admin' && u.kpRank === 'chief');
+  if (chiefUser) {
+    for (const set of out.settings.ruleSets) {
+      if (set && set.scope === 'global' && (!set.ownerName || set.ownerName === '首席守秘人')) {
+        set.ownerName = chiefUser.username || '';
+      }
+    }
+  }
   return out;
 }
 

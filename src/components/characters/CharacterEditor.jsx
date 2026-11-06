@@ -26,12 +26,13 @@ import {
   occupationBranchHints, blankCustomSkill, blankSheet, blankSkills, computeSheet,
   currenciesFor, DEFAULT_CURRENCY, isNamedSkill, specOptions, validateSheet,
   blankEduGrowth, blankLegendary, blankLegendaryBonus, grantEduReroll, resetEduGrowth, houseRuleSummary,
+  AUDIT_RULE_META, DEFAULT_AUDIT_RULES,
 } from '../../../shared/coc7e.js';
 import { rollCharacteristics, rollLuck, educationCheck } from '../../lib/dice.js';
 import { parseAttributeBlocks, ATTR_LABEL, ATTR_ORDER } from '../../lib/attrImport.js';
 import { apiGet, apiPost, apiPut } from '../../lib/api.js';
 import {
-  Badge, Button, Field, Input, Modal, NumberInput, Panel, Select, Tabs, Textarea, Toggle, WarningList, cx,
+  Badge, Button, Combobox, Drawer, Field, Input, Modal, NumberInput, Pager, Panel, Select, Tabs, Textarea, Toggle, WarningList, cx,
 } from '../ui.jsx';
 
 /** 表单字段：label 12.5px、输入框 15px、占位符至少 ink-mute（ui.jsx 的 Field 写死 9.5px，这里用后代选择器覆盖） */
@@ -248,6 +249,73 @@ function SpecialtyPicker({ group, onToggle }) {
 }
 
 // ------------------------------------------------------------------ 主组件
+function fmtAuditValue(meta, value) {
+  if (meta.type === 'boolean') return value ? '启用' : '关闭';
+  if (meta.key === 'minPointUsage') return value ? `${Math.round(value * 100)}%` : '不检查';
+  return value ? String(value) : '不检查';
+}
+
+/** 规则集详情抽屉：把审卡阈值与自定义规则完整摊开，玩家选之前就能看清。 */
+function RuleSetDetail({ set }) {
+  if (!set) return null;
+  const rules = { ...DEFAULT_AUDIT_RULES, ...(set.auditRules || {}) };
+  const houseRules = set.houseRules || [];
+  const numeric = houseRules.filter((r) => r.type === 'deriveBase');
+  const checks = houseRules.filter((r) => r.type !== 'deriveBase');
+  return (
+    <div className="space-y-5 text-[14px] leading-relaxed text-ink-soft">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={set.scope === 'global' ? 'amber' : 'slate'}>{set.scope === 'global' ? '全局默认' : '个人规则'}</Badge>
+        {set.isActive ? <Badge tone="emerald">守秘人当前在用</Badge> : null}
+      </div>
+      <p className="text-[13.5px] text-ink-mute">
+        发布：{set.ownerName || '未登记'}{set.updatedAt ? ` · ${new Date(set.updatedAt).toLocaleDateString('zh-CN')}` : ''}
+      </p>
+
+      <section>
+        <h4 className="mb-2 font-serif text-[16px] font-bold text-ink">数值规则（会改写车卡）</h4>
+        {numeric.length ? (
+          <ul className="space-y-1.5">
+            {numeric.map((r) => (
+              <li key={r.id} className="border-l-2 border-ochre/50 pl-2.5">{houseRuleSummary(r)}</li>
+            ))}
+          </ul>
+        ) : <p className="text-ink-mute">这套规则不改变车卡基础值。</p>}
+      </section>
+
+      <section>
+        <h4 className="mb-2 font-serif text-[16px] font-bold text-ink">审卡校验项</h4>
+        <ul className="space-y-1">
+          {AUDIT_RULE_META.map((meta) => {
+            const value = rules[meta.key];
+            const changed = value !== DEFAULT_AUDIT_RULES[meta.key];
+            return (
+              <li key={meta.key} className="flex items-baseline justify-between gap-3 border-b border-line/70 pb-1">
+                <span className="min-w-0">
+                  {meta.label}
+                  {changed ? <span className="ml-1 text-[12px] text-ochre">已调整</span> : null}
+                </span>
+                <b className="shrink-0 font-mono text-[13px] text-ink">{fmtAuditValue(meta, value)}</b>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <section>
+        <h4 className="mb-2 font-serif text-[16px] font-bold text-ink">自定义审卡要求</h4>
+        {checks.length ? (
+          <ul className="space-y-1.5">
+            {checks.map((r) => (
+              <li key={r.id} className="border-l-2 border-moon/50 pl-2.5">{houseRuleSummary(r)}</li>
+            ))}
+          </ul>
+        ) : <p className="text-ink-mute">没有额外的属性 / 技能门槛。</p>}
+      </section>
+    </div>
+  );
+}
+
 export default function CharacterEditor({
   characterId = null, loadCharacter = null, owners = [], customOccupations = [],
   currentUser, guest = false, initialSheet = null,
@@ -277,6 +345,25 @@ export default function CharacterEditor({
     [ruleSets, sheet.ruleSetId],
   );
   const houseRules = useMemo(() => chosenRuleSet?.houseRules || [], [chosenRuleSet]);
+  const RULE_PAGE = 6;
+  const [ruleQuery, setRuleQuery] = useState('');
+  const [rulePage, setRulePage] = useState(1);
+  const [ruleDetail, setRuleDetail] = useState(null);
+  const ruleHints = useMemo(() => {
+    const out = new Set();
+    (ruleSets || []).forEach((s) => { if (s.name) out.add(s.name); if (s.ownerName) out.add(s.ownerName); });
+    return [...out].slice(0, 20);
+  }, [ruleSets]);
+  const filteredRuleSets = useMemo(() => {
+    const q = ruleQuery.trim().toLowerCase();
+    if (!q) return ruleSets || [];
+    return (ruleSets || []).filter((s) => [s.name, s.ownerName, s.scope === 'global' ? '全局默认' : '个人规则']
+      .some((v) => String(v || '').toLowerCase().includes(q)));
+  }, [ruleSets, ruleQuery]);
+  const rulePages = Math.max(1, Math.ceil(filteredRuleSets.length / RULE_PAGE));
+  const rulePageNow = Math.min(rulePage, rulePages);
+  const pagedRuleSets = filteredRuleSets.slice((rulePageNow - 1) * RULE_PAGE, rulePageNow * RULE_PAGE);
+  useEffect(() => { setRulePage(1); }, [ruleQuery]);
   const ctx = useMemo(() => ({ customOccupations, houseRules }), [customOccupations, houseRules]);
 
   /**
@@ -1740,7 +1827,16 @@ export default function CharacterEditor({
                 还没有守秘人发布规则集，按官方规则书计算即可。
               </p>
             ) : (
+              <>
               <div className="space-y-3">
+                <Combobox
+                  value={ruleQuery}
+                  onChange={setRuleQuery}
+                  options={ruleHints}
+                  placeholder="查找规则集名称或发布守秘人"
+                  emptyHint="没有匹配的规则集，可直接输入关键字"
+                />
+
                 <label className={cx('flex cursor-pointer items-start gap-3 rounded-[2px] border p-4 transition-colors',
                   !sheet.ruleSetId ? 'border-ochre bg-ochre/[0.06]' : 'border-line-strong bg-paper-raised hover:border-ink-mute')}>
                   <input type="radio" name="ruleSet" className="mt-1 accent-[var(--ink)]" checked={!sheet.ruleSetId} onChange={() => patch({ ruleSetId: '' })} />
@@ -1750,7 +1846,7 @@ export default function CharacterEditor({
                   </span>
                 </label>
 
-                {ruleSets.map((set) => {
+                {pagedRuleSets.map((set) => {
                   const active = sheet.ruleSetId === set.id;
                   const numeric = (set.houseRules || []).filter((r) => r.type === 'deriveBase');
                   const checks = (set.houseRules || []).filter((r) => r.type !== 'deriveBase');
@@ -1787,12 +1883,36 @@ export default function CharacterEditor({
                           </span>
                         ) : null}
                       </span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setRuleDetail(set); }}
+                        className="shrink-0 self-start border-b border-line-strong pb-0.5 text-[13.5px] text-ochre transition-colors hover:border-ochre"
+                      >
+                        详情
+                      </button>
                     </label>
                   );
                 })}
+                {filteredRuleSets.length === 0 ? (
+                  <p className="border border-dashed border-line-strong px-3 py-6 text-center text-[14px] text-ink-mute">
+                    没有匹配的规则集，换个名字或守秘人用户名试试。
+                  </p>
+                ) : null}
               </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[13px] text-ink-mute">
+                  {ruleQuery ? `已筛选：${filteredRuleSets.length} 套` : rulePages <= 1 ? `共 ${filteredRuleSets.length} 套` : ''}
+                </span>
+                <Pager page={rulePageNow} total={filteredRuleSets.length} pageSize={RULE_PAGE} onChange={setRulePage} label="套" />
+              </div>
+              </>
             )}
           </Panel>
+
+          <Drawer open={Boolean(ruleDetail)} onClose={() => setRuleDetail(null)} title={ruleDetail ? ruleDetail.name : ''}>
+            <RuleSetDetail set={ruleDetail} />
+          </Drawer>
         </div>
       )}
 

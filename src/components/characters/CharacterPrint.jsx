@@ -31,10 +31,52 @@ function Line({ value, className = '' }) {
 
 function Box({ label, value, sub }) {
   return (
-    <div className="border border-ink/25 rounded-[3px] bg-paper px-1.5 py-1 text-center leading-tight">
+    <div className="border border-ink/25 rounded-[3px] bg-paper px-1.5 py-0.5 text-center leading-tight">
       <div className="text-[10.5px] text-ink-mute">{label}</div>
-      <div className="text-[19px] font-bold font-mono text-ink">{value ?? '—'}</div>
+      <div className="text-[18px] font-bold font-mono text-ink">{value ?? '—'}</div>
       {sub ? <div className="text-[10.5px] text-ink-mute">{sub}</div> : null}
+    </div>
+  );
+}
+
+/**
+ * 官方纸质卡式的可圈画数字格：白底、无边框，只把数字排在格子里，玩家用笔圈。
+ * lead：把 0 的位置换成文字（如「疯了」「霉运连连」），数字从 1 开始。
+ */
+function Pill({ label, value }) {
+  return (
+    <span className="inline-flex items-baseline gap-1 whitespace-nowrap rounded-full border border-ink/45 px-1.5 py-[1px] leading-none">
+      <span className="text-[8.5px] text-ink-mute">{label}</span>
+      <b className="font-mono text-[10px] text-ink">{value}</b>
+    </span>
+  );
+}
+
+function NumGrid({ from, to, cols = 10, cellH = 16, lead = '', leadSpan = 2 }) {
+  const nums = [];
+  for (let i = from; i <= to; i += 1) nums.push(i);
+  return (
+    <div
+      className="grid gap-x-[1px] gap-y-[1px]"
+      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+    >
+      {lead ? (
+        <span
+          className="flex items-center justify-center text-center font-serif text-[10px] leading-[1.05] text-ink"
+          style={{ gridColumn: `span ${leadSpan}`, height: cellH }}
+        >
+          {lead}
+        </span>
+      ) : null}
+      {nums.map((n) => (
+        <span
+          key={n}
+          className="flex items-center justify-center font-mono text-[10.5px] leading-none text-ink"
+          style={{ height: cellH }}
+        >
+          {String(n).padStart(2, '0')}
+        </span>
+      ))}
     </div>
   );
 }
@@ -63,19 +105,19 @@ function SkillColumn({ skills }) {
           return (
             <tr
               key={s.id}
-              style={{ height: 22 }}
+              style={{ height: 16 }}
               className={`border-b border-ink/12 ${allocated ? 'bg-paper font-bold' : ''}`}
             >
-              <td className="py-[1.5px] align-middle text-center text-[12px] leading-[18px]">{s.marked ? '☑' : '☐'}</td>
-              <td className="py-[1.5px] text-[11px] leading-[18px] text-ink-mute">{s.isOccupation ? '★' : (s.kind === 'custom' ? '✎' : '')}</td>
-              <td className={`py-[1.5px] pr-1 leading-[18px] whitespace-nowrap overflow-hidden text-ellipsis ${tight ? 'text-[11px]' : ''}`}>
+              <td className="py-[1px] align-middle text-center text-[12px] leading-[16px]">{s.marked ? '☑' : '☐'}</td>
+              <td className="py-[1px] text-[11px] leading-[16px] text-ink-mute">{s.isOccupation ? '★' : (s.kind === 'custom' ? '✎' : '')}</td>
+              <td className={`py-[1px] pr-1 leading-[16px] whitespace-nowrap overflow-hidden text-ellipsis ${tight ? 'text-[11px]' : ''}`}>
                 <span title={label}>{s.name}</span>
                 <span className="text-ink-mute font-normal">（{s.base}%）</span>
               </td>
-              <td className="py-[1.5px] text-right font-mono leading-[18px] whitespace-nowrap text-ink-mute font-normal">
+              <td className="py-[1px] text-right font-mono leading-[16px] whitespace-nowrap text-ink-mute font-normal">
                 {s.half}/{s.fifth}
               </td>
-              <td className="py-[1.5px] text-right font-mono leading-[18px] whitespace-nowrap">{s.total}%</td>
+              <td className="py-[1px] text-right font-mono leading-[16px] whitespace-nowrap">{s.total}%</td>
             </tr>
           );
         })}
@@ -99,18 +141,23 @@ export default function CharacterPrint({ character }) {
 
   const w = d.wealth || { level: '—', cashText: '—', assetsText: '—' };
 
+  const numCells = (from, to, stretch = false) => Array.from({ length: to - from + 1 }, (_, i) => {
+    const n = from + i;
+    return <span key={n} className={`flex ${stretch ? 'h-full' : 'h-[13px]'} items-center justify-center font-mono text-[10.5px] leading-none text-ink`}>{String(n).padStart(2, '0')}</span>;
+  });
+
   return (
     <div className="print-root text-ink">
       {/* ============================ 第 1 页 ============================ */}
       <section className="print-paper print-page">
-        <div className="border border-ink/45 p-3 shadow-[inset_0_0_0_1px_#dccdb1]">
-          <div className="text-center border-b border-ink/45 pb-1 mb-2">
+        <div className="border border-ink/45 p-2.5 shadow-[inset_0_0_0_1px_#dccdb1]">
+          <div className="text-center border-b border-ink/45 pb-0.5 mb-1">
             <div className="text-[11.5px] tracking-[0.5em] text-ochre">❖ {character.era || '1920s'} 调查员 · 秘密调查档案馆 ❖</div>
-            <div className="text-2xl font-semibold font-serif tracking-[0.26em]">COC 七版 角色卡</div>
+            <div className="text-[21px] font-semibold font-serif tracking-[0.26em]">COC 七版 角色卡</div>
           </div>
 
           {/* 基本信息 */}
-          <div className="grid grid-cols-3 gap-x-2 gap-y-1 text-[12.5px] mb-2">
+          <div className="grid grid-cols-3 gap-x-2 gap-y-0.5 text-[12px] mb-1">
             <div className="whitespace-nowrap">姓名：<Line value={character.name} className="w-[8.6rem]" /></div>
             <div className="whitespace-nowrap">玩家：<Line value={character.playerName} className="w-[7.4rem]" /></div>
             <div className="whitespace-nowrap">职业：<Line value={d.occupation?.name || '无'} className="w-[7.4rem]" /></div>
@@ -122,29 +169,85 @@ export default function CharacterPrint({ character }) {
             <div className="whitespace-nowrap">状态：<Line value={STATUS_LABEL[character.status] || ''} className="w-[5rem]" /></div>
           </div>
 
-          {/* 属性 */}
-          <div className="grid grid-cols-9 gap-1 mb-2">
+          {/* 属性：固定信息，只保留八项属性 */}
+          <div className="grid grid-cols-8 gap-1 mb-1">
             {ALL_CHARS.filter((k) => k !== 'Luck').map((k) => (
               <Box key={k} label={`${CHAR_LABEL[k]} ${k}`} value={d.eff[k]} sub={`${d.half[k]}/${d.fifth[k]}`} />
             ))}
-            <Box label="幸运 LUCK" value={d.eff.Luck} sub={`${d.half.Luck}/${d.fifth.Luck}`} />
           </div>
 
-          {/* 派生值 */}
-          <div className="grid grid-cols-6 gap-1 mb-2">
-            <Box label="生命值 HP" value={d.hp} />
-            <Box label="重伤值" value={Math.floor(d.hp / 2)} />
-            <Box label="魔法点 MP" value={d.mp} />
-            <Box label="理智 SAN" value={d.san} />
-            <Box label="移动力 MOV" value={d.mov} />
-            <Box label="伤害加值 / 体格" value={`${d.db} / ${d.build}`} />
+          {/* 生命 / 魔法 / 移动与伤害加值：同一横行，HP 标题行装下全部标记与派生 */}
+          <div className="grid grid-cols-[1fr_1fr_max-content] gap-1 mb-1 items-stretch">
+            {/* 生命 HP */}
+            <div className="border border-ink/35 rounded-[3px] px-1.5 py-1 flex flex-col">
+              <div className="grid grid-cols-5 items-center gap-x-[1px]">
+                <div className="col-span-4 flex items-baseline gap-x-1.5 whitespace-nowrap">
+                  <span className="font-bold text-[12.5px]">生命 HP</span>
+                  <Pill label="Max" value={d.hp} />
+                  <span className="text-[9px] text-ink-mute">重伤值 <b className="font-mono text-[10px] text-ink">{Math.floor(d.hp / 2)}</b></span>
+                  <span className="inline-flex items-center gap-x-1 text-[9px] text-ink-soft">
+                    <span className="inline-flex items-center gap-[1.5px]"><i className="inline-block h-[7px] w-[7px] border border-ink/60" />重伤</span>
+                    <span className="inline-flex items-center gap-[1.5px]"><i className="inline-block h-[7px] w-[7px] border border-ink/60" />濒死</span>
+                    <span className="inline-flex items-center gap-[1.5px]"><i className="inline-block h-[7px] w-[7px] border border-ink/60" />昏迷</span>
+                  </span>
+                </div>
+                <span className="text-center font-mono text-[10.5px] text-ink">00</span>
+              </div>
+              <div className="mt-1 flex-1 grid grid-cols-5 grid-rows-4 gap-[1px]">
+                {numCells(1, 20, true)}
+              </div>
+            </div>
+
+            {/* 魔法 MP：标题、Max 与数列同一网格，铺满整框 */}
+            <div className="border border-ink/35 rounded-[3px] px-1.5 py-1 flex">
+              <div className="flex-1 grid grid-rows-2 gap-[1px]" style={{ gridTemplateColumns: 'repeat(16, minmax(0, 1fr))' }}>
+                <span className="flex items-center font-bold text-[12px] whitespace-nowrap" style={{ gridColumn: 'span 3' }}>魔法 MP</span>
+                <span className="flex items-center whitespace-nowrap" style={{ gridColumn: 'span 3' }}><Pill label="Max" value={d.mp} /></span>
+                {numCells(0, 24, true)}
+              </div>
+            </div>
+
+            {/* 移动力 / 伤害加值：宽度贴近内容 */}
+            <div className="grid grid-rows-2 gap-1">
+              <div className="flex flex-col justify-center border border-ink/25 rounded-[3px] px-1.5 py-0.5 text-center leading-tight">
+                <div className="text-[9px] text-ink-mute">移动力 MOV</div>
+                <div className="text-[15px] font-bold font-mono text-ink">{d.mov}</div>
+              </div>
+              <div className="flex flex-col justify-center border border-ink/25 rounded-[3px] px-1.5 py-0.5 text-center leading-tight">
+                <div className="text-[9px] text-ink-mute">伤害加值 / 体格</div>
+                <div className="text-[13px] font-bold font-mono text-ink">{d.db} / {d.build}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 理智 SAN：标题、勾选与数字同一网格流式排布 */}
+          <div className="border border-ink/35 rounded-[3px] px-2 py-1 mb-1">
+            <div className="grid items-center gap-x-[1px] gap-y-[1px]" style={{ gridTemplateColumns: 'repeat(30, minmax(0, 1fr))' }}>
+              <span className="font-bold text-[13px]" style={{ gridColumn: 'span 4' }}>理智 SAN</span>
+              <span className="inline-flex items-center gap-1 text-[10px] text-ink-soft" style={{ gridColumn: 'span 3' }}><i className="inline-block h-[8px] w-[8px] border border-ink/60" />临时疯狂</span>
+              <span className="inline-flex items-center gap-1 text-[10px] text-ink-soft" style={{ gridColumn: 'span 4' }}><i className="inline-block h-[8px] w-[8px] border border-ink/60" />不定时疯狂</span>
+              <span className="flex items-center whitespace-nowrap" style={{ gridColumn: 'span 4' }}><Pill label="Start" value={d.san} /></span>
+              <span className="flex items-center text-[10.5px] text-ink-mute" style={{ gridColumn: 'span 4' }}>Max <span className="ml-1 inline-block h-[14px] w-[1.9rem] rounded-[2px] border border-ink/45" /></span>
+              <span className="font-serif text-[10px] leading-[1.05] text-ink" style={{ gridColumn: 'span 2' }}>疯了</span>
+              {numCells(1, 99)}
+            </div>
+          </div>
+
+          {/* 幸运 LUCK：数字从标题旁开始 */}
+          <div className="border border-ink/35 rounded-[3px] px-2 py-1 mb-1">
+            <div className="grid items-center gap-x-[1px] gap-y-[1px]" style={{ gridTemplateColumns: 'repeat(30, minmax(0, 1fr))' }}>
+              <span className="font-bold text-[13px]" style={{ gridColumn: 'span 4' }}>幸运 LUCK</span>
+              <span className="flex items-center whitespace-nowrap" style={{ gridColumn: 'span 4' }}><Pill label="Start" value={d.eff.Luck} /></span>
+              <span className="font-serif text-[10px] leading-[1.05] text-ink" style={{ gridColumn: 'span 3' }}>霉运连连</span>
+              {numCells(1, 99)}
+            </div>
           </div>
 
           {/* 技能 */}
           <div className="border border-ink/25 rounded-[3px] overflow-hidden">
-            <div className="bg-paper-deep px-2 py-1 text-[12.5px] font-bold text-ink-soft flex justify-between flex-wrap gap-2 shadow-[inset_0_-1px_0_0_var(--color-line)]">
+            <div className="bg-paper-deep px-2 py-1 text-[11px] font-bold text-ink-soft flex justify-between flex-wrap gap-1 shadow-[inset_0_-1px_0_0_var(--color-line)]">
               <span>调查员技能（★本职 · ✎自定义 · 加粗=已投点 · ☐=本局大成功标记 · 括号内为基础值）</span>
-              <span className="font-normal text-ink-mute">
+              <span className="font-normal text-[10px] text-ink-mute">
                 职业 {d.spent.occupation}/{d.budget.occupation} · 兴趣 {d.spent.interest}/{d.budget.interest}
               </span>
             </div>
@@ -154,7 +257,7 @@ export default function CharacterPrint({ character }) {
           </div>
 
           {/* 武器 */}
-          <div className="border border-ink/25 rounded-[3px] overflow-hidden mt-2">
+          <div className="border border-ink/25 rounded-[3px] overflow-hidden mt-3">
             <div className="bg-paper-deep px-2 py-1 text-[12.5px] font-bold text-ink-soft tracking-[0.15em] shadow-[inset_0_-1px_0_0_var(--color-line)]">❖ 武器</div>
             <table className="w-full text-[11.5px] border-collapse">
               <thead>
@@ -171,16 +274,16 @@ export default function CharacterPrint({ character }) {
               <tbody>
                 {(character.weapons || []).map((row, i) => (
                   <tr key={`${row.name}-${i}`} className="border-b border-ink/12">
-                    <td className="px-2 py-[3px] font-bold">{row.name}</td>
-                    <td className="px-2 py-[3px]">{row.skill}</td>
-                    <td className="px-2 py-[3px]">{row.damage}</td>
-                    <td className="px-2 py-[3px]">{row.range}</td>
-                    <td className="px-2 py-[3px]">{row.attacks}</td>
-                    <td className="px-2 py-[3px]">{row.ammo}</td>
-                    <td className="px-2 py-[3px]">{row.malfunction}</td>
+                    <td className="px-2 py-[1.5px] font-bold">{row.name}</td>
+                    <td className="px-2 py-[1.5px]">{row.skill}</td>
+                    <td className="px-2 py-[1.5px]">{row.damage}</td>
+                    <td className="px-2 py-[1.5px]">{row.range}</td>
+                    <td className="px-2 py-[1.5px]">{row.attacks}</td>
+                    <td className="px-2 py-[1.5px]">{row.ammo}</td>
+                    <td className="px-2 py-[1.5px]">{row.malfunction}</td>
                   </tr>
                 ))}
-                {Array.from({ length: Math.max(0, 4 - (character.weapons || []).length) }).map((_, i) => (
+                {Array.from({ length: Math.max(0, 1 - (character.weapons || []).length) }).map((_, i) => (
                   <tr key={`e${i}`} className="border-b border-ink/12">
                     {Array.from({ length: 7 }).map((__, j) => <td key={j} className="px-2 py-[8px]" />)}
                   </tr>
@@ -269,10 +372,10 @@ export default function CharacterPrint({ character }) {
               <tbody>
                 {(character.moduleLinks || []).map((l) => (
                   <tr key={l.moduleId} className="border-b border-ink/12">
-                    <td className="px-2 py-[3px] font-mono">{l.date || ''}</td>
-                    <td className="px-2 py-[3px]">{l.moduleTitle}</td>
-                    <td className="px-2 py-[3px]">{l.role}</td>
-                    <td className="px-2 py-[3px]">{l.note || ''}</td>
+                    <td className="px-2 py-[1.5px] font-mono">{l.date || ''}</td>
+                    <td className="px-2 py-[1.5px]">{l.moduleTitle}</td>
+                    <td className="px-2 py-[1.5px]">{l.role}</td>
+                    <td className="px-2 py-[1.5px]">{l.note || ''}</td>
                   </tr>
                 ))}
                 {(character.moduleLinks || []).length === 0 && (

@@ -9,7 +9,7 @@
  * 注意：审核状态与批复**不属于角色卡本体**，只用于流程沟通，永远不会被打印导出。
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft, BookOpen, Calendar, CheckCircle, ClipboardCheck, Crown, Edit, ExternalLink,
   FileText, Link2, Plus, Printer, ScrollText, Send, Share2, Shield, Sword, Trash2, Undo2,
@@ -21,7 +21,7 @@ import {
 } from '../../../shared/coc7e.js';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api.js';
 import {
-  Badge, Button, EmptyState, Field, Input, Modal, Panel, Select, Tabs, Textarea, WarningList, cx,
+  Badge, Button, Combobox, EmptyState, Field, Input, Modal, Panel, Select, Tabs, Textarea, WarningList, cx,
 } from '../ui.jsx';
 import { ExportCardModal } from './CardTransferModal.jsx';
 
@@ -65,6 +65,14 @@ export default function CharacterDetail({
   const [keepers, setKeepers] = useState([]);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitKpId, setSubmitKpId] = useState('');
+  const [submitQuery, setSubmitQuery] = useState('');
+  const submitHints = useMemo(() => keepers.map((k) => k.username).filter(Boolean).slice(0, 30), [keepers]);
+  const filteredKeepers = useMemo(() => {
+    const q = submitQuery.trim().toLowerCase();
+    if (!q) return keepers;
+    return keepers.filter((k) => [k.username, k.kpTitle, k.isChief ? '首席' : '']
+      .some((v) => String(v || '').toLowerCase().includes(q)));
+  }, [keepers, submitQuery]);
   const [custodyPick, setCustodyPick] = useState([]);
   const [showAllSkills, setShowAllSkills] = useState(false);
 
@@ -825,8 +833,15 @@ export default function CharacterDetail({
             <ScrollText className="h-4 w-4 shrink-0 text-moon" />
             本次提交会冻结当前规则集：{c.ruleSet?.name || '官方规则书'}（之后 KP 改规则不影响这张卡）。
           </p>
-          <div className="space-y-2">
-            {keepers.map((k) => (
+          <Combobox
+            value={submitQuery}
+            onChange={setSubmitQuery}
+            options={submitHints}
+            placeholder="查找守秘人用户名或头衔"
+            emptyHint="没有匹配的守秘人，可直接输入用户名"
+          />
+          <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
+            {filteredKeepers.map((k) => (
               <label key={k.id} className={cx('flex cursor-pointer items-center justify-between gap-3 border px-3.5 py-2.5 text-[16px] transition-colors', submitKpId === k.id ? 'border-ochre/60 bg-ochre/[0.07] text-ink' : 'border-line-strong text-ink-soft hover:border-ochre/40')}>
                 <span className="flex items-center gap-2">
                   <input type="radio" name="submit-kp" value={k.id} checked={submitKpId === k.id} onChange={() => setSubmitKpId(k.id)} className="accent-[var(--color-ochre)]" />
@@ -836,7 +851,15 @@ export default function CharacterDetail({
                 {submitKpId === k.id ? <CheckCircle className="w-4 h-4 text-ochre" /> : null}
               </label>
             ))}
+            {filteredKeepers.length === 0 ? (
+              <p className="border border-dashed border-line-strong px-3 py-6 text-center text-[14px] text-ink-mute">
+                没有匹配的守秘人，换个用户名试试。
+              </p>
+            ) : null}
           </div>
+          <p className="text-[13px] text-ink-mute">
+            共 {filteredKeepers.length} 位{submitQuery ? '（已筛选）' : ''}，列表可上下滚动
+          </p>
           <p className="text-[14px] leading-[1.7] text-ink-mute">审核状态与批复不会写进卡里，也不会被打印。</p>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setSubmitOpen(false)}>取消</Button>

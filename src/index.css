@@ -785,13 +785,17 @@ html.theme-push::view-transition-group(root) {
   body * { visibility: hidden; }
   .print-root, .print-root * { visibility: visible; }
   .print-root {
-    position: absolute;
-    inset: 0 auto auto 0;
+    position: static;
     width: 100%;
+    margin: 0;
   }
+  html, body { margin: 0 !important; padding: 0 !important; }
   .no-print { display: none !important; }
   .print-page { page-break-after: always; }
   .print-page:last-child { page-break-after: auto; }
+  /* 页面由 @page 的 8mm 外边距提供留白；纸张盒子不再重复 210mm 宽和 padding，
+     否则打印时会因内容区只有 194×281mm 而整体缩放、出现额外白边。 */
+  .print-root .print-paper { width: auto; min-height: 0; padding: 0; background: transparent !important; box-shadow: none; }
   .print-avoid-break { break-inside: avoid; }
 }
 
