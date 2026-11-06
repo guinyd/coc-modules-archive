@@ -64,6 +64,23 @@ function namePrefix(bot, name) {
   return '';
 }
 
+/**
+ * 专攻技能拆成可直接识别的别名：去掉「射击 / 格斗 / 外语…」这类分支头，
+ * 斜杠拆开，霰弹枪额外补「步霰」（与官方 Excel 骰娘导入一致）。
+ */
+function specTokens(custom) {
+  const parts = String(custom || '')
+    .split(/[/／]/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  const tokens = [];
+  for (const p of parts) {
+    tokens.push(p);
+    if (p.includes('霰弹')) tokens.push('步霰');
+  }
+  return [...new Set(tokens)];
+}
+
 /** 需要导出的技能（普通技能全给基础值；专攻技能只给已选方向/投过点的） */
 function skillsForExport(derived) {
   const out = [];
@@ -74,8 +91,8 @@ function skillsForExport(derived) {
     }
     if (s.spec) {
       if (!s.custom && !(s.occ > 0 || s.interest > 0 || s.growth > 0)) continue;
-      const base = SKILL_BY_KEY[s.key]?.name || s.key;
-      out.push({ name: s.custom ? `${base}${s.custom}` : base, total: s.total, aliases: [] });
+      const tokens = specTokens(s.custom);
+      if (tokens.length) out.push({ tokens, total: s.total });
       continue;
     }
     const nm = SKILL_BY_KEY[s.key]?.name || s.name;
@@ -111,6 +128,10 @@ export function buildDiceBotCommand(sheet, derived, opts = {}) {
   parts.push(`hp${Number(d.hp ?? 0)}`, `体力${Number(d.hp ?? 0)}`);
 
   for (const sk of skillsForExport(d)) {
+    if (sk.tokens) {
+      for (const t of sk.tokens) parts.push(`${t}${sk.total}`);
+      continue;
+    }
     parts.push(`${sk.name}${sk.total}`);
     for (const a of sk.aliases) parts.push(`${a}${sk.total}`);
   }

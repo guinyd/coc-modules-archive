@@ -92,6 +92,22 @@ for (const f of DICEBOT_FORMATS) {
 ok('塔系前缀带角色名-', buildDiceBotCommand(base, d, { bot: 'tower' }).startsWith('.st 自检调查员-'));
 ok('惠惠前缀带角色名？', buildDiceBotCommand(base, d, { bot: 'mdice' }).startsWith('.st 自检调查员？'));
 ok('句号模式', buildDiceBotCommand(base, d, { bot: 'dice', dot: '。' }).startsWith('。st '));
+ok('专攻技能拆分支：去掉射击/格斗头、拆斜杠、补「步霰」', (() => {
+  const specSheet = {
+    ...base,
+    skills: [
+      { id: 'firearms#0', key: 'firearms', custom: '手枪', occ: 20 },
+      { id: 'firearms#1', key: 'firearms', custom: '步枪/霰弹枪', occ: 25 },
+      { id: 'fighting#0', key: 'fighting', custom: '斗殴', occ: 25 },
+    ],
+  };
+  const sd = computeSheet(specSheet);
+  const cmd = buildDiceBotCommand(specSheet, sd, { bot: 'tower' });
+  const has = (t) => cmd.includes(t);
+  return !cmd.includes('/')
+    && has('手枪') && has('步枪') && has('霰弹枪') && has('步霰') && has('斗殴')
+    && !cmd.includes('射击') && !cmd.includes('格斗');
+})());
 ok('shiki 版带派生值与武器', (() => {
   const cmd = buildDiceBotCommand(base, d, { bot: 'shiki' });
   return cmd.includes('&DB=') && cmd.includes('闪避:') && cmd.includes('&徒手=');
