@@ -63,6 +63,8 @@ export function toEditableSheet(character) {
     birthplace: character.birthplace || '',
     era: character.era || '1920s',
     chars: { ...blankSheet().chars, ...(character.chars || {}) },
+    charGrowth: { ...(character.charGrowth || {}) },
+    sanGrowth: character.sanGrowth || 0,
     eduBonus: character.eduBonus || 0,
     applyAgeAdjust: character.applyAgeAdjust === true,   // 默认关闭，老卡保留已保存的选择
     armorPenalty: character.armorPenalty || 0,
@@ -129,7 +131,7 @@ function ProgressBar({ used, total, label, hint }) {
 
 function DerivedGrid({ derived }) {
   const items = [
-    ['生命值 HP', derived.hp], ['魔法点 MP', derived.mp], ['理智 SAN', derived.san],
+    ['生命值 HP', derived.hp], ['魔法点 MP', derived.mp], ['理智 SAN', `${derived.san} / ${derived.sanMax}`],
     ['移动力 MOV', derived.mov], ['伤害加值 DB', derived.db], ['体格 Build', derived.build],
     ['闪避', derived.dodgeBase], ['母语', derived.ownLanguageBase],
   ];
@@ -192,7 +194,7 @@ function SpecPicker({ skillKey, value, onChange }) {
 function SpecialtyPicker({ group, onToggle }) {
   const [q, setQ] = useState('');
   const pool = useMemo(
-    () => group.pool || Object.values(SKILL_BY_KEY).filter((s) => !s.spec).map((s) => s.key),
+    () => group.pool || Object.values(SKILL_BY_KEY).map((s) => s.key),
     [group.pool],
   );
   const searchable = !group.pool && pool.length > 8;
@@ -207,6 +209,7 @@ function SpecialtyPicker({ group, onToggle }) {
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
         <p className="text-[14px] text-ink-soft">
           {group.label} <span className="font-bold text-ochre">{group.picked.length}/{group.limit}</span>
+          <span className="ml-2 text-[12.5px] text-ink-mute">带分支的技能组（格斗/射击/技艺/外语/科学）按整组计入，分支在技能表里自选</span>
         </p>
         {searchable ? (
           <div className="flex items-center gap-1.5">
@@ -232,6 +235,9 @@ function SpecialtyPicker({ group, onToggle }) {
                 on ? 'border-forest bg-forest text-paper-raised' : 'border-line-strong bg-paper-raised text-ink-soft hover:border-forest/50')}
             >
               {SKILL_BY_KEY[k]?.name || k}
+              {SKILL_BY_KEY[k]?.spec ? (
+                <span className="ml-1 text-[11.5px] font-normal opacity-80">含全部分支</span>
+              ) : null}
             </button>
           );
         })}
@@ -450,6 +456,12 @@ export default function CharacterEditor({
 
   const setChar = (key, value) => {
     setSheet((prev) => ({ ...prev, chars: { ...prev.chars, [key]: value === '' ? '' : Number(value) } }));
+    setDirty(true);
+  };
+
+  const setCharGrowth = (key, value) => {
+    const n = value === '' ? 0 : Math.max(0, Math.min(99, Math.trunc(Number(value)) || 0));
+    setSheet((prev) => ({ ...prev, charGrowth: { ...(prev.charGrowth || {}), [key]: n } }));
     setDirty(true);
   };
 
@@ -1057,8 +1069,9 @@ export default function CharacterEditor({
                   <Input value={sheet.name} maxLength={40} onChange={(e) => patch({ name: e.target.value })} placeholder="例：约翰·H·沃特雷" />
                 </Field>
                 <Field className={FIELD} label="玩家名"><Input value={sheet.playerName} maxLength={40} onChange={(e) => patch({ playerName: e.target.value })} /></Field>
-                <Field className={FIELD} label="年龄" hint="15-90 之间；影响属性补正与教育增强">
-                  <NumberInput min={15} max={120} value={sheet.age} onChange={setAge} />
+                <Field className={FIELD} label="年龄"
+                  hint={sheet.agePenaltyWaived ? 'KP 已豁免年龄减益：可填任意非负整数' : '15-120 之间；影响属性补正与教育增强'}>
+                  <NumberInput min={sheet.agePenaltyWaived ? 0 : 15} max={sheet.agePenaltyWaived ? 999 : 120} value={sheet.age} onChange={setAge} />
                 </Field>
                 <Field className={FIELD} label="性别"><Input value={sheet.gender} maxLength={20} onChange={(e) => patch({ gender: e.target.value })} /></Field>
                 <Field className={FIELD} label="住地"><Input value={sheet.residence} maxLength={40} onChange={(e) => patch({ residence: e.target.value })} /></Field>
@@ -1307,6 +1320,16 @@ export default function CharacterEditor({
                       <div className="mb-1 font-mono text-[14px] font-semibold tracking-[0.06em] text-ink-mute">掷骰值</div>
                       <NumberInput value={sheet.chars[k]} onChange={(v) => setChar(k, v)} className="!py-2" />
                     </div>
+                    <div className="w-16">
+                      <div className="mb-1 font-mono text-[14px] font-semibold tracking-[0.06em] text-moon">成长 +</div>
+                      <NumberInput
+                        min={0}
+                        max={99}
+                        value={sheet.charGrowth?.[k] || 0}
+                        onChange={(v) => setCharGrowth(k, v)}
+                        className="!py-2 !border-moon/50"
+                      />
+                    </div>
                     {derived.legendary.enabled ? (
                       <div className="w-20">
                         <div className="mb-1 font-mono text-[14px] font-semibold tracking-[0.06em] text-ochre">传奇 +</div>
@@ -1329,6 +1352,32 @@ export default function CharacterEditor({
                 </div>
               ))}
             </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[2px] border border-moon/40 bg-moon/[0.05] px-4 py-3">
+              <div className="min-w-0">
+                <p className="flex flex-wrap items-baseline gap-2 text-[15px] font-bold text-ink">
+                  理智 SAN
+                  <span className="font-mono text-[15px]">
+                    起始 <b className="text-forest">{derived.san}</b>
+                    <span className="mx-1 text-ink-mute">/</span>
+                    上限 <b className="text-ochre">{derived.sanMax}</b>
+                  </span>
+                </p>
+                <p className="mt-1 text-[13.5px] leading-[1.65] text-ink-soft">
+                  起始 = min(意志 + 成长, 99 − 神话知识)，最低 0；上限随克苏鲁神话增长而下降（当前神话 {derived.mythos}）。成长可正可负——剧本削减 SAN 时填负数。
+                </p>
+              </div>
+              <label className="flex items-center gap-2">
+                <span className="text-[14px] font-semibold text-moon">成长 ±</span>
+                <NumberInput
+                  min={-99}
+                  max={99}
+                  value={sheet.sanGrowth || 0}
+                  onChange={(v) => { patch({ sanGrowth: v === '' ? 0 : Math.max(-99, Math.min(99, Math.trunc(Number(v)) || 0)) }); }}
+                  className="!w-20 !py-2 !border-moon/50"
+                />
+              </label>
+            </div>
+
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Toggle
                 checked={sheet.applyAgeAdjust}

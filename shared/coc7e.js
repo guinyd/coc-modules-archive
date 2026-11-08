@@ -419,6 +419,7 @@ export function effectiveChars(chars, age, opts = {}) {
   const apply = opts.apply !== false;
   // KP 可以「豁免年龄减益、只保留教育成长」：属性不再因年龄下降，但 eduBonus 照常加
   const waive = opts.waivePenalty === true;
+  const growth = opts.growth || {};
   const eduBonus = clampInt(opts.eduBonus, -99, 99, 0);
   const adj = apply ? ageAdjust(age) : ageAdjust(0);
   const alloc = apply && !waive ? resolveAgeAlloc(adj, opts.ageAlloc) : {};
@@ -438,6 +439,10 @@ export function effectiveChars(chars, age, opts = {}) {
     }
     // 「传奇」额外调整值单独一栏累加，不与掷骰属性混用
     v += clampInt(legend[k], 0, 999, 0);
+    // 属性成长：与技能「成长」同义，按剧本/房规奖励单独记一栏；
+    // 成长不能让属性突破 99（只有克苏鲁神话技能可超过 99），超出部分不再计入。
+    const gr = clampInt(growth[k], 0, 99, 0);
+    if (gr && v < 99) v = Math.min(99, v + gr);
     out[k] = Math.max(0, Math.min(999, v));
   }
   return out;
@@ -585,7 +590,9 @@ export function occupationAllowed(occ, picks = {}) {
   (picks.choices || []).forEach((pick, i) => {
     if (pick && groups[i] && groups[i].includes(pick)) allowed.add(pick);
   });
-  for (const k of picks.free || []) if (SKILL_BY_KEY[k] && !isSpec(k)) allowed.add(k);
+  // 自由特长可以直接选「带分支的技能组」（如格斗、射击）：整组所有专攻槽都算本职，
+  // 具体分支由玩家在技能表里自行选择，不必在特长列表里枚举几十个分支项。
+  for (const k of picks.free || []) if (SKILL_BY_KEY[k]) allowed.add(k);
   for (const k of picks.social || []) if (SOCIAL_SKILLS.includes(k)) allowed.add(k);
   // KP 自定义职业可以直接勾选「任意自定义技能名」
   for (const n of occ?.customKeys || []) allowed.add(`custom:${n}`);
@@ -640,7 +647,18 @@ export function computeSheet(sheet, ctx = {}) {
   const waivePenalty = s.agePenaltyWaived === true;
   const legendary = normalizeLegendary(s.legendary);
   const legendaryBonus = normalizeLegendaryBonus(s.legendaryBonus);
+  const charGrowth = {};
+  for (const k of ALL_CHARS) charGrowth[k] = clampInt(s.charGrowth?.[k], 0, 99, 0);
   const eff = effectiveChars(raw, age, {
+    apply: applyAge,
+    waivePenalty,
+    eduBonus: s.eduBonus,
+    ageAlloc: s.ageAlloc,
+    legendary: legendaryBonus,
+    growth: charGrowth,
+  });
+  // 技能点预算只看「未加成长」的属性：成长不是教育/智力训练，不产生职业点或兴趣点
+  const effBase = effectiveChars(raw, age, {
     apply: applyAge,
     waivePenalty,
     eduBonus: s.eduBonus,
@@ -658,7 +676,6 @@ export function computeSheet(sheet, ctx = {}) {
 
   const hp = Math.floor((eff.CON + eff.SIZ) / 10);
   const mp = Math.floor(eff.POW / 5);
-  const san = eff.POW;
   const dbb = damageBonusBuild(eff.STR, eff.SIZ);
   const mv = movement(eff.STR, eff.DEX, eff.SIZ, age, s.armorPenalty, waivePenalty);
   const dodgeBase = Math.floor(eff.DEX / 2);
@@ -668,7 +685,7 @@ export function computeSheet(sheet, ctx = {}) {
   const allowed = occupationAllowed(occ, picks);
   // 原本职（职业模板固定项 + 信用评级）与玩家在弹性槽位里自选的本职分开标记
   const baseOcc = new Set([...(occ?.keys || []), 'credit']);
-  const budget = { occupation: occupationBudget(occ, eff), interest: eff.INT * 2 };
+  const budget = { occupation: occupationBudget(occ, effBase), interest: effBase.INT * 2 };
 
   // 标准技能：以存档为准，但 id/key/基础值全部由本引擎重建，忽略存档里可能被篡改的重复项
   const incoming = new Map();
@@ -730,6 +747,13 @@ export function computeSheet(sheet, ctx = {}) {
     });
   }
 
+  // 理智：起始 = min(意志 + 成长调整, 99 - 神话知识)；上限随克苏鲁神话增长而降低
+  const mythosSkill = skills.find((x) => x.key === 'cthulhu');
+  const mythos = mythosSkill ? clampInt(mythosSkill.total, 0, 99, 0) : 0;
+  const sanMax = Math.max(0, 99 - mythos);
+  const sanGrowth = clampInt(s.sanGrowth, -99, 99, 0);   // 可正可负：剧本也可能削减意志/SAN
+  const san = Math.min(sanMax, Math.max(0, eff.POW + sanGrowth));
+
   const spent = { occupation: occSpent, interest: interestSpent };
   const remaining = {
     occupation: budget.occupation - occSpent,
@@ -760,7 +784,7 @@ export function computeSheet(sheet, ctx = {}) {
 
   return {
     eff, raw, half, fifth, age,
-    hp, mp, san, mov: mv.mov, movAgePenalty: mv.agePenalty,
+    hp, mp, san, sanMax, sanGrowth, mythos, mov: mv.mov, movAgePenalty: mv.agePenalty,
     db: dbb.db, build: dbb.build, strSiz: dbb.total,
     dodgeBase, ownLanguageBase: eff.EDU,
     /** 传奇标记与额外调整值（只有 KP 能改） */
@@ -768,6 +792,8 @@ export function computeSheet(sheet, ctx = {}) {
     legendaryBonus,
     /** KP 是否豁免了年龄减益（只保留教育成长） */
     waiveAgePenalty: waivePenalty,
+    /** 属性成长与理智成长（剧本/房规奖励，单独一栏） */
+    charGrowth,
     /** 教育增强结算记录（KP 可见） */
     eduGrowth,
     /** 玩家备注：只记录，不参与打印 */
@@ -1346,6 +1372,8 @@ export function blankSheet(ownerId = '') {
   return {
     name: '', playerName: '', occupationId: '', age: 25, gender: '', residence: '', birthplace: '', era: '1920s',
     chars, eduBonus: 0, applyAgeAdjust: false, armorPenalty: 0, ageAlloc: {},   // 年龄补正默认不套用，由玩家主动开启
+    charGrowth: {}, sanGrowth: 0,          // 属性/理智成长（剧本或房规奖励，单独记录）
+
     eduGrowth: blankEduGrowth(),          // 教育增强结算记录（KP 可见）
     legendary: blankLegendary(),          // 传奇标记（KP 单独开启，允许突破 99）
     legendaryBonus: blankLegendaryBonus(),// 传奇额外调整值（单独一栏）

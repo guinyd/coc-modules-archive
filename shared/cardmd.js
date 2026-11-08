@@ -16,7 +16,8 @@ import {
 /** 允许在记录里传输的字段（其余一律丢弃） */
 const FIELDS = [
   'name', 'playerName', 'occupationId', 'age', 'gender', 'residence', 'birthplace', 'era',
-  'chars', 'eduBonus', 'eduGrowth', 'applyAgeAdjust', 'ageAlloc', 'armorPenalty',
+  'chars', 'charGrowth', 'sanGrowth', 'eduBonus', 'eduGrowth', 'applyAgeAdjust', 'ageAlloc', 'armorPenalty',
+  'agePenaltyWaived',
   'occPicks', 'skills', 'customSkills', 'weapons', 'equipment', 'equipmentItems', 'currency', 'extraAssets',
   'background', 'experience', 'notes', 'status',
 ];
@@ -47,7 +48,7 @@ export function unpackCard(obj) {
   out.name = str(obj.name, 40);
   out.playerName = str(obj.playerName, 40);
   out.occupationId = obj.occupationId === undefined || obj.occupationId === null ? '' : String(obj.occupationId).slice(0, 32);
-  out.age = int(obj.age, 15, 120, 25);
+  out.age = int(obj.age, 0, 999, 25);
   out.gender = str(obj.gender, 20);
   out.residence = str(obj.residence, 40);
   out.birthplace = str(obj.birthplace, 40);
@@ -57,9 +58,18 @@ export function unpackCard(obj) {
   if (obj.chars && typeof obj.chars === 'object') {
     for (const k of ALL_CHARS) out.chars[k] = int(obj.chars[k], 0, 99, 0);
   }
+  out.charGrowth = {};
+  if (obj.charGrowth && typeof obj.charGrowth === 'object') {
+    for (const k of ALL_CHARS) {
+      const n = int(obj.charGrowth[k], 0, 99, 0);
+      if (n) out.charGrowth[k] = n;
+    }
+  }
+  out.sanGrowth = int(obj.sanGrowth, -99, 99, 0);
   out.eduBonus = int(obj.eduBonus, 0, 999, 0);
   if (obj.eduGrowth && typeof obj.eduGrowth === 'object') out.eduGrowth = { ...base.eduGrowth, ...obj.eduGrowth };
   out.applyAgeAdjust = obj.applyAgeAdjust === true;
+  out.agePenaltyWaived = obj.agePenaltyWaived === true;
   if (obj.ageAlloc && typeof obj.ageAlloc === 'object') {
     out.ageAlloc = {};
     for (const k of ['STR', 'SIZ', 'CON', 'DEX']) {
@@ -203,15 +213,19 @@ export function buildCardMarkdown(character, derived) {
   lines.push(`- 出生地：${body(s.birthplace)}`);
   lines.push(`- 状态：${STATUS_LABEL[s.status] || '草稿'}`, '');
 
-  lines.push('## 属性', '', '| 属性 | 数值 |', '| --- | --- |');
-  for (const k of ALL_CHARS) lines.push(`| ${CHAR_LABEL[k]} ${k} | ${cell(d.eff?.[k] ?? s.chars?.[k])} |`);
+  lines.push('## 属性', '', '| 属性 | 数值 | 成长 |', '| --- | --- | --- |');
+  for (const k of ALL_CHARS) {
+    const growth = Number(s.charGrowth?.[k]) || 0;
+    lines.push(`| ${CHAR_LABEL[k]} ${k} | ${cell(d.eff?.[k] ?? s.chars?.[k])} | ${growth ? `+${growth}` : '—'} |`);
+  }
   const { base: attrBase, withLuck: attrWithLuck } = attrTotals(s, d);
   lines.push('', `- 属性总和：${attrBase} / ${attrWithLuck}（不含运 / 含运）`, '');
 
   lines.push('## 派生值', '',
-    '| 生命值 | 魔法值 | 理智 | 幸运 | 伤害加成 | 体格 | 移动 |',
-    '| --- | --- | --- | --- | --- | --- | --- |',
-    `| ${d.hp} | ${d.mp} | ${d.san} | ${d.eff?.Luck ?? '—'} | ${d.db} | ${d.build} | ${d.mov} |`, '');
+    '| 生命值 | 魔法值 | 理智起始 | 理智上限 | 幸运 | 伤害加成 | 体格 | 移动 |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- |',
+    `| ${d.hp} | ${d.mp} | ${d.san} | ${d.sanMax} | ${d.eff?.Luck ?? '—'} | ${d.db} | ${d.build} | ${d.mov} |`,
+    '', `- 理智上限 = 99 − 神话知识（当前神话 ${d.mythos ?? 0}）`, '');
 
   lines.push('## 职业', '');
   if (d.occupation) {

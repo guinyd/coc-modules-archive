@@ -8,7 +8,7 @@
 
 import {
   blankSheet, blankSkills, computeSheet, validateSheet, auditSheet,
-  ageAdjust, effectiveChars, damageBonusBuild,
+  ageAdjust, effectiveChars, damageBonusBuild, occupationAllowed,
 } from '../shared/coc7e.js';
 import { buildDiceBotCommand, DICEBOT_FORMATS } from '../shared/dicebot.js';
 import { buildCardBackup, buildCardMarkdown, importCardData } from '../shared/cardmd.js';
@@ -120,12 +120,15 @@ ok('包含属性、全部技能与背景章节',
   md.includes('## 属性') && md.includes('## 技能（全部）') && md.includes('## 背景故事'));
 ok('列出全部技能（不止已投点）', md.split(String.fromCharCode(10)).filter((l) => l.startsWith('| ') && !l.includes('---') && !l.startsWith('| 技能')).length > 40);
 ok('属性总和区分含运 / 不含运', md.includes('属性总和：480 / 525（不含运 / 含运）'));
+ok('属性表带成长列、派生值写明理智上限', md.includes('| 属性 | 数值 | 成长 |') && md.includes('理智上限 = 99 − 神话知识'));
 ok('Markdown 不再内嵌数据块', !md.includes('<details>') && !md.includes('```json'));
 ok('可读 Markdown 不再用于还原，提示改用 .json',
   (() => { const r = importCardData(md); return !r.ok && r.error.includes('.json'); })());
 const backup = buildCardBackup(base);
 const back = importCardData(backup);
 ok('JSON 备份往返成功', back.ok && back.sheet.name === base.name && back.sheet.chars.STR === 60, back.error);
+ok('JSON 备份保留属性/理智成长',
+  (() => { const r = importCardData(buildCardBackup({ ...base, charGrowth: { STR: 5 }, sanGrowth: 7 })); return r.ok && r.sheet.charGrowth.STR === 5 && r.sheet.sanGrowth === 7; })());
 ok('导入后是干净的新卡（无传奇/无模组经历/草稿）',
   back.ok && back.sheet.legendary.enabled === false && back.sheet.moduleLinks.length === 0 && back.sheet.status === 'draft');
 ok('旧版带数据块的 Markdown 仍可导入', (() => {
@@ -136,6 +139,34 @@ ok('旧版带数据块的 Markdown 仍可导入', (() => {
 })());
 ok('旧角色卡编码提示已停用', (() => { const r = importCardData('COC7G1:abcd'); return !r.ok && r.error.includes('停用'); })());
 ok('空内容被拒绝', importCardData('   ').ok === false);
+
+section('属性与理智成长');
+const growthSheet = {
+  ...blankSheet(), name: '成长自检', chars: { ...blankSheet().chars, POW: 60, CON: 50, SIZ: 50 },
+  charGrowth: { POW: 10 }, sanGrowth: 20,
+};
+const gd = computeSheet(growthSheet, {});
+ok('属性成长计入有效值（POW 60+10）', gd.eff.POW === 70, gd.eff.POW);
+ok('SAN 起始 = 意志+成长（70+20）', gd.san === 90, gd.san);
+ok('SAN 上限默认 99', gd.sanMax === 99);
+const mythSheet = { ...growthSheet, skills: [{ id: 'cthulhu', key: 'cthulhu', occ: 20 }] };
+const md2 = computeSheet(mythSheet, {});
+ok('SAN 上限 = 99 − 神话知识（20）', md2.sanMax === 79 && md2.san === 79, `${md2.sanMax}/${md2.san}`);
+ok('自由特长可选分支组（格斗整组算本职）', (() => {
+  const occ = { keys: ['dodge'], free: 1, pts: { terms: [{ stat: 'EDU', mult: 4 }] } };
+  const allowed = occupationAllowed(occ, { free: ['fighting'] });
+  return allowed.has('fighting') && !allowed.has('firearms');
+})());
+
+const capSheet = { ...growthSheet, chars: { ...growthSheet.chars, STR: 95 }, charGrowth: { STR: 10 } };
+const cd = computeSheet(capSheet, {});
+ok('成长不能让属性突破 99（95+10→99）', cd.eff.STR === 99, cd.eff.STR);
+const budgetSheet = { ...blankSheet(), name: '预算自检', chars: { ...blankSheet().chars, INT: 70, EDU: 80 }, charGrowth: { INT: 20, EDU: 10 } };
+const bd = computeSheet(budgetSheet, {});
+ok('成长不计入兴趣点预算（INT 70+20，预算仍 140）', bd.eff.INT === 90 && bd.budget.interest === 140, `${bd.eff.INT}/${bd.budget.interest}`);
+const negSheet = { ...growthSheet, sanGrowth: -10 };
+const nd = computeSheet(negSheet, {});
+ok('SAN 成长可为负（70−10=60）', nd.san === 60, nd.san);
 
 section('房规除法取整');
 ok('属性 ÷ 2 向下取整（81 ÷ 2 = 40）', (() => {

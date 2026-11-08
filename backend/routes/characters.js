@@ -133,10 +133,15 @@ function guardEduGrowth(data, actor, current) {
 }
 
 function guardKpOnlyFields(data, actor, current) {
-  if (actor?.role === 'admin') return data;
-  for (const f of KP_ONLY_FIELDS) {
-    if (!(f in data)) continue;
-    data[f] = current && current[f] !== undefined ? current[f] : defaultKpOnly(f);
+  if (actor?.role !== 'admin') {
+    for (const f of KP_ONLY_FIELDS) {
+      if (!(f in data)) continue;
+      data[f] = current && current[f] !== undefined ? current[f] : defaultKpOnly(f);
+    }
+  }
+  // 年龄范围以最终生效的豁免开关为准：玩家伪造豁免标记会被上面的还原挡掉
+  if (data.age !== undefined && data.agePenaltyWaived !== true && (data.age < 15 || data.age > 120)) {
+    throw badRequest('年龄需在 15-120 之间；要录入超出范围的年龄，请由 KP 勾选「豁免年龄减益」');
   }
   return data;
 }
@@ -378,6 +383,8 @@ function present(character, { actor, full = true }) {
     residence: character.residence || '',
     birthplace: character.birthplace || '',
     chars: derived.raw,
+    charGrowth: derived.charGrowth,
+    sanGrowth: derived.sanGrowth,
     eduBonus: derived.ageAdjust.eduBonus,
     eduGrowth: derived.eduGrowth,
     applyAgeAdjust: derived.ageAdjust.apply,

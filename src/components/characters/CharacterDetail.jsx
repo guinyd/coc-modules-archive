@@ -372,7 +372,7 @@ export default function CharacterDetail({
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3 lg:grid-cols-7">
           <StatBox label="生命值 HP" value={d.hp} />
           <StatBox label="魔法点 MP" value={d.mp} />
-          <StatBox label="理智 SAN" value={d.san} />
+          <StatBox label="理智 SAN" value={`${d.san} / ${d.sanMax}`} />
           <StatBox label="移动力 MOV" value={d.mov} />
           <StatBox label="伤害加值" value={d.db} tone="amber" />
           <StatBox label="体格" value={d.build} tone="amber" />

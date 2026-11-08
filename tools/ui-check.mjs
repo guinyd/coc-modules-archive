@@ -623,6 +623,10 @@ try {
       return Boolean(b);
     })()`);
     await sleep(700);
+    const growthUi = await page.eval(`document.body.innerText.includes('成长 +') && document.body.innerText.includes('99 − 神话知识')`);
+    ok('属性卡提供「成长 +」并说明 SAN 上限公式', growthUi === true);
+    const groupPick = await page.eval(`document.body.innerText.includes('含全部分支')`);
+    ok('特长选择支持按组选取（含全部分支）', groupPick === true);
     const eduUi = await page.eval(`document.body.innerText.includes('教育增强（年龄成长）')`);
     ok('编辑器有「教育增强（年龄成长）」面板', eduUi === true);
     const eduManual = await page.eval(`[...document.querySelectorAll('button')].some(b => b.textContent.includes('清零教育补正'))`);

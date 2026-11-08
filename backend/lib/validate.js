@@ -315,6 +315,18 @@ function parseLegendary(value) {
   return l;
 }
 
+/** 属性成长：只接受已知属性键，0-99 的整数（与技能成长同口径） */
+function parseCharGrowth(value) {
+  if (value === undefined || value === null) return {};
+  if (typeof value !== 'object' || Array.isArray(value)) throw badRequest('属性成长格式不正确');
+  const out = {};
+  for (const k of ALL_CHARS) {
+    if (value[k] === undefined || value[k] === null || value[k] === '') continue;
+    out[k] = vInt(value[k], `属性成长（${k}）`, { min: 0, max: 99, def: 0 });
+  }
+  return out;
+}
+
 /** 传奇额外调整值：只接受已知属性键，0-999 的整数，单独一栏不与原始属性混用 */
 function parseLegendaryBonus(value) {
   if (value === undefined || value === null) return blankLegendaryBonus();
@@ -447,7 +459,9 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
   const occId = out.occupationId !== undefined
     ? out.occupationId
     : (partial ? (current?.occupationId || '') : '');
-  if (need('age')) out.age = vInt(b.age, '年龄', { min: 15, max: 120, def: 25 });
+  // 年龄：常规 15-120；KP 开了「豁免年龄减益」后才允许任意非负整数
+  const ageWaived = b.agePenaltyWaived === true || current?.agePenaltyWaived === true;
+  if (need('age')) out.age = vInt(b.age, '年龄', ageWaived ? { min: 0, max: 999, def: 25 } : { min: 15, max: 120, def: 25 });
   if (need('gender')) out.gender = vStr(b.gender, '性别', { max: 20 });
   if (need('residence')) out.residence = vStr(b.residence, '住地', { max: 40 });
   if (need('birthplace')) out.birthplace = vStr(b.birthplace, '故乡/出身', { max: 40 });
@@ -463,6 +477,8 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
     out.chars = c;
   }
 
+  if (need('charGrowth')) out.charGrowth = parseCharGrowth(b.charGrowth);
+  if (need('sanGrowth')) out.sanGrowth = vInt(b.sanGrowth, '理智成长', { min: -99, max: 99, def: 0 });
   if (need('eduBonus')) out.eduBonus = vInt(b.eduBonus, '教育增强', { min: 0, max: 999, def: 0 });
   if (need('eduGrowth')) out.eduGrowth = parseEduGrowth(b.eduGrowth);
   if (need('applyAgeAdjust')) out.applyAgeAdjust = vBool(b.applyAgeAdjust, true);
@@ -556,6 +572,8 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
     out.residence = out.residence ?? '';
     out.birthplace = out.birthplace ?? '';
     out.era = out.era ?? '1920s';
+    out.charGrowth = out.charGrowth ?? {};
+    out.sanGrowth = out.sanGrowth ?? 0;
     out.eduBonus = out.eduBonus ?? 0;
     out.eduGrowth = out.eduGrowth ?? blankEduGrowth();
     out.applyAgeAdjust = out.applyAgeAdjust ?? true;

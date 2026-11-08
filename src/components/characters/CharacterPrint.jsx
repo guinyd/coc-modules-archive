@@ -227,7 +227,7 @@ export default function CharacterPrint({ character }) {
               <span className="inline-flex items-center gap-1 text-[10px] text-ink-soft" style={{ gridColumn: 'span 3' }}><i className="inline-block h-[8px] w-[8px] border border-ink/60" />临时疯狂</span>
               <span className="inline-flex items-center gap-1 text-[10px] text-ink-soft" style={{ gridColumn: 'span 4' }}><i className="inline-block h-[8px] w-[8px] border border-ink/60" />不定时疯狂</span>
               <span className="flex items-center whitespace-nowrap" style={{ gridColumn: 'span 4' }}><Pill label="Start" value={d.san} /></span>
-              <span className="flex items-center text-[10.5px] text-ink-mute" style={{ gridColumn: 'span 4' }}>Max <span className="ml-1 inline-block h-[14px] w-[1.9rem] rounded-[2px] border border-ink/45" /></span>
+              <span className="flex items-center whitespace-nowrap" style={{ gridColumn: 'span 4' }}><Pill label="Max" value={d.sanMax} /></span>
               <span className="font-serif text-[10px] leading-[1.05] text-ink" style={{ gridColumn: 'span 2' }}>疯了</span>
               {numCells(1, 99)}
             </div>

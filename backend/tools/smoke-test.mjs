@@ -238,6 +238,56 @@ try {
     await api('DELETE', `/api/characters/${c.id}`, { token: A });
   }
 
+  section('角色卡：属性/理智成长与年龄豁免（v10.6）');
+  const grown = await api('POST', '/api/characters', {
+    token: A, body: { ...blank, name: '成长测试员', charGrowth: { POW: 10 }, sanGrowth: 20 },
+  });
+  ok('属性成长计入有效值（POW 55+10）', grown.status === 200 && grown.json.derived.eff.POW === 65,
+    JSON.stringify(grown.json?.derived?.eff));
+  ok('SAN 起始 = 意志 + 成长（65+20）', grown.json.derived.san === 85 && grown.json.derived.sanMax === 99,
+    `${grown.json.derived.san}/${grown.json.derived.sanMax}`);
+  const mythCard = await api('POST', '/api/characters', {
+    token: A, body: { ...blank, name: '神话测试员', skills: [{ id: 'cthulhu', key: 'cthulhu', occ: 20 }] },
+  });
+  ok('SAN 上限 = 99 − 神话知识（20）', mythCard.status === 200 && mythCard.json.derived.sanMax === 79,
+    String(mythCard.json?.derived?.sanMax));
+  const oldAgeCard = await api('POST', '/api/characters', {
+    token: A, body: { ...blank, name: '超龄测试', age: 130 },
+  });
+  ok('未豁免年龄减益时 130 岁被拒', oldAgeCard.status === 400);
+  const waivedAgeCard = await api('POST', '/api/characters', {
+    token: A, body: { ...blank, name: '豁免超龄测试', age: 130, agePenaltyWaived: true },
+  });
+  ok('首席豁免后可录入 130 岁', waivedAgeCard.status === 200 && waivedAgeCard.json.age === 130, String(waivedAgeCard.status));
+  const capped = await api('POST', '/api/characters', {
+    token: A, body: { ...blank, name: '成长上限测试', chars: { ...blank.chars, STR: 95 }, charGrowth: { STR: 10 } },
+  });
+  ok('成长不能让属性突破 99（95+10）', capped.status === 200 && capped.json.derived.eff.STR === 99,
+    String(capped.json?.derived?.eff?.STR));
+  const budgetCard = await api('POST', '/api/characters', {
+    token: A, body: { ...blank, name: '成长预算测试', charGrowth: { EDU: 10, INT: 20 } },
+  });
+  ok('成长不计入技能点预算（EDU 90 仍按 80×4）',
+    budgetCard.json.derived.eff.EDU === 90
+    && budgetCard.json.derived.budget.occupation === 320
+    && budgetCard.json.derived.budget.interest === 140,
+    `${budgetCard.json?.derived?.eff?.EDU}/${budgetCard.json?.derived?.budget?.occupation}/${budgetCard.json?.derived?.budget?.interest}`);
+  const negSan = await api('POST', '/api/characters', {
+    token: A, body: { ...blank, name: 'SAN负成长测试', sanGrowth: -10 },
+  });
+  ok('SAN 成长可为负（55−10=45）', negSan.status === 200 && negSan.json.derived.san === 45,
+    String(negSan.json?.derived?.san));
+  const myCard = await api('POST', '/api/characters', {
+    token: playerToken, body: { ...blank, name: '玩家豁免伪造测试' },
+  });
+  const fakeWaive = await api('PATCH', `/api/characters/${myCard.json.id}`, {
+    token: playerToken, body: { age: 130, agePenaltyWaived: true },
+  });
+  ok('玩家伪造豁免标记仍被拒', fakeWaive.status === 400, String(fakeWaive.status));
+  for (const c of [grown, mythCard, waivedAgeCard, myCard, capped, budgetCard, negSan]) {
+    await api('DELETE', `/api/characters/${c.json.id}`, { token: A });
+  }
+
   section('角色卡：职业指定专攻方向（对照 Excel 原文）');
   const priestId = 211;   // 牧师（《克苏鲁煤气灯》）：本职技能里直接写了「拉丁语」
   const priestMissing = await api('POST', '/api/characters', {
