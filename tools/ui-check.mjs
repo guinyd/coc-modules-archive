@@ -463,6 +463,46 @@ try {
     ok('可以添加自定义技能', afterAdd.includes('技能名称'));
 
 
+    console.log('\n== 附表：法术与神话典籍（v10.7） ==');
+        await page.eval(`(() => {
+          const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === '附表');
+          if (b) b.click();
+          return Boolean(b);
+        })()`);
+        await sleep(700);
+        const appendixText = await page.eval('document.body.innerText');
+        ok('编辑器有「附表」页（法术详情 + 神话典籍）',
+          appendixText.includes('法术详情') && appendixText.includes('神话典籍') && appendixText.includes('添加法术'));
+        await page.eval(`(() => {
+          const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('添加法术'));
+          if (b) b.click();
+          return Boolean(b);
+        })()`);
+        await sleep(500);
+        await page.eval(`(() => {
+          const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === '大典');
+          if (b) b.click();
+          return Boolean(b);
+        })()`);
+        await sleep(600);
+        const drawerInfo = await page.eval(`(() => {
+          const d = document.querySelector('[role="dialog"][aria-label="法术大典"]');
+          if (!d) return { open: false };
+          return { open: true, text: d.innerText.slice(0, 600) };
+        })()`);
+        ok('「大典」拉起法术大典抽屉（分类 + 条目）',
+          drawerInfo.open === true && drawerInfo.text.includes('全部') && drawerInfo.text.includes('战斗')
+          && drawerInfo.text.includes('共'), JSON.stringify(drawerInfo).slice(0, 160));
+        await page.eval(`(() => {
+          const d = document.querySelector('[role="dialog"][aria-label="法术大典"]');
+          const first = d ? [...d.querySelectorAll('ul button')][0] : null;
+          if (first) first.click();
+          return Boolean(first);
+        })()`);
+        await sleep(700);
+        const afterPick = await page.eval(`(() => ({ toast: document.body.innerText.includes('已填入') }))()`);
+        ok('点选条目后自动补全法术行', afterPick.toast === true, JSON.stringify(afterPick));
+
     console.log('\n== 属性不被清零（回归：年龄补正 bug） ==');
     await page.send('Page.navigate', { url: BASE });
     await sleep(300);
@@ -663,6 +703,8 @@ try {
       ...blankSheet(),
       name: '导入测试员', occupationId: 2, age: 30, gender: '女', era: '1920s',
       chars: { STR: 55, CON: 60, SIZ: 50, DEX: 65, APP: 70, INT: 65, POW: 55, EDU: 75, Luck: 40 },
+      spells: [{ id: 'sp_demo', name: '接触深渊', category: '交流', cost: '1D6 理智', time: '1 轮', condition: '需知晓者引路' }],
+            tomes: [{ id: 'tm_demo', name: '无名祭祀书', meta: '拉丁文 · 1692', sanity: '1D4', occult: '+3', mythos: '+1' }],
       notes: '导入链路自检',
     });
     await page.send('Page.navigate', { url: BASE });
@@ -729,6 +771,18 @@ try {
       return Boolean(b);
     })()`);
     await sleep(700);
+    console.log('\n== 详情：附表页（v10.7） ==');
+        const tabInfo = await page.eval(`(() => {
+          const t = document.querySelector('[role="tab"][data-tab="appendix"]');
+          if (!t) return { found: false, tabs: [...document.querySelectorAll('[role="tab"]')].map((x) => x.dataset.tab), btns: [...document.querySelectorAll('button')].slice(0, 12).map((x) => x.textContent.trim().slice(0, 8)), txt: document.body.innerText.slice(0, 260).split(String.fromCharCode(10)).join('|') };
+          t.click();
+          return { found: true };
+        })()`);
+        await sleep(800);
+        const detailAppendix = await page.eval('document.body.innerText');
+        ok('详情页有「附表」页（法术详情 + 神话典籍）',
+          detailAppendix.includes('法术详情') && detailAppendix.includes('神话典籍'), JSON.stringify(tabInfo).slice(0, 200));
+
     ok('详情页有「备注」栏（不打印）', (await page.eval('document.body.innerText')).includes('不会出现在骰娘指令与打印件上'));
     await page.eval(`(() => {
       const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('导出') && x.textContent.includes('骰娘'));

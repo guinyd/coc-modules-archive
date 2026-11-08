@@ -12,6 +12,10 @@ import {
 } from '../shared/coc7e.js';
 import { buildDiceBotCommand, DICEBOT_FORMATS } from '../shared/dicebot.js';
 import { buildCardBackup, buildCardMarkdown, importCardData } from '../shared/cardmd.js';
+import {
+  SPELL_CATALOG, SPELL_CATEGORIES, TOME_CATALOG,
+  normalizeSpells, normalizeTomes, spellFromCatalog, tomeFromCatalog,
+} from '../shared/occult.js';
 
 let pass = 0; const fails = [];
 const ok = (name, cond, extra = '') => {
@@ -113,6 +117,40 @@ ok('shiki 版带派生值与武器', (() => {
   return cmd.includes('&DB=') && cmd.includes('闪避:') && cmd.includes('&徒手=');
 })());
 
+section('附表：法术与神话典籍');
+ok('法术目录含 400+ 条与 17 个分类', SPELL_CATALOG.length >= 400 && SPELL_CATEGORIES.length === 17,
+  `${SPELL_CATALOG.length}/${SPELL_CATEGORIES.length}`);
+ok('典籍目录覆盖全部版本（110+ 本）', TOME_CATALOG.length >= 110, String(TOME_CATALOG.length));
+const spellRow = spellFromCatalog(SPELL_CATALOG[0], 'sp_test');
+ok('从大典补全法术名/分类/消耗/用时/详情/别名',
+  spellRow.name === SPELL_CATALOG[0].name && spellRow.category === SPELL_CATALOG[0].category
+  && spellRow.cost === SPELL_CATALOG[0].cost
+  && spellRow.detail === (SPELL_CATALOG[0].detail || '')
+  && spellRow.alias === (SPELL_CATALOG[0].aliases || []).join('、'), JSON.stringify(spellRow).slice(0, 120));
+const tomeRow = tomeFromCatalog(TOME_CATALOG[0], 'tm_test');
+ok('从典籍目录补全书名与全文', tomeRow.name === TOME_CATALOG[0].name && Boolean(tomeRow.desc));
+ok('空名法术被过滤、数量封顶 40',
+  normalizeSpells([{ name: '' }, { name: '  ' }]).length === 0
+  && normalizeSpells(Array.from({ length: 45 }, (_, i) => ({ name: `法术${i}` }))).length === 40);
+ok('法术目录带详情与别名（天气改换术）', (() => {
+  const w = SPELL_CATALOG.find((x) => x.name === '天气改换术');
+  return Boolean(w && w.detail.includes('缓和或恶化天气') && w.aliases.includes('雨之舞'));
+})());
+ok('内联字段不再吞掉用时/详情（通神术）', (() => {
+  const t = SPELL_CATALOG.find((x) => x.name === '通神术');
+  return Boolean(t && t.time === '5~10（1D6+4）轮' && t.detail.startsWith('没有人会去使用通神术')
+    && t.aliases.includes('召来开路者') && t.cost.startsWith('5点POW'));
+})());
+ok('全部法术都有消耗/用时/详情', SPELL_CATALOG.every((x) => x.cost && x.time && x.detail));
+
+ok('旧版截断的典籍正文已补全（德基安之书）', (() => {
+  const t = TOME_CATALOG.find((x) => x.name === '《德基安之书》' && x.meta === '亚特兰蒂斯版');
+  return Boolean(t && t.desc.includes('长年的狂热研究') && t.desc.includes('Shamballah'));
+})());
+ok('典籍名称保留书名号', TOME_CATALOG.every((t) => t.name.startsWith('《')));
+
+ok('典籍数量封顶 20', normalizeTomes(Array.from({ length: 25 }, (_, i) => ({ name: `典籍${i}` }))).length === 20);
+
 section('角色卡 Markdown / JSON 备份');
 const md = buildCardMarkdown(base);
 ok('以调查员档案标题开头', md.startsWith('# 调查员档案 · 自检调查员'), md.slice(0, 30));
@@ -167,6 +205,14 @@ ok('成长不计入兴趣点预算（INT 70+20，预算仍 140）', bd.eff.INT =
 const negSheet = { ...growthSheet, sanGrowth: -10 };
 const nd = computeSheet(negSheet, {});
 ok('SAN 成长可为负（70−10=60）', nd.san === 60, nd.san);
+
+const occultSheet = { ...base, spells: [spellRow], tomes: [tomeRow] };
+const occultMd = buildCardMarkdown(occultSheet);
+ok('Markdown 附表输出法术与典籍', occultMd.includes('## 附表') && occultMd.includes('### 法术详情')
+  && occultMd.includes('### 神话典籍') && occultMd.includes(spellRow.name) && occultMd.includes(tomeRow.name));
+const occultBack = importCardData(buildCardBackup(occultSheet));
+ok('JSON 备份保留法术与典籍',
+  occultBack.ok && occultBack.sheet.spells.length === 1 && occultBack.sheet.tomes.length === 1);
 
 section('房规除法取整');
 ok('属性 ÷ 2 向下取整（81 ÷ 2 = 40）', (() => {

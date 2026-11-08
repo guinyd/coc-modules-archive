@@ -1055,7 +1055,7 @@ function GuestSheetView({ sheet, onBack, onEdit, onPrint, onDelete, onLogin, sho
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="ghost" onClick={() => setExportOpen(true)}><Share2 className="h-4 w-4" />导出编码 / 骰娘指令</Button>
+            <Button variant="ghost" onClick={() => setExportOpen(true)}><Share2 className="h-4 w-4" />导出 / 骰娘指令</Button>
             <Button variant="ghost" onClick={onPrint}><FileText className="h-4 w-4" />打印 / 导出 PDF</Button>
             <Button variant="ghost" onClick={onEdit}>编辑</Button>
             <Button onClick={onLogin}><User className="h-4 w-4" />登录后收录</Button>
@@ -1125,6 +1125,68 @@ function GuestSheetView({ sheet, onBack, onEdit, onPrint, onDelete, onLogin, sho
           </table>
         </div>
       </Panel>
+
+      {(sheet.spells || []).length || (sheet.tomes || []).length ? (
+        <Panel className="p-5 sm:p-6">
+          <h2 className="mb-3 font-serif text-[19px] font-bold text-slate-100">附表</h2>
+          {(sheet.spells || []).length ? (
+            <div className="mb-4">
+              <div className="mb-2 text-[14.5px] font-bold text-slate-200">法术详情</div>
+              <div className="overflow-x-auto border border-line-strong">
+                <table className="w-full min-w-[520px] text-left text-[14px]">
+                  <thead className="bg-paper-deep text-[13px] text-slate-400">
+                    <tr>
+                      <th className="px-2.5 py-1.5">法术</th>
+                      <th className="px-2.5 py-1.5">分类</th>
+                      <th className="px-2.5 py-1.5">消耗</th>
+                      <th className="px-2.5 py-1.5">用时</th>
+                      <th className="px-2.5 py-1.5">条件</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line-strong text-slate-300">
+                    {(sheet.spells || []).map((sp) => (
+                      <tr key={sp.id} className="align-top">
+                        <td className="px-2.5 py-1.5 font-bold text-slate-100">{sp.name}</td>
+                        <td className="px-2.5 py-1.5">{sp.category || '—'}</td>
+                        <td className="px-2.5 py-1.5">{sp.cost || '—'}</td>
+                        <td className="px-2.5 py-1.5">{sp.time || '—'}</td>
+                        <td className="px-2.5 py-1.5">{sp.condition || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {(sheet.spells || []).some((sp) => sp.detail || sp.alias) ? (
+                <div className="mt-2 space-y-2">
+                  {(sheet.spells || []).filter((sp) => sp.detail || sp.alias).map((sp) => (
+                    <div key={sp.id} className="border border-line-strong bg-paper-deep/60 p-3">
+                      <div className="text-[14px] font-bold text-slate-100">{sp.name}{sp.alias ? <span className="ml-2 text-[12.5px] font-normal text-slate-400">别名：{sp.alias}</span> : null}</div>
+                      {sp.detail ? <p className="mt-1 whitespace-pre-wrap text-[13.5px] leading-[1.75] text-slate-300">{sp.detail}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {(sheet.tomes || []).length ? (
+            <div>
+              <div className="mb-2 text-[14.5px] font-bold text-slate-200">神话典籍</div>
+              <ul className="space-y-2">
+                {(sheet.tomes || []).map((tm) => (
+                  <li key={tm.id} className="border border-line-strong bg-paper-deep p-3">
+                    <div className="font-serif text-[15px] font-bold text-slate-100">{tm.name}</div>
+                    <div className="mt-1 text-[13.5px] text-slate-400">
+                      {[tm.meta, tm.sanity ? `理智 ${tm.sanity}` : '', tm.occult ? `神秘学 ${tm.occult}` : '', tm.mythos ? `神话 ${tm.mythos}` : ''].filter(Boolean).join(' · ')}
+                    </div>
+                    {tm.spells ? <div className="mt-1 whitespace-pre-wrap text-[13.5px] text-slate-300">法术：{tm.spells}</div> : null}
+                    {tm.desc ? <div className="mt-1 whitespace-pre-wrap text-[13.5px] leading-[1.75] text-slate-300">{tm.desc}</div> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </Panel>
+      ) : null}
 
       <Panel className="p-5 sm:p-6">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

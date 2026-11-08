@@ -12,13 +12,14 @@ import {
   ALL_CHARS, BACKGROUND_FIELDS, CHAR_LABEL, STATUS_LABEL,
   blankSheet, clampInt, computeSheet, skillName,
 } from './coc7e.js';
+import { normalizeSpells, normalizeTomes } from './occult.js';
 
 /** 允许在记录里传输的字段（其余一律丢弃） */
 const FIELDS = [
   'name', 'playerName', 'occupationId', 'age', 'gender', 'residence', 'birthplace', 'era',
   'chars', 'charGrowth', 'sanGrowth', 'eduBonus', 'eduGrowth', 'applyAgeAdjust', 'ageAlloc', 'armorPenalty',
   'agePenaltyWaived',
-  'occPicks', 'skills', 'customSkills', 'weapons', 'equipment', 'equipmentItems', 'currency', 'extraAssets',
+  'occPicks', 'skills', 'customSkills', 'weapons', 'equipment', 'equipmentItems', 'spells', 'tomes', 'currency', 'extraAssets',
   'background', 'experience', 'notes', 'status',
 ];
 
@@ -77,6 +78,8 @@ export function unpackCard(obj) {
     }
   }
   out.armorPenalty = int(obj.armorPenalty, 0, 10, 0);
+  out.spells = normalizeSpells(obj.spells);
+  out.tomes = normalizeTomes(obj.tomes);
 
   if (obj.occPicks && typeof obj.occPicks === 'object') {
     const arr = (v, max) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string').slice(0, max) : []);
@@ -271,6 +274,43 @@ export function buildCardMarkdown(character, derived) {
   lines.push(`- 现金：${cell(d.wealth?.cashText || '—')}`);
   lines.push(`- 其他资产：${body(s.extraAssets)}`);
   lines.push('');
+
+  const spells = (s.spells || []).filter((sp) => sp?.name);
+  const tomes = (s.tomes || []).filter((t) => t?.name);
+  if (spells.length || tomes.length) {
+    lines.push('## 附表', '');
+    lines.push('### 法术详情', '');
+    if (spells.length) {
+      lines.push('| 法术 | 分类 | 消耗 | 用时 | 条件 |', '| --- | --- | --- | --- | --- |');
+      for (const sp of spells) {
+        lines.push(`| ${cell(sp.name)} | ${cell(sp.category)} | ${cell(sp.cost)} | ${cell(sp.time)} | ${cell(sp.condition)} |`);
+      }
+    } else {
+      lines.push('（未填写）');
+    }
+    const detailed = spells.filter((sp) => sp.detail || sp.alias || sp.notes);
+    if (detailed.length) {
+      lines.push('');
+      for (const sp of detailed) {
+        lines.push(`**${sp.name}**${sp.alias ? `（别名：${sp.alias}）` : ''}`, '');
+        if (sp.detail) lines.push(...String(sp.detail).split(String.fromCharCode(10)).map((x) => `> ${x}`), '');
+        if (sp.notes) lines.push(`- 备注：${sp.notes}`, '');
+      }
+    }
+    lines.push('');
+    lines.push('### 神话典籍', '');
+    if (tomes.length) {
+      for (const t of tomes) {
+        const bits = [t.en, t.meta, t.sanity && `理智损失：${t.sanity}`, t.occult && `神秘学：${t.occult}`, t.mythos && `克苏鲁神话：${t.mythos}`, t.spells && `法术：${t.spells}`].filter(Boolean);
+        lines.push(`- **${t.name}**${bits.length ? ` — ${bits.join(' · ')}` : ''}`);
+        if (t.desc) lines.push(...String(t.desc).split(String.fromCharCode(10)).map((x) => `  > ${x}`));
+        if (t.notes) lines.push(`  - 备注：${t.notes}`);
+      }
+    } else {
+      lines.push('（未填写）');
+    }
+    lines.push('');
+  }
 
   lines.push('## 经历', '', body(s.experience), '');
   lines.push('## 备注', '', body(s.notes), '');

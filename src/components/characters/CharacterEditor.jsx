@@ -16,7 +16,7 @@
 
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
-  AlertCircle, ArrowLeft, BookOpen, Check, CloudUpload, Crown, Dices, Download, FileText, Info, Plus, Save,
+  AlertCircle, ArrowLeft, BookOpen, Check, CloudUpload, Crown, Dices, Download, FileText, Info, Library, Plus, Save,
   ScrollText, Search, Sword, Trash2, User as UserIcon, Wand2, X,
 } from 'lucide-react';
 import {
@@ -29,6 +29,10 @@ import {
   AUDIT_RULE_META, DEFAULT_AUDIT_RULES,
 } from '../../../shared/coc7e.js';
 import { rollCharacteristics, rollLuck, educationCheck } from '../../lib/dice.js';
+import {
+  SPELL_CATALOG, SPELL_CATEGORIES, TOME_CATALOG, SPELL_LIMIT, TOME_LIMIT,
+  blankSpell, blankTome, spellFromCatalog, tomeFromCatalog,
+} from '../../../shared/occult.js';
 import { parseAttributeBlocks, ATTR_LABEL, ATTR_ORDER } from '../../lib/attrImport.js';
 import { apiGet, apiPost, apiPut } from '../../lib/api.js';
 import {
@@ -45,7 +49,10 @@ const TABS = [
   { key: 'combat', label: '战斗', icon: Sword },
   { key: 'story', label: '背景故事', icon: BookOpen },
   { key: 'journal', label: '装备与经历', icon: FileText },
+  { key: 'appendix', label: '附表', icon: Library },
 ];
+
+const occultId = (prefix) => `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 
 
 /** 把后端返回的角色卡对象（或访客草稿）转成可编辑的表单数据 */
@@ -84,6 +91,8 @@ export function toEditableSheet(character) {
       : blankSheet().weapons).map((w) => ({ ...w })),
     equipment: character.equipment || '',
     equipmentItems: Array.isArray(character.equipmentItems) ? character.equipmentItems : [],
+    spells: Array.isArray(character.spells) ? character.spells.map((x) => ({ ...x })) : [],
+    tomes: Array.isArray(character.tomes) ? character.tomes.map((x) => ({ ...x })) : [],
     currency: character.currency || DEFAULT_CURRENCY[character.era || '1920s'] || 'USD',
     extraAssets: character.extraAssets || '',
     background: { ...blankSheet().background, ...(character.background || {}) },
@@ -355,6 +364,12 @@ export default function CharacterEditor({
   const [ruleQuery, setRuleQuery] = useState('');
   const [rulePage, setRulePage] = useState(1);
   const [ruleDetail, setRuleDetail] = useState(null);
+  // 附表：法术详情 / 神话典籍
+  const [spellPicker, setSpellPicker] = useState(null);
+  const [spellQuery, setSpellQuery] = useState('');
+  const [spellCat, setSpellCat] = useState('全部');
+  const [tomePicker, setTomePicker] = useState(false);
+  const [tomeQuery, setTomeQuery] = useState('');
   const ruleHints = useMemo(() => {
     const out = new Set();
     (ruleSets || []).forEach((s) => { if (s.name) out.add(s.name); if (s.ownerName) out.add(s.ownerName); });
@@ -541,6 +556,56 @@ export default function CharacterEditor({
     patch({ customSkills: [...sheet.customSkills, blankCustomSkill()] });
   };
   const removeCustomSkill = (id) => patch({ customSkills: sheet.customSkills.filter((s) => s.id !== id) });
+
+  // ---------------------------------------------------------- 附表：法术 / 典籍
+  const spellRows = sheet.spells || [];
+  const tomeRows = sheet.tomes || [];
+  const updateSpell = (id, field, value) => {
+    setSheet((prev) => ({
+      ...prev,
+      spells: (prev.spells || []).map((sp) => (sp.id === id ? { ...sp, [field]: value } : sp)),
+    }));
+    setDirty(true);
+  };
+  const addSpell = (entry) => {
+    if (spellRows.length >= SPELL_LIMIT) { showToast(`法术最多 ${SPELL_LIMIT} 条`, 'error'); return; }
+    const id = occultId('sp');
+    const row = entry ? spellFromCatalog(entry, id) : blankSpell({ id });
+    setSheet((prev) => ({ ...prev, spells: [...(prev.spells || []), row] }));
+    setDirty(true);
+    if (entry) showToast(`已填入「${entry.name}」`);
+  };
+  const removeSpell = (id) => patch({ spells: spellRows.filter((sp) => sp.id !== id) });
+  const updateTome = (id, field, value) => {
+    setSheet((prev) => ({
+      ...prev,
+      tomes: (prev.tomes || []).map((tm) => (tm.id === id ? { ...tm, [field]: value } : tm)),
+    }));
+    setDirty(true);
+  };
+  const addTome = (entry) => {
+    if (tomeRows.length >= TOME_LIMIT) { showToast(`典籍最多 ${TOME_LIMIT} 条`, 'error'); return; }
+    const id = occultId('tm');
+    const row = entry ? tomeFromCatalog(entry, id) : blankTome({ id });
+    setSheet((prev) => ({ ...prev, tomes: [...(prev.tomes || []), row] }));
+    setDirty(true);
+    if (entry) showToast(`已填入「${entry.name}」`);
+  };
+  const removeTome = (id) => patch({ tomes: tomeRows.filter((tm) => tm.id !== id) });
+  const spellResults = useMemo(() => {
+    const q = spellQuery.trim().toLowerCase();
+    return SPELL_CATALOG.filter((sp) => (spellCat === '全部' || sp.category === spellCat)
+      && (!q || sp.name.toLowerCase().includes(q)
+        || sp.category.toLowerCase().includes(q)
+        || (sp.aliases || []).some((a) => a.toLowerCase().includes(q))));
+  }, [spellQuery, spellCat]);
+  const tomeResults = useMemo(() => {
+    const q = tomeQuery.trim().toLowerCase();
+    if (!q) return TOME_CATALOG;
+    return TOME_CATALOG.filter((tm) => tm.name.toLowerCase().includes(q)
+      || (tm.meta || '').toLowerCase().includes(q)
+      || (tm.desc || '').toLowerCase().includes(q));
+  }, [tomeQuery]);
 
   // ---------------------------------------------------------- 属性生成
   const luckTwice = derived.ageAdjust.luckRolls > 1;   // 15-19 岁：幸运掷两次取高
@@ -2096,6 +2161,218 @@ export default function CharacterEditor({
           </Panel>
         </div>
       )}
+
+{/* ---------------------------------------------------- 附表 */}
+      {tab === 'appendix' && (
+        <div className="space-y-5">
+          <Panel className="space-y-4 p-5 sm:p-6">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink">
+                  <Library className="h-4 w-4 text-ochre" />法术详情
+                  <span className="text-[14px] font-normal text-ink-mute">{spellRows.length} / {SPELL_LIMIT}</span>
+                </h3>
+                <p className="mt-1 text-[14px] leading-[1.7] text-ink-soft">
+                  点名称旁的「大典」按分类浏览或搜索官方法术，点选后自动补全名称、分类、消耗与用时；也可以手写自定义法术。
+                </p>
+              </div>
+              <Button variant="ghost" onClick={() => addSpell()} disabled={spellRows.length >= SPELL_LIMIT}>
+                <Plus className="w-4 h-4" />添加法术
+              </Button>
+            </div>
+            {spellRows.length === 0 ? (
+              <p className="border border-dashed border-line-strong py-10 text-center text-[14.5px] text-ink-mute">
+                还没有法术。点「添加法术」手填，或点「大典」从目录里挑一条自动补全。
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {spellRows.map((sp) => (
+                  <div key={sp.id} className="space-y-2 rounded-[2px] border border-line-strong bg-paper-raised p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input
+                        value={sp.name || ''}
+                        maxLength={80}
+                        placeholder="法术名称"
+                        onChange={(e) => updateSpell(sp.id, 'name', e.target.value.slice(0, 80))}
+                        className="!min-w-0 flex-1 !py-1.5 !text-[15px]"
+                      />
+                      <Button
+                        variant="subtle"
+                        onClick={() => { setSpellPicker(sp.id); setSpellQuery(''); setSpellCat('全部'); }}
+                      >
+                        <Search className="w-4 h-4" />大典
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => removeSpell(sp.id)}
+                        className="border-b border-transparent px-1 text-[14px] text-red-600 transition-colors hover:border-red-500"
+                      >
+                        移除
+                      </button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-4">
+                      <Select value={sp.category || ''} onChange={(e) => updateSpell(sp.id, 'category', e.target.value)}>
+                        <option value="">未分类</option>
+                        {SPELL_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                      </Select>
+                      <Input value={sp.cost || ''} maxLength={80} placeholder="消耗（例：6 点魔法值）" onChange={(e) => updateSpell(sp.id, 'cost', e.target.value.slice(0, 80))} />
+                      <Input value={sp.time || ''} maxLength={80} placeholder="用时（例：30 分钟）" onChange={(e) => updateSpell(sp.id, 'time', e.target.value.slice(0, 80))} />
+                      <Input value={sp.en || ''} maxLength={120} placeholder="英文名（可选）" onChange={(e) => updateSpell(sp.id, 'en', e.target.value.slice(0, 120))} />
+                    </div>
+                    <Input value={sp.condition || ''} maxLength={300} placeholder="条件（材料、仪式、前置…）" onChange={(e) => updateSpell(sp.id, 'condition', e.target.value.slice(0, 300))} />
+                    <Input value={sp.alias || ''} maxLength={300} placeholder="别名（用「、」分隔，例：掌控元素、雨之舞）" onChange={(e) => updateSpell(sp.id, 'alias', e.target.value.slice(0, 300))} />
+                    <Textarea rows={4} maxLength={8000} value={sp.detail || ''} placeholder="法术详情（效果、范围、持续时间、代价…）" onChange={(e) => updateSpell(sp.id, 'detail', e.target.value.slice(0, 8000))} />
+                    <Input value={sp.notes || ''} maxLength={500} placeholder="备注（本卡相关的记录）" onChange={(e) => updateSpell(sp.id, 'notes', e.target.value.slice(0, 500))} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+
+          <Panel className="space-y-4 p-5 sm:p-6">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink">
+                  <BookOpen className="h-4 w-4 text-moon" />神话典籍
+                  <span className="text-[14px] font-normal text-ink-mute">{tomeRows.length} / {TOME_LIMIT}</span>
+                </h3>
+                <p className="mt-1 text-[14px] leading-[1.7] text-ink-soft">
+                  点「典籍」从目录里挑一本，自动补全语言/作者、理智损失与技能加成；也可以记录自编典籍。
+                </p>
+              </div>
+              <Button variant="ghost" onClick={() => addTome()} disabled={tomeRows.length >= TOME_LIMIT}>
+                <Plus className="w-4 h-4" />添加典籍
+              </Button>
+            </div>
+            {tomeRows.length === 0 ? (
+              <p className="border border-dashed border-line-strong py-10 text-center text-[14.5px] text-ink-mute">
+                还没有典籍。调查员读过的书、抄本或残卷都可以记在这里。
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {tomeRows.map((tm) => (
+                  <div key={tm.id} className="space-y-2 rounded-[2px] border border-line-strong bg-paper-raised p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input
+                        value={tm.name || ''}
+                        maxLength={120}
+                        placeholder="典籍名称"
+                        onChange={(e) => updateTome(tm.id, 'name', e.target.value.slice(0, 120))}
+                        className="!min-w-0 flex-1 !py-1.5 !text-[15px]"
+                      />
+                      <Button variant="subtle" onClick={() => { setTomePicker(true); setTomeQuery(''); }}>
+                        <Search className="w-4 h-4" />典籍
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => removeTome(tm.id)}
+                        className="border-b border-transparent px-1 text-[14px] text-red-600 transition-colors hover:border-red-500"
+                      >
+                        移除
+                      </button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr]">
+                      <Input value={tm.meta || ''} maxLength={300} placeholder="语言 / 作者 / 年代" onChange={(e) => updateTome(tm.id, 'meta', e.target.value.slice(0, 300))} />
+                      <Input value={tm.sanity || ''} maxLength={80} placeholder="理智损失" onChange={(e) => updateTome(tm.id, 'sanity', e.target.value.slice(0, 80))} />
+                      <Input value={tm.occult || ''} maxLength={80} placeholder="神秘学（+%）" onChange={(e) => updateTome(tm.id, 'occult', e.target.value.slice(0, 80))} />
+                      <Input value={tm.mythos || ''} maxLength={80} placeholder="克苏鲁神话（+%）" onChange={(e) => updateTome(tm.id, 'mythos', e.target.value.slice(0, 80))} />
+                    </div>
+                    <Input value={tm.en || ''} maxLength={160} placeholder="英文名（可选）" onChange={(e) => updateTome(tm.id, 'en', e.target.value.slice(0, 160))} />
+                    <Textarea rows={2} maxLength={4000} value={tm.spells || ''} placeholder="记载的法术" onChange={(e) => updateTome(tm.id, 'spells', e.target.value.slice(0, 4000))} />
+                    <Textarea rows={7} maxLength={12000} value={tm.desc || ''} placeholder="典籍全文 / 详情（语言、版本、理智损失、咒文与其它效果…）" onChange={(e) => updateTome(tm.id, 'desc', e.target.value.slice(0, 12000))} />
+                    <Textarea rows={2} maxLength={500} value={tm.notes || ''} placeholder="本卡相关的备注" onChange={(e) => updateTome(tm.id, 'notes', e.target.value.slice(0, 500))} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </div>
+      )}
+
+      <Drawer open={Boolean(spellPicker)} onClose={() => setSpellPicker(null)} title="法术大典">
+        <div className="space-y-3">
+          <Input value={spellQuery} onChange={(e) => setSpellQuery(e.target.value)} placeholder="搜索法术名、别名或分类…" autoFocus />
+          <div className="flex flex-wrap gap-1.5">
+            {['全部', ...SPELL_CATEGORIES].map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setSpellCat(c)}
+                className={cx('rounded-[2px] border px-2 py-1 text-[13px] transition-colors',
+                  spellCat === c ? 'border-ochre/60 bg-ochre/10 text-ochre' : 'border-line-strong text-ink-soft hover:border-ink-mute')}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+          <div className="text-[13.5px] text-ink-mute">共 {spellResults.length} 条</div>
+          <ul className="max-h-[60vh] divide-y divide-line-strong overflow-y-auto rounded-[2px] border border-line-strong">
+            {spellResults.map((entry) => (
+              <li key={entry.name}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = spellPicker;
+                    setSheet((prev) => ({
+                      ...prev,
+                      spells: (prev.spells || []).map((sp) => (sp.id === id
+                        ? { ...spellFromCatalog(entry, sp.id), condition: sp.condition, notes: sp.notes }
+                        : sp)),
+                    }));
+                    setSpellPicker(null);
+                    setDirty(true);
+                    showToast(`已填入「${entry.name}」`);
+                  }}
+                  className="w-full px-2.5 py-2 text-left transition-colors hover:bg-paper-deep/50"
+                >
+                  <span className="font-bold text-ink">{entry.name}</span>
+                  <span className="ml-2 text-[12.5px] text-ink-mute">{entry.category}</span>
+                  <span className="block text-[13px] text-ink-soft">{entry.cost || '消耗未注明'}{entry.time ? ` · ${entry.time}` : ''}</span>
+                  {entry.detail ? <span className="mt-0.5 line-clamp-2 text-[12.5px] leading-[1.6] text-ink-mute">{entry.detail}</span> : null}
+                  {entry.aliases?.length ? <span className="block text-[12.5px] text-ink-mute">别名：{entry.aliases.join('、')}</span> : null}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Drawer>
+
+      <Drawer open={tomePicker} onClose={() => setTomePicker(false)} title="神话典籍">
+        <div className="space-y-3">
+          <Input value={tomeQuery} onChange={(e) => setTomeQuery(e.target.value)} placeholder="搜索书名、语言、作者或摘要…" autoFocus />
+          <div className="text-[13.5px] text-ink-mute">共 {tomeResults.length} 条</div>
+          <ul className="max-h-[60vh] divide-y divide-line-strong overflow-y-auto rounded-[2px] border border-line-strong">
+            {tomeResults.map((entry) => (
+              <li key={entry.name}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const empty = tomeRows.find((tm) => !tm.name);
+                    if (empty) {
+                      setSheet((prev) => ({
+                        ...prev,
+                        tomes: (prev.tomes || []).map((tm) => (tm.id === empty.id ? { ...tomeFromCatalog(entry, tm.id), notes: tm.notes } : tm)),
+                      }));
+                    } else {
+                      addTome(entry);
+                    }
+                    setTomePicker(false);
+                    setDirty(true);
+                  }}
+                  className="w-full px-2.5 py-2 text-left transition-colors hover:bg-paper-deep/50"
+                >
+                  <span className="font-bold text-ink">{entry.name}</span>
+                  <span className="block text-[13px] text-ink-soft">{entry.meta || ''}</span>
+                  {entry.desc ? <span className="mt-0.5 line-clamp-2 text-[12.5px] leading-[1.6] text-ink-mute">{entry.desc}</span> : null}
+                  <span className="block text-[12.5px] text-ink-mute">
+                    {[entry.sanity && `理智 ${entry.sanity}`, entry.occult && `神秘学 ${entry.occult}`, entry.mythos && `神话 ${entry.mythos}`].filter(Boolean).join(' · ')}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Drawer>
 
       <OccupationPicker
         open={occOpen}

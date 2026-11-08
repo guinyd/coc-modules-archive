@@ -1386,6 +1386,8 @@ export function blankSheet(ownerId = '') {
     weapons: blankWeapons(),
     equipment: '',
     equipmentItems: [],
+    spells: [],
+    tomes: [],
     currency: DEFAULT_CURRENCY['1920s'],
     extraAssets: '',
     assets: { spending: '', cash: '', assets: '' },

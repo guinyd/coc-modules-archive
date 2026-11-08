@@ -18,6 +18,7 @@ import {
   blankEduGrowth, normalizeEduGrowth, blankLegendary, normalizeLegendary,
   blankLegendaryBonus, PLAYER_TITLES, KP_TITLES,
 } from '../../shared/coc7e.js';
+import { normalizeSpells, normalizeTomes } from '../../shared/occult.js';
 
 const ID_RE = /^[A-Za-z0-9_-]{1,48}$/;
 
@@ -525,6 +526,8 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
       name: vText(it?.name, '物品', { max: 120 }),
     })).filter((it) => it.name);
   }
+  if (need('spells')) out.spells = normalizeSpells(b.spells);
+  if (need('tomes')) out.tomes = normalizeTomes(b.tomes);
   // 消费水平 / 现金 / 资产由信用评级 + 时代 + 货币自动推导，**不接受客户端提交**（锁死不可改）
 
   if (need('background')) {
@@ -563,6 +566,8 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
     out.experience = out.experience ?? '';
     out.equipment = out.equipment ?? '';
     out.equipmentItems = out.equipmentItems ?? [];
+    out.spells = out.spells ?? [];
+    out.tomes = out.tomes ?? [];
     out.weapons = out.weapons ?? blankWeapons();
     out.moduleLinks = out.moduleLinks ?? [];   // 走到这里说明 body 没给 moduleLinks（新建卡）
     out.status = out.status ?? 'draft';

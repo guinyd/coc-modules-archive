@@ -288,6 +288,47 @@ try {
     await api('DELETE', `/api/characters/${c.json.id}`, { token: A });
   }
 
+  section('角色卡：附表（法术 / 神话典籍，v10.7）');
+  const occult = await api('POST', '/api/characters', {
+    token: A,
+    body: {
+      ...blank,
+      name: '附表测试员',
+      spells: [{
+        name: '接触深渊', en: 'Contact Deep', category: '交流', cost: '1D6 理智', time: '1 轮',
+        condition: '需知晓者引路', alias: '深渊低语、海底召唤',
+        detail: '施法者以血在镜面画出印记，深渊的存在会借由梦境回应。'.repeat(30), notes: '首次施放',
+      }],
+      tomes: [{
+        name: '《无名祭祀书》', en: 'Nameless Ritual', meta: '拉丁文 · 1692', sanity: '1D4', occult: '+3', mythos: '+1',
+        spells: '接触深渊', desc: '这是一部残缺的祭祀书，记载着与深渊存在沟通的仪式。'.repeat(60),
+      }],
+    },
+  });
+  ok('创建带附表的角色卡 → 回读法术与典籍', occult.status === 200
+    && occult.json.spells?.length === 1 && occult.json.tomes?.length === 1,
+    JSON.stringify(occult.json?.spells || occult.json).slice(0, 160));
+  ok('法术详情/别名与典籍全文完整保存', occult.json.spells[0].detail.length >= 600
+    && occult.json.spells[0].alias.includes('深渊低语')
+    && occult.json.tomes[0].desc.length >= 1200
+    && occult.json.tomes[0].name.startsWith('《'),
+    `${occult.json.spells[0].detail?.length} / ${occult.json.tomes[0].desc?.length}`);
+  const patchedOccult = await api('PATCH', `/api/characters/${occult.json.id}`, {
+    token: A,
+    body: {
+      spells: [...occult.json.spells, { name: '克苏鲁之眼', category: '战斗', cost: '3D6 理智', time: '即时' }],
+      tomes: [...occult.json.tomes, { name: '' }],
+    },
+  });
+  ok('附表随 PATCH 保存、空名条目被过滤', patchedOccult.status === 200
+    && patchedOccult.json.spells?.length === 2 && patchedOccult.json.tomes?.length === 1,
+    String(patchedOccult.status));
+  const badSpells = await api('PATCH', `/api/characters/${occult.json.id}`, {
+    token: A, body: { spells: Array.from({ length: 45 }, (_, i) => ({ name: `过量法术${i}` })) },
+  });
+  ok('法术数量封顶 40', badSpells.status === 200 && badSpells.json.spells.length === 40);
+  await api('DELETE', `/api/characters/${occult.json.id}`, { token: A });
+
   section('角色卡：职业指定专攻方向（对照 Excel 原文）');
   const priestId = 211;   // 牧师（《克苏鲁煤气灯》）：本职技能里直接写了「拉丁语」
   const priestMissing = await api('POST', '/api/characters', {

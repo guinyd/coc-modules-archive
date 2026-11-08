@@ -12,7 +12,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft, BookOpen, Calendar, CheckCircle, ClipboardCheck, Crown, Edit, ExternalLink,
-  FileText, Link2, Plus, Printer, ScrollText, Send, Share2, Shield, Sword, Trash2, Undo2,
+  FileText, Library, Link2, Plus, Printer, ScrollText, Send, Share2, Shield, Sword, Trash2, Undo2,
   User as UserIcon, Wand2, XCircle,
 } from 'lucide-react';
 import {
@@ -494,6 +494,7 @@ export default function CharacterDetail({
           { value: 'sheet', label: '属性与技能', icon: Wand2 },
           { value: 'story', label: '背景故事', icon: BookOpen },
           { value: 'journal', label: '装备与经历', icon: ScrollText },
+          { value: 'appendix', label: '附表', icon: Library },
         ]}
         value={tab}
         onChange={setTab}
@@ -813,6 +814,90 @@ export default function CharacterDetail({
             <p className="whitespace-pre-wrap rounded-[2px] border border-line-strong bg-paper-deep/40 p-3.5 text-[16px] leading-[1.85] text-ink-soft">
               {c.notes || <span className="text-ink-mute">—</span>}
             </p>
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'appendix' && (
+        <div className="space-y-5 animate-in fade-in">
+          <Panel className="space-y-4 p-5 sm:p-6">
+            <h3 className="flex items-center font-serif text-[17px] font-bold text-ink">
+              <Library className="mr-2 h-4 w-4 text-ochre" />法术详情
+              <span className="ml-2 text-[14px] font-normal text-ink-mute">{(c.spells || []).length} 条</span>
+            </h3>
+            {(c.spells || []).length ? (
+              <div className="overflow-x-auto rounded-[2px] border border-line-strong">
+                <table className="w-full min-w-[560px] text-left text-[14.5px]">
+                  <thead className="bg-paper-deep/70 text-[13px] text-ink-mute">
+                    <tr>
+                      <th className="px-3 py-2">法术</th>
+                      <th className="px-3 py-2">分类</th>
+                      <th className="px-3 py-2">消耗</th>
+                      <th className="px-3 py-2">用时</th>
+                      <th className="px-3 py-2">条件</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line-strong">
+                    {(c.spells || []).map((sp) => (
+                      <tr key={sp.id} className="align-top">
+                        <td className="px-3 py-2 font-bold text-ink">{sp.name}</td>
+                        <td className="px-3 py-2 text-ink-soft">{sp.category || '—'}</td>
+                        <td className="px-3 py-2 text-ink-soft">{sp.cost || '—'}</td>
+                        <td className="px-3 py-2 text-ink-soft">{sp.time || '—'}</td>
+                        <td className="px-3 py-2 text-ink-soft">{sp.condition || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="py-2 text-[16px] text-ink-mute">还没有记录法术。</p>
+            )}
+            {(c.spells || []).some((sp) => sp.detail || sp.alias || sp.notes) ? (
+              <div className="space-y-3">
+                {(c.spells || []).filter((sp) => sp.detail || sp.alias || sp.notes).map((sp) => (
+                  <div key={sp.id} className="rounded-[2px] border border-line-strong bg-paper-deep/30 p-3.5">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <span className="font-serif text-[15.5px] font-bold text-ink">{sp.name}</span>
+                      {sp.en ? <span className="text-[13px] italic text-ink-mute">{sp.en}</span> : null}
+                    </div>
+                    {sp.alias ? <div className="mt-0.5 text-[13.5px] text-ink-mute">别名：{sp.alias}</div> : null}
+                    {sp.detail ? <p className="mt-1.5 whitespace-pre-wrap text-[14.5px] leading-[1.8] text-ink-soft">{sp.detail}</p> : null}
+                    {sp.notes ? <p className="mt-1 text-[13.5px] leading-[1.7] text-ink-mute">备注：{sp.notes}</p> : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </Panel>
+
+          <Panel className="space-y-4 p-5 sm:p-6">
+            <h3 className="flex items-center font-serif text-[17px] font-bold text-ink">
+              <BookOpen className="mr-2 h-4 w-4 text-moon" />神话典籍
+              <span className="ml-2 text-[14px] font-normal text-ink-mute">{(c.tomes || []).length} 本</span>
+            </h3>
+            {(c.tomes || []).length ? (
+              <ul className="space-y-2">
+                {(c.tomes || []).map((tm) => (
+                  <li key={tm.id} className="rounded-[2px] border border-line-strong bg-paper-deep/40 p-3.5">
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <span className="font-serif text-[16px] font-bold text-ink">{tm.name}</span>
+                      {tm.meta ? <span className="text-[13.5px] text-ink-mute">{tm.meta}</span> : null}
+                      {tm.en ? <span className="text-[13px] italic text-ink-mute">{tm.en}</span> : null}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[14px] text-ink-soft">
+                      {tm.sanity ? <span>理智损失：{tm.sanity}</span> : null}
+                      {tm.occult ? <span>神秘学：{tm.occult}</span> : null}
+                      {tm.mythos ? <span>克苏鲁神话：{tm.mythos}</span> : null}
+                    </div>
+                    {tm.spells ? <div className="mt-1 whitespace-pre-wrap text-[14px] leading-[1.75] text-ink-soft">记载法术：{tm.spells}</div> : null}
+                    {tm.desc ? <div className="mt-2 whitespace-pre-wrap border-t border-line pt-2 text-[14.5px] leading-[1.85] text-ink-soft">{tm.desc}</div> : null}
+                    {tm.notes ? <div className="mt-1 text-[13.5px] leading-[1.7] text-ink-mute">备注：{tm.notes}</div> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="py-2 text-[16px] text-ink-mute">还没有记录神话典籍。</p>
+            )}
           </Panel>
         </div>
       )}

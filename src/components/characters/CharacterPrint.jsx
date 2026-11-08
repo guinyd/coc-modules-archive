@@ -395,6 +395,78 @@ export default function CharacterPrint({ character }) {
           </div>
         </div>
       </section>
+
+      {((character.spells || []).length > 0 || (character.tomes || []).length > 0) ? (
+        <section className="print-paper print-page">
+          <div className="flex items-baseline justify-between border-b-2 border-ink pb-1">
+            <div className="font-serif text-[16px] font-black tracking-[0.08em] text-ink">附 表</div>
+            <div className="text-[10.5px] text-ink-mute">{character.name} · 法术与神话典籍</div>
+          </div>
+
+          <div className="mt-2 border border-ink/25 rounded-[3px] overflow-hidden">
+            <div className="bg-paper-deep px-2 py-1 text-[12px] font-bold text-ink-soft tracking-[0.15em] shadow-[inset_0_-1px_0_0_var(--color-line)] flex justify-between">
+              <span>❖ 法术详情</span>
+              <span className="font-normal text-ink-mute tracking-normal">{(character.spells || []).length} 条</span>
+            </div>
+            <table className="w-full text-[11px] border-collapse">
+              <thead>
+                <tr className="border-b border-ink/25 text-ink-mute">
+                  <th className="text-left px-1.5 py-[2px] w-[24%]">法术</th>
+                  <th className="text-left px-1.5 py-[2px] w-[16%]">分类</th>
+                  <th className="text-left px-1.5 py-[2px] w-[16%]">消耗</th>
+                  <th className="text-left px-1.5 py-[2px] w-[14%]">用时</th>
+                  <th className="text-left px-1.5 py-[2px]">条件</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(character.spells || []).map((sp) => (
+                  <tr key={sp.id} className="border-b border-ink/12 align-top">
+                    <td className="px-1.5 py-[1.5px] font-bold">{sp.name}</td>
+                    <td className="px-1.5 py-[1.5px]">{sp.category || ''}</td>
+                    <td className="px-1.5 py-[1.5px]">{sp.cost || ''}</td>
+                    <td className="px-1.5 py-[1.5px]">{sp.time || ''}</td>
+                    <td className="px-1.5 py-[1.5px]">{sp.condition || ''}{sp.notes ? <span className="text-ink-mute">（{sp.notes}）</span> : null}</td>
+                  </tr>
+                ))}
+                {(character.spells || []).length === 0 && (
+                  <tr><td colSpan={5} className="px-2 py-2 text-center text-ink-mute/70">暂无记录</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-3 border border-ink/25 rounded-[3px] overflow-hidden">
+            <div className="bg-paper-deep px-2 py-1 text-[12px] font-bold text-ink-soft tracking-[0.15em] shadow-[inset_0_-1px_0_0_var(--color-line)] flex justify-between">
+              <span>❖ 神话典籍</span>
+              <span className="font-normal text-ink-mute tracking-normal">{(character.tomes || []).length} 本</span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-2 gap-y-1 p-2">
+              {(character.tomes || []).map((tm) => (
+                <div key={tm.id} className="border border-ink/20 rounded-[2px] p-1.5 break-inside-avoid">
+                  <div className="flex flex-wrap items-baseline gap-x-1.5">
+                    <span className="font-serif text-[11.5px] font-bold">{tm.name}</span>
+                    {tm.meta ? <span className="text-[9.5px] text-ink-mute">{tm.meta}</span> : null}
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-ink-soft">
+                    {tm.sanity ? <span className="mr-2">理智 {tm.sanity}</span> : null}
+                    {tm.occult ? <span className="mr-2">神秘学 {tm.occult}</span> : null}
+                    {tm.mythos ? <span className="mr-2">神话 {tm.mythos}</span> : null}
+                  </div>
+                  {tm.spells ? <div className="mt-0.5 text-[10px] text-ink-soft">法术：{tm.spells}</div> : null}
+                  {tm.notes ? <div className="mt-0.5 line-clamp-2 text-[9.5px] leading-[1.5] text-ink-mute">{tm.notes}</div> : null}
+                </div>
+              ))}
+              {(character.tomes || []).length === 0 && (
+                <div className="col-span-2 py-2 text-center text-[11px] text-ink-mute/70">暂无记录</div>
+              )}
+            </div>
+          </div>
+
+          <div className="text-[10.5px] text-ink-mute mt-1.5 text-center">
+            ❖ 角色卡由「秘密调查档案馆」生成 · COC 第 7 版规则 ❖
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

@@ -405,6 +405,8 @@ function present(character, { actor, full = true }) {
     weapons: character.weapons || [],
     equipment: character.equipment || '',
     equipmentItems: Array.isArray(character.equipmentItems) ? character.equipmentItems : [],
+    spells: Array.isArray(character.spells) ? character.spells : [],
+    tomes: Array.isArray(character.tomes) ? character.tomes : [],
     currency: character.currency || 'USD',
     extraAssets: character.extraAssets || '',
     skillMarks: character.skillMarks || {},
