@@ -1,0 +1,119 @@
+{
+  "source": "pulp通俗克苏鲁.md md:13849-13869（书 p.121）；_draft/04-magic.md §4.2",
+  "note": "通常只为人类 NPC 设天赋（怪物已自带特殊能力）；建议重要 NPC 设 1–2 项。除注明被动外，均为花费 10 点幸运触发。",
+  "entries": [
+    {
+      "id": "npc_night_vision",
+      "zh": "昏暗视觉",
+      "kind": "passive",
+      "effect": "忽略夜间射击的惩罚骰。"
+    },
+    {
+      "id": "npc_endurance",
+      "zh": "耐力卓绝",
+      "kind": "luck10",
+      "luckCost": 10,
+      "effect": "CON 检定可花 10 幸运获得奖励骰；含建立追逐时的 MOV 速率。"
+    },
+    {
+      "id": "npc_hardy",
+      "zh": "强健体魄",
+      "kind": "luck10",
+      "luckCost": 10,
+      "effect": "疾病与毒药的伤害和效果减半。"
+    },
+    {
+      "id": "npc_iron_frame",
+      "zh": "铁骨铮铮",
+      "kind": "luck10",
+      "luckCost": 10,
+      "effect": "吸收一轮中受到的 5 点伤害。"
+    },
+    {
+      "id": "npc_unflappable",
+      "zh": "处变不惊",
+      "kind": "passive",
+      "effect": "不会被突袭。"
+    },
+    {
+      "id": "npc_focused_blow",
+      "zh": "专注打击",
+      "kind": "luck10",
+      "luckCost": 10,
+      "effect": "格斗中获得额外伤害骰（徒手 +1D3、剑 +1D6，取决于武器）。"
+    },
+    {
+      "id": "npc_nimble",
+      "zh": "身手敏捷",
+      "kind": "passive",
+      "effect": "应对枪械寻找掩护时不会失去攻击机会。"
+    },
+    {
+      "id": "npc_keen_eyes",
+      "zh": "目光如炬",
+      "kind": "passive",
+      "effect": "忽略瞄准小体型目标（体格 −2）与瞄准近战中目标的惩罚骰。"
+    },
+    {
+      "id": "npc_technique",
+      "zh": "技巧卓绝",
+      "kind": "passive",
+      "effect": "使用战技时体格视为 +1。"
+    },
+    {
+      "id": "npc_flurry",
+      "zh": "疾风连击",
+      "kind": "luck10",
+      "luckCost": 10,
+      "effect": "格斗中再攻击一次。",
+      "note": "与第四章『购买第二次攻击机会』效果重复。"
+    },
+    {
+      "id": "npc_swift",
+      "zh": "动如脱兔",
+      "kind": "luck10",
+      "luckCost": 10,
+      "effect": "一整场战斗中避免寡不敌众。"
+    },
+    {
+      "id": "npc_quick_draw",
+      "zh": "快速拔枪",
+      "kind": "passive",
+      "effect": "决定回合轮次时，即使未准备好射击也视为 +50 DEX。"
+    },
+    {
+      "id": "npc_pistol_master",
+      "zh": "手枪专精",
+      "kind": "passive",
+      "effect": "忽略手枪连射的惩罚骰。"
+    },
+    {
+      "id": "npc_indomitable",
+      "zh": "百折不挠",
+      "kind": "luck10",
+      "luckCost": 10,
+      "effect": "避免最多 5 点 SAN 损失。",
+      "note": "与同名英雄天赋效果不同。"
+    },
+    {
+      "id": "npc_iron_will",
+      "zh": "钢铁意志",
+      "kind": "luck10",
+      "luckCost": 10,
+      "effect": "POW 检定可获得奖励骰。",
+      "note": "与同名英雄天赋效果不同。"
+    },
+    {
+      "id": "npc_psychic_awakening",
+      "zh": "灵能觉醒",
+      "kind": "passive",
+      "effect": "获得一项灵能（遥视/占卜/灵媒/心灵感应/念动之一）。"
+    },
+    {
+      "id": "npc_gadget",
+      "zh": "奇妙道具",
+      "kind": "passive",
+      "effect": "选择或创造一件奇妙道具。"
+    }
+  ]
+}

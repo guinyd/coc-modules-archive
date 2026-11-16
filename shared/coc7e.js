@@ -15,10 +15,16 @@ import {
   SKILLS, SKILL_BY_KEY, SKILL_BY_NAME, SPEC_PRESETS, SPEC_OPTIONS, SPEC_SLOTS,
   SOCIAL_SKILLS, OCCUPATIONS, OCCUPATION_BY_ID, WEAPONS, WEAPON_BY_NAME,
 } from './coc7e-reference.js';
+import {
+  CLASSIC_ID, DEFAULT_SPECS, RULESETS, GAME_SYSTEMS,
+  resolveRuleset, isClassicRuleset, rulesetOf,
+} from './rulesets/index.js';
 
 export {
   SKILLS, SKILL_BY_KEY, SKILL_BY_NAME, SPEC_PRESETS, SPEC_OPTIONS, SPEC_SLOTS,
   SOCIAL_SKILLS, OCCUPATIONS, OCCUPATION_BY_ID, WEAPONS, WEAPON_BY_NAME,
+  CLASSIC_ID, DEFAULT_SPECS, RULESETS, GAME_SYSTEMS,
+  resolveRuleset, isClassicRuleset, rulesetOf,
 };
 
 /** 八大属性 + 幸运 */
@@ -69,8 +75,7 @@ export const NAMED_SKILL_HINT = {
   ownLanguage: { label: '语种', placeholder: '例：中文 / 英语 / 拉丁语', warn: '母语未选择语种（建议填写）' },
 };
 
-/** 新建角色卡时给专攻槽位预置的默认方向（规则书最常见的两项） */
-export const DEFAULT_SPECS = { 'fighting#0': '斗殴', 'firearms#0': '手枪' };
+/** 新建角色卡时给专攻槽位预置的默认方向（规则书最常见的两项，见 rulesets/index.js） */
 
 /** 武器表里必须常驻、不可删除的那一条 */
 export const BUILTIN_WEAPON = '徒手';
@@ -485,56 +490,70 @@ export function movement(str, dex, siz, age, armorPenalty = 0, waiveAgePenalty =
 }
 
 // ------------------------------------------------------------------ 技能
+/**
+ * 多规则支持：这一整段辅助函数都接受一个可选的规则集参数 `R`。
+ * 不传时等价于官方 7e（`R.skillByKey` 缺省用引擎内置技能表），
+ * 因此旧调用点无需改动，新规则集只需传自己的 R。
+ */
+const skillDefsOf = (R) => (R && R.skillByKey) || SKILL_BY_KEY;
+const specSlotsOf = (R) => (R && R.specSlots) || SPEC_SLOTS;
+const specPresetsOf = (R) => (R && R.specPresets) || SPEC_PRESETS;
+const specOptionsOf = (R) => (R && R.specOptions) || SPEC_OPTIONS;
+const defaultSpecsOf = (R) => (R && R.defaultSpecs) || DEFAULT_SPECS;
+const skillListOf = (R) => (R && R.skills) || SKILLS;
+
 /** 专攻槽位 id：非专攻技能就是 key 本身 */
-export function slotId(key, index = 0) {
-  return isSpec(key) ? `${key}#${index}` : key;
+export function slotId(key, index = 0, R = null) {
+  return isSpec(key, R) ? `${key}#${index}` : key;
 }
-export function isSpec(key) {
-  return Boolean(SKILL_BY_KEY[key]?.spec);
+export function isSpec(key, R = null) {
+  return Boolean(skillDefsOf(R)[key]?.spec);
 }
-export function specSlots(key) {
-  const s = SKILL_BY_KEY[key];
+export function specSlots(key, R = null) {
+  const s = skillDefsOf(R)[key];
   if (!s?.spec) return 1;
-  return SPEC_SLOTS[s.spec] || 1;
+  return specSlotsOf(R)[s.spec] || 1;
 }
 /** 某个专攻组的下拉可选项（官方常见方向优先） */
-export function specOptions(key) {
-  const def = SKILL_BY_KEY[key];
+export function specOptions(key, R = null) {
+  const def = skillDefsOf(R)[key];
   if (!def?.spec) return [];
-  const preset = Object.keys(SPEC_PRESETS[def.spec] || {});
-  const curated = SPEC_OPTIONS[def.spec] || [];
+  const preset = Object.keys(specPresetsOf(R)[def.spec] || {});
+  const curated = specOptionsOf(R)[def.spec] || [];
   return [...new Set([...curated, ...preset])];
 }
 /** 技能基础值（含专攻预设与 DEX/EDU 公式） */
-export function skillBase(key, custom, eff) {
-  const def = SKILL_BY_KEY[key];
+export function skillBase(key, custom, eff, R = null) {
+  const def = skillDefsOf(R)[key];
   if (!def) return 0;
   if (def.flags?.includes('dexHalf')) return Math.floor((eff.DEX || 0) / 2);
   if (def.flags?.includes('edu')) return eff.EDU || 0;
-  const preset = custom && def.spec ? SPEC_PRESETS[def.spec]?.[custom] : undefined;
+  const preset = custom && def.spec ? specPresetsOf(R)[def.spec]?.[custom] : undefined;
   if (typeof preset === 'number') return preset;
   return typeof def.base === 'number' ? def.base : 0;
 }
 /** 技能显示名 */
-export function skillName(key, custom) {
-  const def = SKILL_BY_KEY[key];
+export function skillName(key, custom, R = null) {
+  const def = skillDefsOf(R)[key];
   if (!def) return String(custom || key);
-  if (def.spec || isNamedSkill(key)) return custom ? `${def.name}（${custom}）` : def.name;
+  if (def.spec || def.flags?.includes('named')) return custom ? `${def.name}（${custom}）` : def.name;
   return def.name;
 }
 
 /** 生成一张空白技能槽位表（非专攻技能全覆盖 + 专攻组按官方槽位数展开） */
-export function blankSkills() {
+export function blankSkills(R = null) {
   const out = [];
-  for (const def of SKILLS) {
+  const slots = specSlotsOf(R);
+  const defs = defaultSpecsOf(R);
+  for (const def of skillListOf(R)) {
     if (def.spec) {
-      const n = SPEC_SLOTS[def.spec] || 1;
+      const n = slots[def.spec] || 1;
       for (let i = 0; i < n; i++) {
         const id = `${def.key}#${i}`;
-        out.push({ id, key: def.key, custom: DEFAULT_SPECS[id] || '', occ: 0, interest: 0, growth: 0 });
+        out.push({ id, key: def.key, custom: defs[id] || '', occ: 0, interest: 0, bonus: 0, growth: 0 });
       }
     } else {
-      out.push({ id: def.key, key: def.key, custom: '', occ: 0, interest: 0, growth: 0 });
+      out.push({ id: def.key, key: def.key, custom: '', occ: 0, interest: 0, bonus: 0, growth: 0 });
     }
   }
   return out;
@@ -553,14 +572,23 @@ export function blankWeapons() {
 export function blankCustomSkill(id) {
   return {
     id: id || `cs_${Math.random().toString(36).slice(2, 10)}`,
-    name: '', base: 0, occ: 0, interest: 0, growth: 0, isOccupation: false,
+    name: '', base: 0, occ: 0, interest: 0, bonus: 0, growth: 0, isOccupation: false,
   };
 }
 
 // -------------------------------------------------------------- 职业与点数
-/** 解析职业：支持内置数字 id 与 KP 自定义职业的字符串 id */
+/**
+ * 解析职业：支持内置数字 id 与 KP 自定义职业的字符串 id。
+ * 非官方规则集（R.id !== classic7e）只看该规则集自带职业表 —— 通俗克苏鲁的职业 id
+ * 是字符串（film_actor 等），与 7e 的数字 id 不会冲突，但也不该互相串门。
+ */
 export function resolveOccupation(occupationId, ctx = {}) {
   if (occupationId === undefined || occupationId === null || occupationId === '') return null;
+  const R = rulesetOf(null, ctx);
+  if (!isClassicRuleset(R)) {
+    const table = R.occupationById || {};
+    return table[occupationId] || table[String(occupationId)] || null;
+  }
   const custom = (ctx.customOccupations || []).find((o) => String(o.id) === String(occupationId));
   if (custom) return custom;
   return OCCUPATION_BY_ID[occupationId] || OCCUPATION_BY_ID[String(occupationId)] || null;
@@ -568,6 +596,8 @@ export function resolveOccupation(occupationId, ctx = {}) {
 
 /** 全部职业（内置 + KP 自定义），供选择器使用 */
 export function allOccupations(ctx = {}) {
+  const R = rulesetOf(null, ctx);
+  if (!isClassicRuleset(R)) return [...(R.occupations || [])];
   return [...OCCUPATIONS, ...(ctx.customOccupations || [])];
 }
 
@@ -582,18 +612,28 @@ export function occupationBudget(occ, eff) {
 }
 
 /** 该职业允许投入职业点的技能键集合（固定本职 + 玩家在弹性槽位里的选择） */
-export function occupationAllowed(occ, picks = {}) {
-  const allowed = new Set(occ?.keys || []);
+export function occupationAllowed(occ, picks = {}, R = null) {
+  const groups = occ?.choices || [];
+  // 「任选其一」的技能组不能同时默认成本职：先从固定 keys 里剔除，选中后再加回
+  const choiceKeys = new Set(groups.flat());
+  const allowed = new Set((occ?.keys || []).filter((k) => !choiceKeys.has(k)));
   // 信用评级是规则中所有职业通用的「职业技能」，必定可用职业点提升
   if (occ) allowed.add('credit');
-  const groups = occ?.choices || [];
   (picks.choices || []).forEach((pick, i) => {
     if (pick && groups[i] && groups[i].includes(pick)) allowed.add(pick);
   });
   // 自由特长可以直接选「带分支的技能组」（如格斗、射击）：整组所有专攻槽都算本职，
   // 具体分支由玩家在技能表里自行选择，不必在特长列表里枚举几十个分支项。
-  for (const k of picks.free || []) if (SKILL_BY_KEY[k]) allowed.add(k);
-  for (const k of picks.social || []) if (SOCIAL_SKILLS.includes(k)) allowed.add(k);
+  // freePool 非空时（如「任意两项其他个人或时代特长」限定了候选表），只认池内技能。
+  const defs = skillDefsOf(R);
+  const pool = Array.isArray(occ?.freePool) && occ.freePool.length ? new Set(occ.freePool) : null;
+  for (const k of picks.free || []) {
+    if (!defs[k]) continue;
+    if (pool && !pool.has(k)) continue;
+    allowed.add(k);
+  }
+  const social = (R && R.socialSkills) || SOCIAL_SKILLS;
+  for (const k of picks.social || []) if (social.includes(k)) allowed.add(k);
   // KP 自定义职业可以直接勾选「任意自定义技能名」
   for (const n of occ?.customKeys || []) allowed.add(`custom:${n}`);
   return allowed;
@@ -616,12 +656,13 @@ export function occupationNeeds(occ, picks = {}) {
  * 只做**提示与软校验**，不阻塞玩家自选方向（KP 常有房规）。
  * @returns {Array<{key:string,name:string,options:string[],required:boolean}>}
  */
-export function occupationBranchHints(occ) {
+export function occupationBranchHints(occ, R = null) {
   const out = [];
   const presets = occ?.presets;
   if (!presets || typeof presets !== 'object') return out;
+  const defs = skillDefsOf(R);
   for (const [key, options] of Object.entries(presets)) {
-    const def = SKILL_BY_KEY[key];
+    const def = defs[key];
     if (!def) continue;
     const opts = (Array.isArray(options) ? options : [])
       .filter((x) => typeof x === 'string' && x.trim())
@@ -640,11 +681,15 @@ export function occupationBranchHints(occ) {
  */
 export function computeSheet(sheet, ctx = {}) {
   const s = sheet || {};
+  // 规则集：ctx 优先（后端已解析），否则按存档里的 gameSystem 回落
+  const R = rulesetOf(s, ctx);
+  // 通俗克苏鲁取消年龄补正与教育增强：老存档即便开着 applyAgeAdjust 也强制关掉
+  const ageRulesOff = R?.chargen?.ageAdjust?.enabled === false;
   const age = clampInt(s.age, 0, 200, 0);
-  const applyAge = s.applyAgeAdjust === true;   // 默认关闭：玩家不主动开启时不套用年龄补正
+  const applyAge = !ageRulesOff && s.applyAgeAdjust === true && ctx?.ignoreAge !== true;   // 默认关闭；房规「忽略年龄规则」下强制不套用
   const raw = {};
   for (const k of ALL_CHARS) raw[k] = clampInt(s.chars?.[k], 0, 999, 0);
-  const waivePenalty = s.agePenaltyWaived === true;
+  const waivePenalty = s.agePenaltyWaived === true || ageRulesOff;
   const legendary = normalizeLegendary(s.legendary);
   const legendaryBonus = normalizeLegendaryBonus(s.legendaryBonus);
   const charGrowth = {};
@@ -674,7 +719,16 @@ export function computeSheet(sheet, ctx = {}) {
   // 房规：技能基础值改写（deriveBase），只影响技能，不改变属性推导
   const houseBase = deriveBaseMap(ctx.houseRules);
 
-  const hp = Math.floor((eff.CON + eff.SIZ) / 10);
+  // HP 除数由规则集决定：7e 为 10，通俗克苏鲁为 5（低通俗档回到 10）
+  const hpDivisor = (() => {
+    if (typeof R.hpDivisor === 'function') {
+      const v = Number(R.hpDivisor(s));
+      return Number.isFinite(v) && v > 0 ? v : 10;
+    }
+    const v = Number(R.hpDivisor);
+    return Number.isFinite(v) && v > 0 ? v : 10;
+  })();
+  const hp = Math.floor((eff.CON + eff.SIZ) / hpDivisor);
   const mp = Math.floor(eff.POW / 5);
   const dbb = damageBonusBuild(eff.STR, eff.SIZ);
   const mv = movement(eff.STR, eff.DEX, eff.SIZ, age, s.armorPenalty, waivePenalty);
@@ -682,43 +736,67 @@ export function computeSheet(sheet, ctx = {}) {
 
   const occ = resolveOccupation(s.occupationId, ctx);
   const picks = s.occPicks || { free: [], social: [], choices: [] };
-  const allowed = occupationAllowed(occ, picks);
+  const allowed = occupationAllowed(occ, picks, R);
   // 原本职（职业模板固定项 + 信用评级）与玩家在弹性槽位里自选的本职分开标记
   const baseOcc = new Set([...(occ?.keys || []), 'credit']);
-  const budget = { occupation: occupationBudget(occ, effBase), interest: effBase.INT * 2 };
+  // 奖励点（第三套预算）：通俗克苏鲁每个原型固定 100 点，只能投该原型列出的技能
+  const bonusAllow = typeof R.bonusAllowed === 'function' ? R.bonusAllowed(s) : null;
+  // 注意：DEFAULT_AUDIT_RULES 里的中性默认值是 0（官方 7e 没有第三套预算），
+  // 所以「0」要理解为「未配置」，回落到规则集自己的 bonusPoints，否则通克卡会被默认值抹成 0。
+  const bonusBudgetRaw = Number(ctx?.auditRules?.bonusPoints);
+  const bonusBudget = bonusAllow
+    ? Math.max(0, clampInt(bonusBudgetRaw > 0 ? bonusBudgetRaw : R.bonusPoints, 0, 999, R.bonusPoints))
+    : 0;
+  const budget = {
+    occupation: occupationBudget(occ, effBase),
+    interest: typeof R.interest === 'function' ? R.interest(effBase) : effBase.INT * 2,
+    bonus: bonusBudget,
+  };
+  // 技能成功率上限：null / 0 表示无上限（通俗克苏鲁技能可以破 100）
+  const skillCap = Number.isFinite(Number(R.skillCap)) && Number(R.skillCap) > 0
+    ? Number(R.skillCap) : Infinity;
 
   // 标准技能：以存档为准，但 id/key/基础值全部由本引擎重建，忽略存档里可能被篡改的重复项
+  const defs = skillDefsOf(R);
+  const inputMax = Number.isFinite(skillCap) ? skillCap : 999;
   const incoming = new Map();
   for (const item of Array.isArray(s.skills) ? s.skills : []) {
     if (!item || typeof item.id !== 'string') continue;
-    if (!SKILL_BY_KEY[item.key]) continue;
+    if (!defs[item.key]) continue;
     if (incoming.has(item.id)) continue;                 // 重复 id 只取第一条
     incoming.set(item.id, item);
   }
   const skills = [];
-  let occSpent = 0, interestSpent = 0;
-  for (const slot of blankSkills()) {
+  let occSpent = 0, interestSpent = 0, bonusSpent = 0;
+  for (const slot of blankSkills(R)) {
     const src = incoming.get(slot.id);
-    const custom = cleanCustom(slot.key, src?.custom);
-    const rawBase = skillBase(slot.key, custom, eff);
+    const custom = cleanCustom(slot.key, src?.custom, R);
+    const rawBase = skillBase(slot.key, custom, eff, R);
     const base = applyHouseBase(slot.key, rawBase, eff, houseBase);
-    const o = clampInt(src?.occ, 0, SKILL_CAP, 0);
-    const i = clampInt(src?.interest, 0, SKILL_CAP, 0);
-    const g = clampInt(src?.growth, 0, SKILL_CAP, 0);
-    const def = SKILL_BY_KEY[slot.key];
+    const o = clampInt(src?.occ, 0, inputMax, 0);
+    const i = clampInt(src?.interest, 0, inputMax, 0);
+    const b = bonusAllow ? clampInt(src?.bonus, 0, inputMax, 0) : 0;
+    const g = clampInt(src?.growth, 0, inputMax, 0);
+    const def = defs[slot.key];
     const capExempt = def.flags?.includes('nocap');
-    const total = Math.min(capExempt ? 999 : SKILL_CAP, base + o + i + g);
+    const total = Math.min(capExempt ? 999 : skillCap, base + o + i + b + g);
     occSpent += o;
     interestSpent += i;
+    bonusSpent += b;
+    const labels = bonusAllow?.presets?.[slot.key];
+    const bonusSlotOk = Boolean(bonusAllow)
+      && bonusAllow.keys.has(slot.key)
+      && !(Array.isArray(labels) && labels.length && !labels.includes(custom));
     skills.push({
-      id: slot.id, key: slot.key, custom, name: skillName(slot.key, custom),
-      base, origBase: rawBase, occ: o, interest: i, growth: g, total,
+      id: slot.id, key: slot.key, custom, name: skillName(slot.key, custom, R),
+      base, origBase: rawBase, occ: o, interest: i, bonus: b, growth: g, total,
       half: Math.floor(total / 2), fifth: Math.floor(total / 5),
       isOccupation: allowed.has(slot.key), pickedOccupation: allowed.has(slot.key) && !baseOcc.has(slot.key),
+      isBonusAllowed: bonusSlotOk,
       capExempt, spec: def.spec || null,
       special: SPECIAL_SKILLS.includes(slot.key) ? slot.key : null,
       kind: 'standard', houseBase: houseBase.has(slot.key),
-      used: Boolean(src && (o > 0 || i > 0 || g > 0 || custom)),
+      used: Boolean(src && (o > 0 || i > 0 || b > 0 || g > 0 || custom)),
     });
   }
 
@@ -729,11 +807,11 @@ export function computeSheet(sheet, ctx = {}) {
     const name = typeof item?.name === 'string' ? item.name.trim().slice(0, 24) : '';
     if (!id || !name || customSeen.has(id)) continue;
     customSeen.add(id);
-    const base = clampInt(item.base, 0, SKILL_CAP, 0);
-    const o = clampInt(item.occ, 0, SKILL_CAP, 0);
-    const i = clampInt(item.interest, 0, SKILL_CAP, 0);
-    const g = clampInt(item.growth, 0, SKILL_CAP, 0);
-    const total = Math.min(SKILL_CAP, base + o + i + g);
+    const base = clampInt(item.base, 0, inputMax, 0);
+    const o = clampInt(item.occ, 0, inputMax, 0);
+    const i = clampInt(item.interest, 0, inputMax, 0);
+    const g = clampInt(item.growth, 0, inputMax, 0);
+    const total = Math.min(skillCap, base + o + i + g);
     occSpent += o;
     interestSpent += i;
     skills.push({
@@ -754,10 +832,11 @@ export function computeSheet(sheet, ctx = {}) {
   const sanGrowth = clampInt(s.sanGrowth, -99, 99, 0);   // 可正可负：剧本也可能削减意志/SAN
   const san = Math.min(sanMax, Math.max(0, eff.POW + sanGrowth));
 
-  const spent = { occupation: occSpent, interest: interestSpent };
+  const spent = { occupation: occSpent, interest: interestSpent, bonus: bonusSpent };
   const remaining = {
     occupation: budget.occupation - occSpent,
     interest: budget.interest - interestSpent,
+    bonus: budget.bonus - bonusSpent,
   };
 
   const credit = skills.find((x) => x.key === 'credit');
@@ -814,6 +893,9 @@ export function computeSheet(sheet, ctx = {}) {
       id: occ.id, name: occ.name, cr: occ.cr, attr: occ.attr, desc: occ.desc,
       presets: occ.presets || {}, skillText: occ.skillText || '', note: occ.note || '',
       custom: occ.isCustom === true,
+      // 通俗克苏鲁：自由特长槽的候选池（空表示任意技能）/ 英文职业名
+      freePool: occ.freePool || [],
+      nameEn: occ.nameEn || '',
     } : null,
     /** 当前职业要求的信用评级区间，供界面高亮显示 */
     creditRange: occ?.cr || null,
@@ -830,12 +912,47 @@ export function computeSheet(sheet, ctx = {}) {
     skills,
     customSkillCount: skills.filter((x) => x.kind === 'custom').length,
     markedCount: skills.filter((x) => x.marked).length,
+    /** 本卡使用的规则集摘要（前端据此切换版面 / 显示徽章） */
+    ruleset: {
+      id: R.id,
+      name: R.name,
+      short: R.short,
+      creditMode: R.creditMode || 'range',
+      skillCap: Number.isFinite(skillCap) ? skillCap : null,
+      hpDivisor,
+      bonusPoints: budget.bonus,
+      interestFormula: budget.interest === (effBase.INT || 0) * 2 ? 'INT×2' : '自定义',
+    },
+    /** 原型（通俗克苏鲁专属；官方 7e 恒为 null） */
+    archetype: (() => {
+      const a = typeof R.archetypeOf === 'function' ? R.archetypeOf(s) : null;
+      if (!a) return null;
+      return {
+        id: a.id, zh: a.zh, en: a.en || '',
+        coreChar: a.coreChar || [],
+        bonusCount: (a.bonusKeys || []).length,
+        talentForced: a.talentForced || [],
+        talentRule: a.talentRule || '',
+        traits: a.traits || '',
+        suggestedOccupations: a.suggestedOccupations || [],
+      };
+    })(),
+    /** 玩家选定的核心属性（须在原型 coreChar 内） */
+    coreChar: typeof s.coreChar === 'string' ? s.coreChar : '',
+    /** 英雄奖励点白名单（不在表里的技能不允许投奖励点） */
+    bonusAllowedKeys: bonusAllow ? [...bonusAllow.keys] : [],
+    /** 本档天赋数量区间，供 UI 校验 */
+    talentRange: typeof R.talentOf === 'function'
+      ? R.talentOf(s)
+      : (R?.chargen?.talents?.allowed || null),
   };
 }
 
 /** 规则校验：返回人性化提示数组（不阻塞保存） */
 export function validateSheet(sheet, ctx = {}) {
+  const ignoreAge = ctx?.ignoreAge === true;
   const c = computeSheet(sheet, ctx);
+  const R = rulesetOf(sheet, ctx);
   const w = [];
   const occ = c.occupation;
   const lbl = (k) => CHAR_LABEL[k] || k;
@@ -849,10 +966,10 @@ export function validateSheet(sheet, ctx = {}) {
   }
   if (CHARS.every((k) => !c.raw[k])) w.push('还有属性未填写（为 0）');
   // 教育增强：只要「还没结算过」就提示 —— 结算过（哪怕这次没提升）就不再打扰
-  if (c.ageAdjust.eduChecks > 0 && c.ageAdjust.apply && !c.ageAdjust.settled) {
+  if (!ignoreAge && c.ageAdjust.eduChecks > 0 && c.ageAdjust.apply && !c.ageAdjust.settled) {
     w.push(`该年龄有 ${c.ageAdjust.eduChecks} 次教育增强检定未使用`);
   }
-  if (c.ageAdjust.waived) w.push('KP 已豁免这张卡的年龄减益（属性不因年龄下降，教育成长照常保留）');
+  if (!ignoreAge && c.ageAdjust.waived) w.push('KP 已豁免这张卡的年龄减益（属性不因年龄下降，教育成长照常保留）');
   if (c.legendary.enabled) {
     const bonusTotal = CHARS.reduce((a, k) => a + (c.legendaryBonus[k] || 0), 0);
     if (bonusTotal <= 0) w.push('已开启传奇标记，但还没有填写任何额外属性调整值');
@@ -860,11 +977,11 @@ export function validateSheet(sheet, ctx = {}) {
     const any = ALL_CHARS.some((k) => (c.legendaryBonus[k] || 0) > 0);
     if (any) w.push('填写了传奇额外调整值，但传奇标记未开启（该调整值暂不生效）');
   }
-  if ((sheet?.age || 0) > 0 && (sheet?.age || 0) < 15) w.push('年龄小于 15 岁，超出常规调查员范围');
-  if ((sheet?.age || 0) > 90) w.push('年龄超过 90 岁，超出常规调查员范围，请先与 KP 商议');
+  if (!ignoreAge && (sheet?.age || 0) > 0 && (sheet?.age || 0) < 15) w.push('年龄小于 15 岁，超出常规调查员范围');
+  if (!ignoreAge && (sheet?.age || 0) > 90) w.push('年龄超过 90 岁，超出常规调查员范围，请先与 KP 商议');
 
   // 年龄补正：除外貌固定减值外，其余属性是「合计减少 N 点，自行分配」
-  if (c.ageAdjust.apply && c.ageAdjust.poolPoints > 0) {
+  if (!ignoreAge && c.ageAdjust.apply && c.ageAdjust.poolPoints > 0) {
     const need = c.ageAdjust.poolPoints;
     const names = c.ageAdjust.poolKeys.map(lbl).join('/');
     if (!c.ageAdjust.allocComplete) {
@@ -891,7 +1008,7 @@ export function validateSheet(sheet, ctx = {}) {
       w.push(`以下技能作为非本职技能，投入职业点了：${illegal.map((s) => s.name).join('、')}`);
     }
     const bothPoints = c.skills.filter((s) => s.occ > 0 && s.interest > 0);
-    if (bothPoints.length) {
+    if (ctx?.auditRules?.forbidMixedPoints && bothPoints.length) {
       w.push(`同一个技能不能同时吃职业点与兴趣点：${bothPoints.map((s) => `${s.name}(职业${s.occ}+兴趣${s.interest})`).join('、')}`);
     }
     const creditInt = c.skills.find((s) => s.key === 'credit' && s.interest > 0);
@@ -904,7 +1021,7 @@ export function validateSheet(sheet, ctx = {}) {
     if (c.needs.free > 0) w.push(`还需指定 ${c.needs.free} 项任意特长作为本职技能`);
     if (c.needs.choices > 0) w.push(`还有 ${c.needs.choices} 组「任选其一」的本职技能未选择`);
     // 官方指定/建议的专攻方向（如 牧师 → 拉丁语）：只提示，方便 KP 审核
-    for (const h of occupationBranchHints(occ)) {
+    for (const h of occupationBranchHints(occ, R)) {
       const slots = c.skills.filter((s) => s.key === h.key);
       const filled = slots.filter((s) => s.custom);
       if (filled.some((s) => h.options.includes(s.custom))) continue;
@@ -917,11 +1034,24 @@ export function validateSheet(sheet, ctx = {}) {
   if (c.spent.interest > c.budget.interest) {
     w.push(`兴趣点超支：已用 ${c.spent.interest} / 上限 ${c.budget.interest}（智力 ×2）`);
   }
-  const overCap = c.skills.filter((s) => !s.capExempt && s.base + s.occ + s.interest + s.growth > SKILL_CAP);
-  if (overCap.length) w.push(`以下技能超过 ${SKILL_CAP}%：${overCap.map((s) => s.name).join('、')}`);
+  // 英雄奖励点（通俗克苏鲁）：第三套预算，只能投原型列出的技能
+  if (c.budget.bonus > 0 || c.spent.bonus > 0) {
+    if (c.spent.bonus > c.budget.bonus) {
+      w.push(`英雄奖励点超支：已用 ${c.spent.bonus} / 上限 ${c.budget.bonus}`);
+    }
+    const notAllowed = c.skills.filter((s) => s.bonus > 0 && !s.isBonusAllowed);
+    if (notAllowed.length) {
+      w.push(`以下技能不在原型奖励点白名单内：${notAllowed.map((s) => `${s.name}(${s.bonus})`).join('、')}`);
+    }
+    if (!c.archetype && c.spent.bonus > 0) w.push('尚未选择原型，无法使用英雄奖励点');
+  }
+  const cap = c.ruleset?.skillCap;
+  const overCap = cap == null ? [] : c.skills.filter((s) => !s.capExempt
+    && s.base + s.occ + s.interest + s.bonus + s.growth > cap);
+  if (overCap.length) w.push(`以下技能超过 ${cap}%：${overCap.map((s) => s.name).join('、')}`);
 
   const unnamedSpec = c.skills.filter((s) => s.spec && !s.custom
-    && (s.occ > 0 || s.interest > 0 || s.growth > 0));
+    && (s.occ > 0 || s.interest > 0 || s.bonus > 0 || s.growth > 0));
   if (unnamedSpec.length) w.push(`有 ${unnamedSpec.length} 个专攻技能投入了点数但未选择方向`);
 
   // 母语没写语种：只提示，不阻塞保存
@@ -962,6 +1092,14 @@ export const DEFAULT_AUDIT_RULES = {
   // —— 功能项 ——
   flagCustomSkills: true,      // 使用了自定义技能 → 提示 KP 重点核查
   checkOccBranches: true,      // 核对职业的官方指定专攻方向（外语（拉丁语）等）
+  // —— 规则集专属项（官方 7e 全部关闭；通俗克苏鲁在自己的 auditRules 里打开）——
+  requireArchetype: false,     // 必须先选原型
+  coreCharMax: 0,              // 核心属性上限（0 = 不检查）
+  talentsCount: 0,             // 期望天赋数量（0 = 不检查）
+  bonusPoints: 0,              // 英雄奖励点总量（0 = 该规则集没有第三套预算）
+  bonusWhitelist: false,       // 奖励点只能投原型列出的技能
+  skillCap: 0,                 // 技能成功率上限（0 = 无上限）
+  requireKeyConnection: false, // 背景须指定 1 项「关键连接」
 };
 
 /**
@@ -984,6 +1122,14 @@ export const AUDIT_RULE_META = [
   { key: 'enabled', group: 'feature', label: '启用自定义规则审卡', type: 'boolean', hint: '关闭后只执行「点数预算」等内置底线，不套用上面的阈值' },
   { key: 'flagCustomSkills', group: 'feature', label: '使用自定义技能时提示 KP 重点核查', type: 'boolean' },
   { key: 'checkOccBranches', group: 'feature', label: '核对职业的官方指定专攻方向（如 外语（拉丁语））', type: 'boolean' },
+  // —— 通俗克苏鲁专属（官方 7e 规则集没有这些概念，保持默认值即完全不生效）——
+  { key: 'requireArchetype', group: 'pulp', label: '必须选择原型', type: 'boolean', hint: '通俗克苏鲁建卡第一步；未选原型时英雄奖励点不可用' },
+  { key: 'coreCharMax', group: 'pulp', label: '核心属性上限', type: 'number', hint: '(1D6+13)×5 的上限 95；0 = 不检查' },
+  { key: 'talentsCount', group: 'pulp', label: '期望天赋数量', type: 'number', hint: '默认通俗 2 项；低通俗 0-1、高通俗 3（按通俗指示器调整）；0 = 不检查' },
+  { key: 'bonusPoints', group: 'pulp', label: '英雄奖励点总量', type: 'number', hint: '每个原型固定 100 点，只能投原型列出的技能；0 = 关闭第三套预算' },
+  { key: 'bonusWhitelist', group: 'pulp', label: '奖励点限原型技能', type: 'boolean', hint: '关闭后奖励点可投任意技能（房规放宽用）' },
+  { key: 'skillCap', group: 'pulp', label: '技能成功率上限', type: 'number', hint: '0 = 无上限（书内允许突破 100%）；填正数则作为审卡上限' },
+  { key: 'requireKeyConnection', group: 'pulp', label: '背景须指定「关键连接」', type: 'boolean', hint: '从已填背景里挑且只挑 1 项，打星标；用于理智自救' },
 ];
 
 // ------------------------------------------------------------------ 房规
@@ -998,6 +1144,7 @@ export const HOUSE_RULE_TYPES = [
   { type: 'deriveBase', label: '技能基础值', hint: '改写技能基础值：固定值，或按属性乘除后再加减，例如「取悦 = 固定 30」「聆听 = 智力 × 2」' },
   { type: 'requireAttr', label: '属性要求', hint: '某个属性必须达到区间，例如智力至少 60' },
   { type: 'requireSkill', label: '技能要求', hint: '指定技能全部达标（and），或任选 N 项达标（or），例如「侦查 / 聆听 任选一项 ≥ 60」' },
+  { type: 'ignoreAge', label: '忽略年龄规则', hint: '不检查年龄范围，也不套用年龄补正与教育增强；年龄可填任意非负整数，相关入口会隐藏' },
 ];
 export const HOUSE_RULE_LIMIT = 50;
 export const HOUSE_FORMULA_FROM = ALL_CHARS;
@@ -1057,6 +1204,9 @@ export function normalizeHouseRule(input, index = 0) {
     if (!min && !max) return null;
     return { id, type, level, label, attr, min, max };
   }
+  if (type === 'ignoreAge') {
+    return { id, type, level, label };
+  }
   // requireSkill
   const skills = [...new Set((Array.isArray(src.skills) ? src.skills : []).map(String).filter((k) => SKILL_BY_KEY[k]))].slice(0, 8);
   if (!skills.length) return null;
@@ -1077,6 +1227,11 @@ export function normalizeHouseRules(list) {
     out.push(rule);
   }
   return out;
+}
+
+/** 这套房规是否启用了「忽略年龄规则」。 */
+export function houseIgnoresAge(houseRules) {
+  return Array.isArray(houseRules) && houseRules.some((r) => r && r.type === 'ignoreAge');
 }
 
 /** 把 deriveBase 房规折成 Map<技能 key, formula>；后面的覆盖前面的。 */
@@ -1114,6 +1269,7 @@ export function houseRuleSummary(rule) {
     if (r.source === 'fixed') return `${skillName(r.skill)}基础值 = 固定 ${r.value}${sign}`;
     return `${skillName(r.skill)}基础值 = ${CHAR_LABEL[r.from] || r.from} ${r.op === 'mul' ? '×' : '÷'} ${r.value}${sign}`;
   }
+  if (r.type === 'ignoreAge') return '忽略年龄规则（不套用年龄补正与教育增强）';
   if (r.type === 'requireAttr') {
     const label = CHAR_LABEL[r.attr] || r.attr;
     if (r.min && r.max) return `${label}需在 ${r.min}–${r.max} 之间`;
@@ -1134,7 +1290,7 @@ export function evaluateHouseRules(sheet, houseRules, computed) {
   const c = computed;
   const out = [];
   for (const rule of list) {
-    if (rule.type === 'deriveBase') continue;
+    if (rule.type === 'deriveBase' || rule.type === 'ignoreAge') continue;
     const label = rule.label || HOUSE_RULE_TYPES.find((t) => t.type === rule.type)?.label || '房规';
     if (rule.type === 'requireAttr') {
       const v = c.eff?.[rule.attr] ?? 0;
@@ -1181,8 +1337,17 @@ export function evaluateHouseRules(sheet, houseRules, computed) {
  *          level: 'error' 不合规 / 'warn' 需留意 / 'info' 仅供参考
  */
 export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
-  const r = { ...DEFAULT_AUDIT_RULES, ...(rulesInput || {}) };
-  const c = computeSheet(sheet, ctx);
+  const R = rulesetOf(sheet, ctx);
+  // 基线 = 官方 7e ⊕ 该规则集的差异；再把 KP 显式改过的项盖上去。
+  // 只覆盖「与官方基线不同」的入参，避免规则集自己的阈值被全局默认值悄悄抵消。
+  const base = { ...DEFAULT_AUDIT_RULES, ...(R.auditRules || {}) };
+  const input = rulesInput && typeof rulesInput === 'object' ? rulesInput : {};
+  const r = { ...base };
+  for (const [k, v] of Object.entries(input)) {
+    if (Object.hasOwn(DEFAULT_AUDIT_RULES, k) && v === DEFAULT_AUDIT_RULES[k]) continue;
+    r[k] = v;
+  }
+  const c = computeSheet(sheet, { ...ctx, auditRules: r });
   const findings = [];
   const add = (id, label, level, detail) => findings.push({ id, label, level, detail });
 
@@ -1200,6 +1365,7 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
   const max = num(r.charMax);
   // 「启用自定义规则审卡」关闭时，下面的阈值一律不套用；传奇标记仍然只影响属性类规则
   const rulesOn = r.enabled !== false;
+  const ignoreAge = ctx?.ignoreAge === true;
   if (rulesOn && max > 0 && !legendaryOn) {
     for (const k of ALL_CHARS) {
       if (c.eff[k] > max) add(`charMax.${k}`, '属性上限', 'error', `${CHAR_LABEL[k]} ${c.eff[k]} 超过上限 ${max}`);
@@ -1291,11 +1457,11 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
   }
 
   // 教育增强（年龄成长）：KP 要能一眼看出「还没结算」和「重掷过几次」
-  if (c.ageAdjust.apply && c.ageAdjust.eduChecks > 0 && !c.eduGrowth.settled) {
+  if (!ignoreAge && c.ageAdjust.apply && c.ageAdjust.eduChecks > 0 && !c.eduGrowth.settled) {
     add('eduUnsettled', '教育增强未结算', 'warn',
       `该年龄需要 ${c.ageAdjust.eduChecks} 次教育增强检定，玩家还没有结算`);
   }
-  if (c.eduGrowth.attempts.length > 1) {
+  if (!ignoreAge && c.eduGrowth.attempts.length > 1) {
     const g = c.eduGrowth.lastGrant;
     add('eduReroll', '教育增强重掷过', 'warn',
       `共结算 ${c.eduGrowth.attempts.length} 次（重掷 ${c.eduGrowth.rerolls} 次），当前 +${c.eduGrowth.gain}`
@@ -1312,13 +1478,97 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
 
   // 官方指定的专攻方向（如 神职人员/牧师 → 外语（拉丁语））：软提示，供 KP 审核
   if (r.checkOccBranches && c.occupation) {
-    for (const h of occupationBranchHints(c.occupation)) {
+    for (const h of occupationBranchHints(c.occupation, R)) {
       const slots = c.skills.filter((s) => s.key === h.key);
       const filled = slots.filter((s) => s.custom);
       if (filled.some((s) => h.options.includes(s.custom))) continue;
       const want = h.required ? `指定 ${h.options.join(' / ')}` : `建议 ${h.options.join(' / ')}`;
       add(`occBranch.${h.key}`, '职业指定专攻方向', 'warn',
         `【${c.occupation.name}】的「${h.name}」官方${want}；当前${filled.length ? `填写为「${filled.map((s) => s.custom).join('、')}」` : '未选择方向'}`);
+    }
+  }
+  // —— 通俗克苏鲁专属检查（官方 7e 规则集里这些阈值全为 0/false，不产生任何提示）——
+  if (rulesOn && r.requireArchetype && !c.archetype) {
+    add('archetypeRequired', '尚未选择原型', 'error',
+      '通俗克苏鲁必须先选英雄类型（原型）：它决定核心属性、英雄奖励点白名单与天赋限制');
+  }
+  if (c.archetype) {
+    const core = String(c.coreChar || '').toUpperCase();
+    if (!core) {
+      add('coreCharMissing', '尚未指定核心属性', 'error',
+        `原型【${c.archetype.zh}】要求从 ${c.archetype.coreChar.map((k) => CHAR_LABEL[k]).join(' / ')} 中指定 1 项作为核心属性（(1D6+13)×5）`);
+    } else if (!c.archetype.coreChar.includes(core)) {
+      add('coreCharInvalid', '核心属性不在原型范围内', 'error',
+        `原型【${c.archetype.zh}】的核心属性只能是 ${c.archetype.coreChar.map((k) => CHAR_LABEL[k]).join(' / ')}，当前为 ${CHAR_LABEL[core] || core}`);
+    } else if (rulesOn && num(r.coreCharMax) > 0 && c.eff[core] > num(r.coreCharMax)) {
+      add('coreCharMax', '核心属性超出上限', 'error',
+        `核心属性 ${CHAR_LABEL[core]} ${c.eff[core]} 超过 (1D6+13)×5 的上限 ${num(r.coreCharMax)}`);
+    }
+  }
+  // 天赋：数量 / 重复 / 无法识别 / 原型强制项
+  const talents = Array.isArray(sheet?.talents)
+    ? sheet.talents.filter((t) => typeof t === 'string' && t) : [];
+  const talentDefs = R.talentById || {};
+  const unknownTalents = talents.filter((t) => !talentDefs[t]);
+  if (unknownTalents.length) {
+    add('talentsUnknown', '天赋不在规则表内', 'warn',
+      `以下天赋无法识别：${unknownTalents.join('、')}；请核对拼写或改用官方 40 条天赋`);
+  }
+  const dupTalents = [...new Set(talents.filter((t, i) => talents.indexOf(t) !== i))];
+  if (dupTalents.length) {
+    add('talentsDuplicate', '天赋重复', 'error',
+      `重复选择：${dupTalents.map((t) => talentDefs[t]?.zh || t).join('、')}`);
+  }
+  if (rulesOn && num(r.talentsCount) > 0 && !unknownTalents.length) {
+    const range = Array.isArray(c.talentRange) && c.talentRange.length
+      ? c.talentRange : [num(r.talentsCount)];
+    const lo = Math.min(...range), hi = Math.max(...range);
+    if (talents.length < lo || talents.length > hi) {
+      add('talentsCount', '天赋数量不符', 'warn',
+        `当前 ${talents.length} 项，本档要求 ${lo}${lo === hi ? '' : `-${hi}`} 项（可用通俗指示器调整档位）`);
+    }
+  }
+  for (const forced of c.archetype?.talentForced || []) {
+    if (!talents.includes(forced)) {
+      add('talentForced', '原型强制天赋未选', 'warn',
+        `原型【${c.archetype.zh}】要求包含天赋「${talentDefs[forced]?.zh || forced}」`);
+    }
+  }
+  // 英雄奖励点：超额 / 白名单
+  if (rulesOn && c.budget.bonus > 0) {
+    if (c.spent.bonus > c.budget.bonus) {
+      add('bonusBudgetExceeded', '英雄奖励点超支', 'error',
+        `已用 ${c.spent.bonus} / 上限 ${c.budget.bonus}`);
+    }
+    if (r.bonusWhitelist !== false) {
+      const badBonus = c.skills.filter((s) => s.bonus > 0 && !s.isBonusAllowed);
+      if (badBonus.length) {
+        add('bonusNotAllowed', '奖励点投在原型未列出的技能上', 'error',
+          badBonus.map((s) => `${s.name}(${s.bonus})`).join('、'));
+      }
+    }
+  }
+  // 技能成功率上限（可选；0 = 书内无上限）
+  if (rulesOn && num(r.skillCap) > 0) {
+    const capLimit = num(r.skillCap);
+    const overCapSkills = c.skills.filter((s) => !s.capExempt && s.total > capLimit);
+    if (overCapSkills.length) {
+      add('skillCap', '技能成功率超过上限', 'error',
+        overCapSkills.map((s) => `${s.name}(${s.total}%)`).join('、'));
+    }
+  }
+  // 关键连接：从已填背景里挑且只挑 1 项
+  if (rulesOn && r.requireKeyConnection) {
+    const kc = String(sheet?.keyConnection || '').trim();
+    if (!kc) {
+      add('keyConnectionMissing', '尚未指定关键连接', 'warn',
+        '从已填写的背景里挑 1 项作为「关键连接」（理智自救时使用）');
+    } else {
+      const filledKeys = BACKGROUND_FIELDS
+        .filter(([k]) => String(sheet?.background?.[k] || '').trim()).map(([k]) => k);
+      if (!filledKeys.includes(kc)) {
+        add('keyConnectionInvalid', '关键连接指向空白背景', 'warn', '关键连接必须指向一条已填写的背景');
+      }
     }
   }
   // 房规检查项：与审卡规则共用同一求值路径（deriveBase 已体现在 computeSheet 中）
@@ -1347,6 +1597,12 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
       eduCount: c.eduGrowth.count,
       eduManual: c.eduGrowth.manual,
       houseRuleCount: Array.isArray(ctx.houseRules) ? ctx.houseRules.length : 0,
+      // 多规则：审卡结果里带上规则集与通俗克苏鲁专属统计
+      gameSystem: R.id,
+      archetype: c.archetype?.zh || '',
+      talentCount: talents.length,
+      bonusPoints: c.spent.bonus,
+      bonusBudget: c.budget.bonus,
     },
   };
 }
@@ -1358,19 +1614,26 @@ export function clampInt(v, min, max, dflt = 0) {
   return Math.max(min, Math.min(max, Math.trunc(n)));
 }
 
-function cleanCustom(key, v) {
-  const def = SKILL_BY_KEY[key];
-  if (!def?.spec && !isNamedSkill(key)) return '';
+function cleanCustom(key, v, R = null) {
+  const def = skillDefsOf(R)[key];
+  if (!def?.spec && !def?.flags?.includes('named')) return '';
   const s = typeof v === 'string' ? v.trim().slice(0, 24) : '';
   return s;
 }
 
-/** 空角色卡模板（前端新建时使用） */
-export function blankSheet(ownerId = '') {
+/**
+ * 空角色卡模板（前端新建时使用）。
+ * @param {string} ownerId 拥有者
+ * @param {string} gameSystem 规则集 id（'classic7e' | 'pulp'），决定技能表与扩展字段
+ */
+export function blankSheet(ownerId = '', gameSystem = CLASSIC_ID) {
+  const R = resolveRuleset(gameSystem);
   const chars = {};
   for (const k of ALL_CHARS) chars[k] = 0;
   return {
     name: '', playerName: '', occupationId: '', age: 25, gender: '', residence: '', birthplace: '', era: '1920s',
+    /** 游戏规则集：旧存档没有这个字段时按官方 7e 处理 */
+    gameSystem: R.id,
     chars, eduBonus: 0, applyAgeAdjust: false, armorPenalty: 0, ageAlloc: {},   // 年龄补正默认不套用，由玩家主动开启
     charGrowth: {}, sanGrowth: 0,          // 属性/理智成长（剧本或房规奖励，单独记录）
 
@@ -1380,7 +1643,7 @@ export function blankSheet(ownerId = '') {
     agePenaltyWaived: false,              // KP 是否豁免年龄减益（只保留成长）
     notes: '',                            // 玩家备注：只记录，不打印
     occPicks: { free: [], social: [], choices: [] },
-    skills: blankSkills(),
+    skills: blankSkills(R),
     customSkills: [],
     skillMarks: {},
     weapons: blankWeapons(),
@@ -1400,6 +1663,14 @@ export function blankSheet(ownerId = '') {
     status: 'draft',
     isPublic: false,
     ownerId,
+
+    // —— 通俗克苏鲁扩展字段（其他规则集留空，不影响推导）——
+    chargenMethod: 'roll',   // 'roll' 逐项掷骰 / 'quick' 速建向导
+    pulpTone: 'standard',    // 通俗指示器：low / standard / high
+    archetypeId: '',         // 原型 id（22 选 1）
+    coreChar: '',            // 原型指定的核心属性（STR/CON/...）
+    talents: [],             // 天赋 id 列表（2 项，部分原型强制）
+    keyConnection: '',       // 关键连接：指向某一条已填背景的键名
   };
 }
 

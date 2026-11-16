@@ -707,6 +707,98 @@ export function Reveal({ children, delay = 0, variant = 'fade', className, as: T
   );
 }
 
+
+/* ------------------------------------------------------------------ 气泡确认 */
+/** 轻量气泡确认：锚在触发按钮旁，替代遮挡整页的大确认窗。 */
+export function Popconfirm({
+  children, title, detail, confirmText = '确认', cancelText = '取消',
+  tone = 'danger', onConfirm, disabled = false,
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const triggerRef = useRef(null);
+  const boxRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const place = () => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const W = 280;
+      const H = boxRef.current?.offsetHeight || 150;
+      const left = Math.max(8, Math.min(r.right - W, window.innerWidth - W - 8));
+      let top = r.bottom + 8;
+      if (top + H > window.innerHeight - 8) top = Math.max(8, r.top - H - 8);
+      setPos({ left, top });
+    };
+    const timer = window.setTimeout(place, 0);
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    const onDown = (e) => {
+      if (!triggerRef.current?.contains(e.target) && !boxRef.current?.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const toggle = () => {
+    if (disabled) return;
+    if (!open) {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (r) {
+        const W = 280;
+        const left = Math.max(8, Math.min(r.right - W, window.innerWidth - W - 8));
+        setPos({ left, top: r.bottom + 8 });
+      }
+    }
+    setOpen((v) => !v);
+  };
+
+  return (
+    <span className="relative inline-flex">
+      <span
+        ref={triggerRef}
+        className={disabled ? 'pointer-events-none opacity-40' : undefined}
+        aria-expanded={open}
+        onClick={toggle}
+      >
+        {children}
+      </span>
+      {open ? createPortal(
+        <div
+          ref={boxRef}
+          role="dialog"
+          aria-label={title}
+          style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}
+          className="fixed z-[80] w-[17.5rem] border border-line-strong bg-paper-raised p-3.5 text-left shadow-[0_18px_40px_rgba(23,17,9,0.28)]"
+        >
+          <p className="text-[14.5px] font-semibold leading-[1.6] text-ink">{title}</p>
+          {detail ? <p className="mt-1 text-[13px] leading-[1.65] text-ink-mute">{detail}</p> : null}
+          <div className="mt-3 flex justify-end gap-2">
+            <Button variant="ghost" className="!px-3 !py-1.5 !text-[13.5px]" onClick={() => setOpen(false)}>{cancelText}</Button>
+            <Button
+              variant={tone}
+              className="!px-3 !py-1.5 !text-[13.5px]"
+              onClick={() => { setOpen(false); onConfirm?.(); }}
+            >
+              {confirmText}
+            </Button>
+          </div>
+        </div>,
+        document.body,
+      ) : null}
+    </span>
+  );
+}
+
 /* ------------------------------------------------------------------ 分页 */
 /** 通用分页条：page 从 1 开始，total 为总条数；只有一页时不渲染。 */
 export function Pager({ page, total, pageSize = 8, onChange, label = '条' }) {

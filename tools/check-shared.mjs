@@ -9,6 +9,7 @@
 import {
   blankSheet, blankSkills, computeSheet, validateSheet, auditSheet,
   ageAdjust, effectiveChars, damageBonusBuild, occupationAllowed,
+  OCCUPATIONS, normalizeHouseRules,
 } from '../shared/coc7e.js';
 import { buildDiceBotCommand, DICEBOT_FORMATS } from '../shared/dicebot.js';
 import { buildCardBackup, buildCardMarkdown, importCardData } from '../shared/cardmd.js';
@@ -73,10 +74,11 @@ const mixed = {
 const findings = auditSheet(mixed, { forbidMixedPoints: true, creditOccOnly: true }).findings.map((f) => f.id);
 ok('同技能双点 → error', findings.includes('forbidMixedPoints.sameSkill'));
 ok('信用评级投兴趣点 → error', findings.includes('creditOccOnly'));
-ok('玩家端警告同步', (() => {
-  const w = validateSheet(mixed);
+ok('玩家端警告同步（仅开启禁混点时）', (() => {
+  const w = validateSheet(mixed, { auditRules: { forbidMixedPoints: true } });
   return w.some((x) => x.includes('同时吃职业点与兴趣点')) && w.some((x) => x.includes('信用评级投入了兴趣点'));
 })());
+ok('未开启禁混点时不提示同技能混点', !validateSheet(mixed).some((x) => x.includes('同时吃职业点与兴趣点')));
 const cleanMixed = {
   ...base,
   skills: blankSkills().map((s) => (s.id === 'spotHidden' ? { ...s, interest: 30 } : s)),
@@ -227,6 +229,26 @@ ok('乘法结果也向下取整（APP 81 × 1.5 = 121）', (() => {
   const charm = d.skills.find((x) => x.key === 'charm');
   return charm?.base === 121;
 })());
+
+
+section('规则细节修复：探险家二选一 / 忽略年龄');
+ok('探险家（古典）未选任一项时，攀爬/游泳都不算本职', (() => {
+  const occ = OCCUPATIONS.find((o) => o.id === 53);
+  const a = occupationAllowed(occ, { choices: [] });
+  return !a.has('climb') && !a.has('swim');
+})());
+ok('探险家（古典）选游泳后只有游泳算本职', (() => {
+  const occ = OCCUPATIONS.find((o) => o.id === 53);
+  const a = occupationAllowed(occ, { choices: ['swim'] });
+  return a.has('swim') && !a.has('climb');
+})());
+ok('忽略年龄规则可被房规白名单接受', normalizeHouseRules([{ type: 'ignoreAge' }])[0]?.type === 'ignoreAge');
+ok('忽略年龄规则不套用年龄补正（APP 65 不再 −5）', (() => {
+  const sheet = { ...base, applyAgeAdjust: true };
+  return computeSheet(sheet).eff.APP === 60 && computeSheet(sheet, { ignoreAge: true }).eff.APP === 65;
+})());
+ok('忽略年龄规则隐藏年龄范围提示', !validateSheet({ ...base, age: 130 }, { ignoreAge: true }).some((x) => x.includes('年龄超')));
+ok('忽略年龄规则隐藏教育未结算提示', !auditSheet({ ...base, applyAgeAdjust: true }, {}, { ignoreAge: true }).findings.some((f) => f.id === 'eduUnsettled'));
 
 console.log(`\n================ 自检：${pass} 通过 / ${fails.length} 失败 ================`);
 if (fails.length) { console.log('失败项：\n - ' + fails.join('\n - ')); process.exit(1); }

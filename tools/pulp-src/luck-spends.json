@@ -1,0 +1,133 @@
+{
+  "source": "pulp通俗克苏鲁.md @6978-7356；_draft/03-system.md §1",
+  "note": "Pulp 的幸运是『可花的资源』。价目表决定 sheet 上 luck 字段的运行语义；不可用清单是硬约束，UI 与后端都必须拦。",
+  "recovery": {
+    "when": "每次聚会开始",
+    "roll": "1d100",
+    "ifAboveCurrent": {
+      "dice": "2d10",
+      "add": 10,
+      "combine": "sum"
+    },
+    "else": {
+      "dice": "1d10",
+      "add": 5,
+      "combine": "sum"
+    },
+    "cap": 99,
+    "npc": "NPC 幸运 = POW，不随聚会重置；喽啰无幸运"
+  },
+  "forbidden": [
+    {
+      "id": "luck_check",
+      "zh": "幸运检定本身"
+    },
+    {
+      "id": "damage_roll",
+      "zh": "伤害掷骰"
+    },
+    {
+      "id": "pushed_result",
+      "zh": "孤注一掷的结果"
+    },
+    {
+      "id": "improvement",
+      "zh": "幕间成长检定"
+    },
+    {
+      "id": "replace_san_check",
+      "zh": "替代理智检定（但可降低理智损失）"
+    }
+  ],
+  "entries": [
+    {
+      "id": "adjust_roll",
+      "zh": "调整检定骰点",
+      "cost": {
+        "kind": "perPoint",
+        "value": 1
+      },
+      "scope": "技能/属性检定，掷骰之后 1:1 修正",
+      "note": "把骰点调到 01 只算极限成功，不算大成功；唯一例外：战斗中双方都极限成功时，调 01 者赢得对抗。"
+    },
+    {
+      "id": "avoid_fumble",
+      "zh": "免除近战大失败 / 枪械故障",
+      "cost": {
+        "kind": "fixed",
+        "value": 10
+      },
+      "scope": "近战大失败、枪械故障（卡壳/哑弹后果）",
+      "note": "骰点不动，本次攻击仍失败；只免『武器被毁/卡壳』后果。"
+    },
+    {
+      "id": "halve_san",
+      "zh": "减半理智损失",
+      "cost": {
+        "kind": "multiplier",
+        "value": 2,
+        "per": "san"
+      },
+      "scope": "任何理智损失",
+      "note": "损失 8 → 花 16 → 实际损失 4。可与『百折不挠』叠加（20 损失：40 幸运减半到 10，再花 5 → 5）。"
+    },
+    {
+      "id": "indomitable",
+      "zh": "百折不挠（天赋）",
+      "cost": {
+        "kind": "perPoint",
+        "value": 1,
+        "per": "san"
+      },
+      "scope": "持有该天赋者，1:1 抵消 SAN 损失",
+      "requires": "talent:百折不挠",
+      "note": "与减半理智损失可叠加。"
+    },
+    {
+      "id": "flesh_wound",
+      "zh": "擦伤而已",
+      "cost": {
+        "kind": "fixed",
+        "value": 20
+      },
+      "effect": {
+        "type": "heal",
+        "dice": "1d6",
+        "cap": "maxHp"
+      },
+      "scope": "受伤后立即",
+      "note": "立即回复 1D6 HP，不超过上限。"
+    },
+    {
+      "id": "stay_conscious",
+      "zh": "维持意识",
+      "cost": {
+        "kind": "escalating",
+        "base": 1,
+        "factor": 2
+      },
+      "scope": "HP 归零后每轮结束前",
+      "note": "1/2/4/8/16…；付不出即昏迷。"
+    },
+    {
+      "id": "avoid_death",
+      "zh": "避免死亡",
+      "cost": {
+        "kind": "all"
+      },
+      "minLuck": 30,
+      "effect": {
+        "type": "heal",
+        "dice": "1d6",
+        "add": 1
+      },
+      "scope": "受到致死伤害时",
+      "note": "花光全部幸运（须 ≥30），立即 +1D6+1 HP；伤势仍在，免 CON 检定。"
+    }
+  ],
+  "crit": {
+    "critical": "自然 01",
+    "fumble": "100（战斗外的大失败不可用幸运避免）",
+    "luckTo01": "只升级为极限成功；双方极限对抗时调 01 者获胜"
+  }
+}

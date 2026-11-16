@@ -14,7 +14,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  AlertTriangle, CheckCircle, ClipboardCheck, Copy, Crown, Eye, GraduationCap, Plus, RefreshCw,
+  AlertTriangle, CheckCircle, ClipboardCheck, Clock, Copy, Crown, Eye, GraduationCap, Plus, RefreshCw,
   Power, RotateCcw, Save, Scale, Shield, Trash2, Users, Wand2, X, XCircle,
 } from 'lucide-react';
 import {
@@ -25,7 +25,7 @@ import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../../lib/api.js';
 import { eduGrowthLabel, grantEduReroll } from '../../../shared/coc7e.js';
 import EduQuickModal from './EduQuickModal.jsx';
 import {
-  Badge, Button, EmptyState, Field, Input, NumberInput, PageHeader, Panel, Tabs,
+  Badge, Button, EmptyState, Field, Input, NumberInput, PageHeader, Panel, Popconfirm, Tabs,
   Select, Textarea, Toggle, cx,
 } from '../ui.jsx';
 
@@ -105,7 +105,7 @@ export default function KpReviewCenter({ currentUser, showToast, showConfirm, on
       />
 
       {tab === 'queue' && (
-        <QueueTab showToast={showToast} showConfirm={showConfirm} onOpenCharacter={onOpenCharacter} currentUser={currentUser} />
+        <QueueTab showToast={showToast} onOpenCharacter={onOpenCharacter} currentUser={currentUser} />
       )}
       {tab === 'batch' && <BatchTab showToast={showToast} onOpenCharacter={onOpenCharacter} />}
       {tab === 'rules' && <RulesTab showToast={showToast} showConfirm={showConfirm} currentUser={currentUser} />}
@@ -115,7 +115,7 @@ export default function KpReviewCenter({ currentUser, showToast, showConfirm, on
 }
 
 // ------------------------------------------------------------------ 审核队列
-function QueueTab({ showToast, showConfirm, onOpenCharacter, currentUser }) {
+function QueueTab({ showToast, onOpenCharacter, currentUser }) {
   const [items, setItems] = useState([]);
   const [status, setStatus] = useState('pending');
   const [loading, setLoading] = useState(true);
@@ -242,6 +242,11 @@ function QueueTab({ showToast, showConfirm, onOpenCharacter, currentUser }) {
                     </dl>
 
                     <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[14px]">
+                      {it.review?.submittedAt ? (
+                        <span className="flex items-center gap-1.5 text-slate-500">
+                          <Clock className="h-4 w-4" />提交于 {new Date(it.review.submittedAt).toLocaleString('zh-CN', { hour12: false })}
+                        </span>
+                      ) : null}
                       {it.eduGrowth?.settled ? (
                         <span className={cx('flex items-center gap-1.5', (it.eduGrowth.rerolls || 0) > 0 ? 'text-amber-500' : 'text-slate-400')}>
                           <GraduationCap className="h-4 w-4" />教育 +{it.eduGrowth.gain}
@@ -286,16 +291,22 @@ function QueueTab({ showToast, showConfirm, onOpenCharacter, currentUser }) {
                   </Button>
                   {it.reviewStatus === 'pending' ? (
                     <>
-                      <Button
-                        variant="ghost"
-                        className={cx(MINI, '!border-emerald-700 !bg-paper-raised !text-emerald-700 hover:!border-emerald-700 hover:!bg-emerald-700 hover:!text-paper-raised')}
-                        onClick={() => showConfirm(`直接通过【${it.name}】？`, () => review(it.id, 'approved'), {
-                          detail: '通过后批复会被清空，只记录审核人与时间。', danger: false,
-                        })}
+                      <Popconfirm
+                        title={`直接通过【${it.name}】？`}
+                        detail="通过后批复会被清空，只记录审核人与时间。"
+                        confirmText="确认通过"
+                        tone="success"
                         disabled={busy}
+                        onConfirm={() => review(it.id, 'approved')}
                       >
-                        <CheckCircle className="h-4 w-4" />通过
-                      </Button>
+                        <Button
+                          variant="ghost"
+                          className={cx(MINI, '!border-emerald-700 !bg-paper-raised !text-emerald-700 hover:!border-emerald-700 hover:!bg-emerald-700 hover:!text-paper-raised')}
+                          disabled={busy}
+                        >
+                          <CheckCircle className="h-4 w-4" />通过
+                        </Button>
+                      </Popconfirm>
                       <Button
                         variant="ghost"
                         className={cx(MINI, '!border-red-500 !bg-paper-raised !text-red-600 hover:!border-red-600 hover:!bg-red-500 hover:!text-paper-raised')}
@@ -317,9 +328,17 @@ function QueueTab({ showToast, showConfirm, onOpenCharacter, currentUser }) {
                       <Textarea rows={2} maxLength={500} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="例：技能点超了 20，请重新分配" />
                     </Field>
                     <div className="mt-3.5 flex flex-wrap gap-2.5">
-                      <Button variant="danger" onClick={() => review(it.id, 'rejected')} disabled={busy || !comment.trim()}>
-                        <XCircle className="w-4 h-4" />确认驳回并发送批复
-                      </Button>
+                      <Popconfirm
+                        title={`确认驳回【${it.name}】？`}
+                        detail="批复会随卡退回给玩家，不写入角色卡。"
+                        confirmText="确认驳回"
+                        disabled={busy || !comment.trim()}
+                        onConfirm={() => review(it.id, 'rejected')}
+                      >
+                        <Button variant="danger" disabled={busy || !comment.trim()}>
+                          <XCircle className="w-4 h-4" />确认驳回并发送批复
+                        </Button>
+                      </Popconfirm>
                       <Button variant="ghost" onClick={() => setOpenId('')}>取消</Button>
                     </div>
                   </div>
@@ -563,6 +582,7 @@ const HOUSE_TYPES = [
   { key: 'deriveBase', label: '技能基础值（改变车卡数值）' },
   { key: 'requireAttr', label: '属性门槛（审卡要求）' },
   { key: 'requireSkill', label: '技能门槛（审卡要求）' },
+  { key: 'ignoreAge', label: '忽略年龄规则（车卡与审卡）' },
 ];
 
 const blankDraft = () => ({
@@ -742,7 +762,9 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
   const addRule = () => {
     const d = draft;
     let rule = null;
-    if (d.type === 'deriveBase') {
+    if (d.type === 'ignoreAge') {
+      rule = { type: 'ignoreAge' };
+    } else if (d.type === 'deriveBase') {
       if (!allowDeriveBase) { showToast('临时规则模式下不能改技能基础值', 'error'); return; }
       rule = {
         type: 'deriveBase', skill: d.skill, source: d.source,
@@ -1013,6 +1035,13 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
                     {typeOptions.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
                   </Select>
                 </Field>
+
+                {draft.type === 'ignoreAge' ? (
+                  <div className="sm:col-span-2 rounded-[2px] border border-amber-600/45 bg-amber-500/[0.06] px-3.5 py-3 text-[14.5px] leading-relaxed text-slate-300">
+                    启用后：车卡不套用年龄补正、不进行教育增强；年龄可填任意非负整数；
+                    审卡时不再提示年龄范围与年龄补正相关的规则项。
+                  </div>
+                ) : null}
 
                 {draft.type === 'deriveBase' ? (
                   <>

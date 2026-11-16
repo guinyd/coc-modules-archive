@@ -34,10 +34,11 @@ import {
   ruleSetById, ruleSetSummary, snapshotRuleSet, houseRulesFor, activeRuleSet, isKeeper,
 } from '../lib/roles.js';
 import { parseCharacter, parseReview, parseBatchReview, vArray, vEnum, vId, vStr } from '../lib/validate.js';
+import { resolveRuleset } from '../../shared/rulesets/index.js';
 import { audit } from '../lib/audit.js';
 import {
   ALL_CHARS, CHARS, STATUSES, REVIEW_STATUSES, computeSheet, validateSheet, blankSkills, auditSheet,
-  blankLegendary, blankLegendaryBonus,
+  blankLegendary, blankLegendaryBonus, houseIgnoresAge,
 } from '../../shared/coc7e.js';
 
 const router = Router();
@@ -132,7 +133,7 @@ function guardEduGrowth(data, actor, current) {
   return data;
 }
 
-function guardKpOnlyFields(data, actor, current) {
+function guardKpOnlyFields(data, actor, current, ctx = {}) {
   if (actor?.role !== 'admin') {
     for (const f of KP_ONLY_FIELDS) {
       if (!(f in data)) continue;
@@ -140,7 +141,7 @@ function guardKpOnlyFields(data, actor, current) {
     }
   }
   // 年龄范围以最终生效的豁免开关为准：玩家伪造豁免标记会被上面的还原挡掉
-  if (data.age !== undefined && data.agePenaltyWaived !== true && (data.age < 15 || data.age > 120)) {
+  if (ctx?.ignoreAge !== true && data.age !== undefined && data.agePenaltyWaived !== true && (data.age < 15 || data.age > 120)) {
     throw badRequest('年龄需在 15-120 之间；要录入超出范围的年龄，请由 KP 勾选「豁免年龄减益」');
   }
   return data;
@@ -193,9 +194,18 @@ function knownModuleIds() {
   return new Set(db().modules.map((m) => m.id));
 }
 
-/** 规则引擎上下文：把 KP 自定义职业模板与房规喂进去，前后端算法才会一致 */
-function rulesCtx(houseRules) {
-  return { customOccupations: customOccupations(), houseRules: Array.isArray(houseRules) ? houseRules : [] };
+/** 规则引擎上下文：把 KP 自定义职业模板、房规与游戏规则集喂进去，前后端算法才会一致 */
+function rulesCtx(houseRules, auditRules, gameSystem) {
+  const list = Array.isArray(houseRules) ? houseRules : [];
+  const rs = resolveRuleset(gameSystem);
+  return {
+    customOccupations: customOccupations(),
+    houseRules: list,
+    auditRules: auditRules && typeof auditRules === 'object' ? auditRules : undefined,
+    ignoreAge: houseIgnoresAge(list),
+    gameSystem: rs.id,
+    ruleset: rs,
+  };
 }
 
 /** 某张卡适用的规则集：提交快照 > 卡上选择 > 审阅者当前规则集 */
@@ -269,7 +279,7 @@ function present(character, { actor, full = true }) {
     return { ...l, moduleTitle: m ? m.title : '（模组已删除）', moduleRegion: m?.region || '', moduleEra: m?.era || '' };
   });
   const rr = cardRules(character, actor);
-  const ctx = rulesCtx(rr.houseRules);
+  const ctx = rulesCtx(rr.houseRules, rr.auditRules, character.gameSystem);
   const derived = computeSheet(character, ctx);
   const warnings = validateSheet(character, ctx);
   const chief = isChief(actor);
@@ -331,6 +341,8 @@ function present(character, { actor, full = true }) {
     review,
     // 编辑器要靠这个字段回显玩家选过的规则集（present 里另外给 ruleSet 摘要）
     ruleSetId: character.ruleSetId || null,
+    // 游戏规则集（经典 7e / 通俗克苏鲁）：列表、详情、编辑器都按它分流
+    gameSystem: character.gameSystem || 'classic7e',
     // 房规 / 规则集：编辑器与审卡页都要显示「这张卡按哪套规则」
     ruleSet: visibleRules(rr.set ? ruleSetSummary(rr.set) : (rr.snapshot ? {
       id: rr.snapshot.setId || null,
@@ -358,6 +370,7 @@ function present(character, { actor, full = true }) {
       skillCount: derived.skills.filter((s) => s.used).length,
       customSkillCount,
       moduleCount: links.length,
+      archetypeName: derived.archetype?.zh || '',
       spent: derived.spent,
       budget: derived.budget,
       warningCount: warnings.length,
@@ -396,11 +409,17 @@ function present(character, { actor, full = true }) {
     armorPenalty: character.armorPenalty || 0,
     occPicks: character.occPicks || { free: [], social: [], choices: [] },
     skills: (character.skills || []).map((s) => ({
-      id: s.id, key: s.key, custom: s.custom || '', occ: s.occ || 0, interest: s.interest || 0, growth: s.growth || 0,
+      id: s.id,
+      key: s.key,
+      custom: s.custom || '',
+      occ: s.occ || 0,
+      interest: s.interest || 0,
+      bonus: s.bonus || 0,
+      growth: s.growth || 0,
     })),
     customSkills: (character.customSkills || []).map((s) => ({
       id: s.id, name: s.name, base: s.base || 0, occ: s.occ || 0,
-      interest: s.interest || 0, growth: s.growth || 0, isOccupation: Boolean(s.isOccupation),
+      interest: s.interest || 0, bonus: s.bonus || 0, growth: s.growth || 0, isOccupation: Boolean(s.isOccupation),
     })),
     weapons: character.weapons || [],
     equipment: character.equipment || '',
@@ -411,6 +430,13 @@ function present(character, { actor, full = true }) {
     extraAssets: character.extraAssets || '',
     skillMarks: character.skillMarks || {},
     background: character.background || {},
+    // 通俗克苏鲁专属输入（经典 7e 卡为空，编辑器与打印会忽略）
+    pulpTone: character.pulpTone || 'standard',
+    chargenMethod: character.chargenMethod || 'roll',
+    archetypeId: character.archetypeId || '',
+    coreChar: character.coreChar || '',
+    talents: Array.isArray(character.talents) ? character.talents : [],
+    keyConnection: character.keyConnection || '',
     experience: character.experience || '',
     moduleLinks: links,
     derived,
@@ -548,20 +574,20 @@ router.post('/characters', (req, res) => {
   enforceCharacterQuota(ownerId);
   // 建房时可直接选用一套房规（玩家自己的或全局的）
   const chosen = resolveChosenSet(req.user, req.body?.ruleSetId);
+  const rctx = rulesCtx(chosen?.houseRules || [], chosen?.auditRules, req.body?.gameSystem);
   // 首次保存也要过教育增强守卫：防止建卡请求里夹带伪造的结算流水
   const data = stampLegendary(guardEduGrowth(guardKpOnlyFields(
-    parseCharacter(req.body, {
-      knownModuleIds: knownModuleIds(), ctx: rulesCtx(chosen?.houseRules || []),
-    }),
+    parseCharacter(req.body, { knownModuleIds: knownModuleIds(), ctx: rctx }),
     req.user,
     null,
+    rctx,
   ), req.user, null), req.user);
   const now = Date.now();
   const character = {
     id: newId('c'),
     ownerId,
     ...data,
-    skills: data.skills && data.skills.length ? data.skills : blankSkills(),
+    skills: data.skills && data.skills.length ? data.skills : blankSkills(resolveRuleset(data.gameSystem)),
     custody: [],
     ruleSetId: chosen ? chosen.id : null,
     ruleSnapshot: null,
@@ -589,12 +615,13 @@ router.put('/characters/:id', (req, res) => {
   const c = loadWritable(req);
   // 归属不可被改写：即使管理员代改，也不会把卡转移到别人名下
   // current 传入存档：请求体没带的字段（如「模组经历」）沿用存档值，而不是被当成清空
+  const putRR = cardRules(c, req.user);
+  const putCtx = rulesCtx(putRR.houseRules, putRR.auditRules, req.body?.gameSystem || c.gameSystem);
   const data = stampLegendary(guardEduGrowth(guardKpOnlyFields(
-    parseCharacter(req.body, {
-      knownModuleIds: knownModuleIds(), current: c, ctx: rulesCtx(),
-    }),
+    parseCharacter(req.body, { knownModuleIds: knownModuleIds(), current: c, ctx: putCtx }),
     req.user,
     c,
+    putCtx,
   ), req.user, c), req.user);
   delete data.ownerId;
   Object.assign(c, data, { updatedAt: Date.now() });
@@ -618,12 +645,15 @@ router.patch('/characters/:id', (req, res) => {
   if (!chief && typeof req.body?.ownerId === 'string' && req.body.ownerId && req.body.ownerId !== c.ownerId) {
     throw forbidden('只有首席守秘人才能更改角色卡归属');
   }
+  const patchRR = cardRules(c, req.user);
+  const patchCtx = rulesCtx(patchRR.houseRules, patchRR.auditRules, req.body?.gameSystem || c.gameSystem);
   const data = stampLegendary(guardEduGrowth(guardKpOnlyFields(
     parseCharacter(req.body, {
-      partial: true, knownModuleIds: knownModuleIds(), current: c, ctx: rulesCtx(),
+      partial: true, knownModuleIds: knownModuleIds(), current: c, ctx: patchCtx,
     }),
     req.user,
     c,
+    patchCtx,
   ), req.user, c), req.user);
   delete data.ownerId;
   if (chief && typeof req.body?.ownerId === 'string' && req.body.ownerId) {
@@ -841,7 +871,7 @@ router.post('/characters/:id/review', requireAdmin, (req, res) => {
   const { verdict, comment } = parseReview(req.body);
   // 审核以这张卡提交时冻结的规则集为准（房规 + 审卡规则同源）
   const rr = cardRules(c, req.user);
-  const ctx = rulesCtx(rr.houseRules);
+  const ctx = rulesCtx(rr.houseRules, rr.auditRules, c.gameSystem);
   const result = auditSheet(c, rr.auditRules, ctx);
   const now = Date.now();
 
@@ -915,7 +945,7 @@ router.post('/admin/audit/batch', requireAdmin, (req, res) => {
       ownerName: ownerNameOf(c.ownerId),
       reviewStatus: c.reviewStatus || 'none',
       updatedAt: c.updatedAt,
-      ...auditSheet(c, rr.auditRules, rulesCtx(rr.houseRules)),
+      ...auditSheet(c, rr.auditRules, rulesCtx(rr.houseRules, rr.auditRules, c.gameSystem)),
     };
   });
   audit(req, 'admin.audit_batch', {
@@ -960,7 +990,7 @@ router.post('/admin/reviews/batch', requireAdmin, (req, res) => {
       comment: verdict === 'rejected' ? comment : '',
       stats: (() => {
         const rr = cardRules(c, req.user);
-        return auditSheet(c, rr.auditRules, rulesCtx(rr.houseRules)).stats;
+        return auditSheet(c, rr.auditRules, rulesCtx(rr.houseRules, rr.auditRules, c.gameSystem)).stats;
       })(),
       findings: [],
       batch: true,
@@ -989,7 +1019,7 @@ router.post('/admin/audit/:id', requireAdmin, (req, res) => {
     name: c.name,
     ownerName: ownerNameOf(c.ownerId),
     rules: rr.auditRules,
-    ...auditSheet(c, rr.auditRules, rulesCtx(rr.houseRules)),
+    ...auditSheet(c, rr.auditRules, rulesCtx(rr.houseRules, rr.auditRules, c.gameSystem)),
   });
 });
 

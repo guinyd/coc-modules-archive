@@ -24,10 +24,12 @@ import {
   NAMED_SKILL_HINT, OCCUPATIONS, SKILL_BY_KEY, SOCIAL_SKILLS, STATUSES, STATUS_LABEL,
   WEAPONS, ageAdjust, agePoolKeys, agePoolPoints, defaultAgeAlloc, resolveAgeAlloc,
   occupationBranchHints, blankCustomSkill, blankSheet, blankSkills, computeSheet,
-  currenciesFor, DEFAULT_CURRENCY, isNamedSkill, specOptions, validateSheet,
+  currenciesFor, DEFAULT_CURRENCY, specOptions, validateSheet,
   blankEduGrowth, blankLegendary, blankLegendaryBonus, grantEduReroll, resetEduGrowth, houseRuleSummary,
   AUDIT_RULE_META, DEFAULT_AUDIT_RULES,
 } from '../../../shared/coc7e.js';
+import { CLASSIC_ID, GAME_SYSTEMS, resolveRuleset } from '../../../shared/rulesets/index.js';
+import { PULP_CRIT, PULP_HEALING, PULP_LUCK_SPENDS, PULP_TONES, pulpTalentTables } from '../../../shared/rulesets/pulp.js';
 import { rollCharacteristics, rollLuck, educationCheck } from '../../lib/dice.js';
 import {
   SPELL_CATALOG, SPELL_CATEGORIES, TOME_CATALOG, SPELL_LIMIT, TOME_LIMIT,
@@ -58,8 +60,11 @@ const occultId = (prefix) => `${prefix}_${Date.now().toString(36)}${Math.random(
 /** 把后端返回的角色卡对象（或访客草稿）转成可编辑的表单数据 */
 export function toEditableSheet(character) {
   if (!character) return { ...blankSheet(), ruleSetId: '' };
+  const gameSystem = character.gameSystem || (typeof character.ruleSet === 'string' ? character.ruleSet : '') || CLASSIC_ID;
+  const R = resolveRuleset(gameSystem);
   return {
     ruleSetId: character.ruleSetId || '',
+    gameSystem: R.id,
     name: character.name || '',
     playerName: character.playerName || '',
     occupationId: character.occupationId === undefined || character.occupationId === null
@@ -82,9 +87,9 @@ export function toEditableSheet(character) {
     agePenaltyWaived: character.agePenaltyWaived === true,
     notes: character.notes || '',
     occPicks: character.occPicks || { free: [], social: [], choices: [] },
-    skills: (character.skills && character.skills.length ? character.skills : blankSkills())
-      .map((s) => ({ ...s })),
-    customSkills: (character.customSkills || []).map((s) => ({ ...s })),
+    skills: (character.skills && character.skills.length ? character.skills : blankSkills(R))
+      .map((s) => ({ ...s, bonus: Number(s.bonus) || 0 })),
+    customSkills: (character.customSkills || []).map((s) => ({ ...s, bonus: Number(s.bonus) || 0 })),
     skillMarks: { ...(character.skillMarks || {}) },
     weapons: (character.weapons && character.weapons.length
       ? character.weapons
@@ -97,6 +102,13 @@ export function toEditableSheet(character) {
     extraAssets: character.extraAssets || '',
     background: { ...blankSheet().background, ...(character.background || {}) },
     experience: character.experience || '',
+    // 通俗克苏鲁扩展字段
+    chargenMethod: character.chargenMethod || 'roll',
+    pulpTone: character.pulpTone || 'standard',
+    archetypeId: character.archetypeId || '',
+    coreChar: character.coreChar || '',
+    talents: Array.isArray(character.talents) ? character.talents.filter((t) => typeof t === 'string') : [],
+    keyConnection: character.keyConnection || '',
     // 「模组经历」在详情页维护，但存档是全量 PUT，这里必须原样带上，
     // 否则编辑保存会把关联模组清空（服务端也会做缺省保护）。
     moduleLinks: (character.moduleLinks || []).map((l) => ({
@@ -156,9 +168,273 @@ function DerivedGrid({ derived }) {
   );
 }
 
+// ------------------------------------------------------------------ 规则选择 / 通俗克苏鲁
+
+/** 新建卡第一步：选择游戏规则（两套规则各自独立的数据与公式） */
+function SystemPicker({ onPick }) {
+  return (
+    <div className="mx-auto max-w-4xl space-y-7 px-1 py-8 sm:py-12">
+      <div className="space-y-2 text-center">
+        <p className="font-mono text-[14px] tracking-[0.32em] text-ink-mute">建立调查员档案</p>
+        <h1 className="font-serif text-[27px] font-bold tracking-[0.01em] text-ink">先选择要使用的游戏规则</h1>
+        <p className="mx-auto max-w-xl text-[15px] leading-[1.8] text-ink-soft">
+          两套规则各自维护技能表、职业表与审卡标准。规则会记录在角色卡上，之后的审卡、打印与导出都按这套规则解读。
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {GAME_SYSTEMS.map((g) => (
+          <button
+            key={g.id}
+            type="button"
+            onClick={() => onPick(g.id)}
+            className="group flex flex-col items-start gap-3 rounded-[2px] border border-line-strong bg-paper-raised p-5 text-left transition-all duration-300 hover:-translate-y-0.5 hover:border-vermilion/60 hover:shadow-[0_12px_32px_-20px_rgba(0,0,0,0.5)]"
+          >
+            <div className="flex w-full items-start justify-between gap-3">
+              <div>
+                <h2 className="font-serif text-[20px] font-bold text-ink">{g.name}</h2>
+                <p className="mt-0.5 text-[13.5px] text-ink-mute">{g.tag}</p>
+              </div>
+              <Badge tone={g.id === CLASSIC_ID ? 'slate' : 'amber'}>{g.short}</Badge>
+            </div>
+            <p className="text-[15px] leading-[1.75] text-ink-soft">{g.desc}</p>
+            <ul className="space-y-1 text-[14px] leading-[1.7] text-ink-soft">
+              {(g.bullets || []).map((b) => (
+                <li key={b} className="flex gap-1.5"><span className="text-ochre">·</span><span>{b}</span></li>
+              ))}
+            </ul>
+            <span className="mt-auto inline-flex items-center gap-1 pt-1 text-[14.5px] font-semibold text-vermilion">
+              用这套规则开始<span aria-hidden>→</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 通俗克苏鲁：原型、核心属性、通俗档位与天赋 */
+function HeroPanel({
+  sheet, derived, R, onTone, onArchetype, onCoreChar, onToggleTalent,
+}) {
+  const tone = PULP_TONES.find((t) => t.id === (sheet.pulpTone || 'standard')) || PULP_TONES[1];
+  const tables = useMemo(() => pulpTalentTables(), []);
+  const talents = sheet.talents || [];
+  const arche = derived.archetype;
+  const raw = arche ? R.archetypeById[arche.id] : null;
+  const range = derived.talentRange || tone.talents;
+  const countOk = range.includes(talents.length);
+
+  return (
+    <Panel className="space-y-5 p-5 sm:p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-2.5">
+        <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink">
+          <Crown className="h-4 w-4 text-ochre" />英雄原型与通俗档位
+        </h3>
+        <span className="text-[13.5px] text-ink-mute">原型决定核心属性、100 点英雄奖励技能范围与部分强制天赋</span>
+      </div>
+
+      <div>
+        <p className="mb-2 text-[14px] font-semibold tracking-[0.04em] text-ink-soft">通俗档位</p>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {PULP_TONES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onTone(t.id)}
+              className={cx('rounded-[2px] border p-3 text-left transition',
+                tone.id === t.id ? 'border-forest bg-forest/[0.06]' : 'border-line-strong bg-paper-raised hover:border-forest/45')}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
+                <span className="font-serif text-[15px] font-bold text-ink">{t.label}</span>
+                <span className="font-mono text-[12.5px] text-ink-mute">HP÷{t.hpDivisor} · 天赋 {t.talents.join('~')}</span>
+              </div>
+              <p className="mt-1 text-[13px] leading-[1.65] text-ink-soft">{t.hint}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field className={FIELD} label="英雄原型" required>
+          <Select value={sheet.archetypeId || ''} onChange={(e) => onArchetype(e.target.value)}>
+            <option value="">选择原型…</option>
+            {R.archetypes.map((a) => (
+              <option key={a.id} value={a.id}>{a.zh}{(a.coreChar || []).length ? ` · 核心${a.coreChar.join('/')}` : ''}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field className={FIELD} label="核心属性" hint="(1D6+13)×5 = 70–95">
+          <Select value={sheet.coreChar || ''} onChange={(e) => onCoreChar(e.target.value)} disabled={!arche}>
+            <option value="">{arche ? '选择核心属性…' : '先选原型'}</option>
+            {(arche?.coreChar || []).map((k) => <option key={k} value={k}>{CHAR_LABEL[k]} {k}</option>)}
+          </Select>
+        </Field>
+      </div>
+
+      {arche ? (
+        <div className="space-y-1.5 rounded-[2px] border border-line-strong bg-paper-deep/40 p-3.5 text-[14px] leading-[1.75] text-ink-soft">
+          <div className="flex flex-wrap items-center gap-2 text-ink">
+            <b className="font-serif text-[15px]">{arche.zh}</b>
+            {arche.en ? <span className="font-mono text-[12.5px] text-ink-mute">{arche.en}</span> : null}
+            <Badge tone="amber">奖励点 {derived.budget.bonus}</Badge>
+            <Badge tone="cyan">可投技能 {arche.bonusCount} 项</Badge>
+            {arche.talentForced.length ? <Badge tone="red">强制天赋：{arche.talentForced.map((id) => R.talentById?.[id]?.zh || id).join('、')}</Badge> : null}
+          </div>
+          {arche.traits ? <p>性格标签：{arche.traits}</p> : null}
+          {arche.suggestedOccupations?.length ? <p className="text-ink-mute">建议职业：{arche.suggestedOccupations.join(' / ')}</p> : null}
+          {raw?.bonusSkillRaw ? <p className="text-ink-mute">原书奖励技能：{raw.bonusSkillRaw}</p> : null}
+        </div>
+      ) : (
+        <p className="rounded-[2px] border border-amber-600/45 bg-amber-500/[0.06] p-3.5 text-[14px] leading-[1.75] text-ink-soft">
+          通俗克苏鲁必须先选原型：原型决定核心属性、100 点英雄奖励点能投在哪些技能上，部分原型还会强制指定天赋（如「无情斗士 → 坚定不移」）。
+        </p>
+      )}
+
+      <div>
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-[14px] font-semibold tracking-[0.04em] text-ink-soft">天赋（四张 d10 表，共 40 条）</p>
+          <span className={cx('font-mono text-[13px]', countOk ? 'text-forest' : 'text-ochre')}>
+            已选 {talents.length} 项 · 本档要求 {range.join(' 或 ')} 项
+          </span>
+        </div>
+        <div className="space-y-2">
+          {tables.map((tb) => {
+            const picked = tb.rows.filter((t) => talents.includes(t.id));
+            return (
+              <details key={tb.key} open={picked.length > 0} className="rounded-[2px] border border-line-strong bg-paper-raised">
+                <summary className="flex cursor-pointer flex-wrap items-center gap-2 px-3 py-2 text-[14px] font-semibold text-ink-soft">
+                  {tb.zh}<span className="font-mono text-[12.5px] text-ink-mute">表 {tb.table}</span>
+                  {picked.length ? <Badge tone="amber">已选 {picked.length}</Badge> : null}
+                </summary>
+                <div className="grid gap-1.5 border-t border-line p-2.5 sm:grid-cols-2">
+                  {tb.rows.map((t) => {
+                    const on = talents.includes(t.id);
+                    const forced = (arche?.talentForced || []).includes(t.id);
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => onToggleTalent(t.id)}
+                        className={cx('flex items-start gap-2 rounded-[2px] border px-2 py-1.5 text-left transition',
+                          on ? 'border-vermilion/50 bg-vermilion/[0.06]' : 'border-line bg-paper hover:border-ink-mute')}
+                      >
+                        <span className="mt-0.5 shrink-0 font-mono text-[12.5px] text-ink-mute">{String(t.roll).padStart(2, '0')}</span>
+                        <span className="min-w-0">
+                          <span className="block text-[14px] font-semibold text-ink">{t.zh}{forced ? ' · 强制' : ''}</span>
+                          <span className="block text-[12.5px] leading-[1.55] text-ink-soft">{t.effect}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </details>
+            );
+          })}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+/** 幸运花费的中文描述（数据来自 luck-spends.json，此处只做展示格式化） */
+function luckCostText(cost) {
+  if (!cost) return '—';
+  const v = Number(cost.value) || 0;
+  switch (cost.kind) {
+    case 'perPoint': return cost.per === 'san' ? '每 1 点损失（1:1 抵消）' : '每 1 点（1:1）';
+    case 'fixed': return `${v} 点`;
+    case 'multiplier': return `每 1 点损失需 ${v} 点`;
+    case 'escalating': return `首轮 ${cost.base ?? 1} 点，此后每轮翻倍`;
+    case 'all': return '全部幸运';
+    default: return '—';
+  }
+}
+
+/** 通克速查：幸运花费 / 判定口径 / 治疗与点数池（规则书要点，纯只读参考） */
+function PulpReference() {
+  return (
+    <Panel className="space-y-3 p-4 sm:p-5">
+      <details>
+        <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2">
+          <span className="flex items-center gap-2 text-[15px] font-semibold text-ink">
+            <BookOpen className="h-4 w-4 text-ochre" /> 通俗克苏鲁速查
+          </span>
+          <span className="text-[13px] text-ink-mute">幸运花费 · 判定 · 治疗</span>
+        </summary>
+        <div className="grid gap-5 pt-4 sm:grid-cols-2">
+          <div>
+            <p className="text-[13px] font-semibold text-ink">幸运花费</p>
+            <ul className="mt-2 space-y-2">
+              {PULP_LUCK_SPENDS.map((x) => (
+                <li key={x.id} className="text-[13px] leading-relaxed text-ink-soft">
+                  <span className="text-ink">{x.zh}</span>
+                  <span className="text-ochre"> · {luckCostText(x.cost)}</span>
+                  {x.minLuck ? <span className="text-ink-mute">（需幸运 ≥ {x.minLuck}）</span> : null}
+                  <span className="block text-[12px] text-ink-mute">{x.scope}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <p className="text-[13px] font-semibold text-ink">判定</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">{PULP_CRIT.note}</p>
+            </div>
+            <div>
+              <p className="text-[13px] font-semibold text-ink">生命与治疗</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">{PULP_HEALING.note}</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+                自然恢复 {PULP_HEALING.natural} HP / 天（快速治疗 {PULP_HEALING.fastHeal} HP / 天）· 急救 {PULP_HEALING.firstAid} · 医学 {PULP_HEALING.medicine}（极难成功额外 +{PULP_HEALING.medicineBoost}）
+              </p>
+            </div>
+            <div>
+              <p className="text-[13px] font-semibold text-ink">三套点数池</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+                本职点只投本职与信用评级；英雄奖励点（每原型 100）只投原型技能；兴趣点（智力×2）可投任意技能。三者互不通用，余数作废；技能成功率可以超过 100%。
+              </p>
+            </div>
+          </div>
+        </div>
+      </details>
+    </Panel>
+  );
+}
+
+/** 英雄奖励点分配：只列当前原型白名单里的技能 */
+function BonusPanel({ derived, onSetBonus }) {
+  const total = derived.budget.bonus;
+  if (!total) {
+    return (
+      <div className="rounded-[2px] border border-line-strong bg-paper-deep/40 p-4 text-[14px] leading-[1.75] text-ink-soft">
+        英雄奖励点：<b>先选英雄原型</b>。通俗克苏鲁每个原型固定 100 点，只能投在原型列出的技能上，并且可以与本职点叠加。
+      </div>
+    );
+  }
+  const rows = derived.skills.filter((s) => s.isBonusAllowed);
+  return (
+    <div className="space-y-3 rounded-[2px] border border-amber-600/40 bg-amber-500/[0.05] p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-[14px] font-semibold tracking-[0.04em] text-ink">{derived.archetype?.zh || '原型'} · 英雄奖励点</p>
+        <span className="font-mono text-[13px] text-ink-mute">白名单内可投 {rows.length} 项</span>
+      </div>
+      <ProgressBar used={derived.spent.bonus} total={total} label="英雄奖励点" hint="（每原型 100 点，可与本职点叠加）" />
+      <div className="grid gap-1.5 sm:grid-cols-2">
+        {rows.map((s) => (
+          <label key={s.id} className="flex items-center justify-between gap-2 rounded-[2px] border border-line-strong bg-paper-raised px-2.5 py-1.5">
+            <span className="min-w-0 truncate text-[14px] text-ink-soft">{s.name}</span>
+            <span className="shrink-0 font-mono text-[12.5px] text-ink-mute">{s.base}+{s.occ}+{s.interest}+{s.bonus}</span>
+            <NumberInput blankZero value={s.bonus} onChange={(v) => onSetBonus(s.id, v)} className="!w-16 !py-1 text-center" />
+          </label>
+        ))}
+      </div>
+      {rows.length === 0 ? <p className="text-[13.5px] text-ink-mute">该原型列出的技能都不在当前技能表里，请检查生成数据。</p> : null}
+    </div>
+  );
+}
+
 /** 专攻方向下拉：列出该组的官方常见方向，也允许自己输入 */
-function SpecPicker({ skillKey, value, onChange }) {
-  const options = specOptions(skillKey);
+function SpecPicker({ skillKey, value, onChange, R }) {
+  const options = specOptions(skillKey, R);
   const [customMode, setCustomMode] = useState(() => Boolean(value) && !options.includes(value));
   if (customMode) {
     return (
@@ -200,18 +476,19 @@ function SpecPicker({ skillKey, value, onChange }) {
  * 「任选 N 项社交技能 / 任意 N 项特长」选择器。
  * 自由特长的候选池有几十项，给一个搜索框才找得到；社交技能只有 4 项，平铺更直观。
  */
-function SpecialtyPicker({ group, onToggle }) {
+function SpecialtyPicker({ group, onToggle, R }) {
   const [q, setQ] = useState('');
+  const defs = R?.skillByKey || SKILL_BY_KEY;
   const pool = useMemo(
-    () => group.pool || Object.values(SKILL_BY_KEY).map((s) => s.key),
-    [group.pool],
+    () => group.pool || Object.values(defs).map((s) => s.key),
+    [group.pool, defs],
   );
   const searchable = !group.pool && pool.length > 8;
   const list = useMemo(() => {
     const kw = q.trim().toLowerCase();
     if (!kw) return pool;
-    return pool.filter((k) => (SKILL_BY_KEY[k]?.name || k).toLowerCase().includes(kw));
-  }, [pool, q]);
+    return pool.filter((k) => (defs[k]?.name || k).toLowerCase().includes(kw));
+  }, [pool, q, defs]);
 
   return (
     <div>
@@ -343,6 +620,10 @@ export default function CharacterEditor({
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [occOpen, setOccOpen] = useState(false);
+  // 新建卡时先选游戏规则（官方 7e / 通俗克苏鲁）；编辑既有卡直接进入
+  const [systemPicked, setSystemPicked] = useState(
+    () => Boolean(characterId) || Boolean(initialSheet?.gameSystem),
+  );
   // 骰娘导入：长期存在的输入框 + 解析出的候选卡片
   const [importText, setImportText] = useState('');
   const [importBlocks, setImportBlocks] = useState([]);
@@ -354,7 +635,12 @@ export default function CharacterEditor({
   // 守秘人发布的规则集（房规 + 审卡规则）：玩家在「房规」页选用
   const [ruleSets, setRuleSets] = useState([]);
 
-  const occupations = useMemo(() => [...OCCUPATIONS, ...(customOccupations || [])], [customOccupations]);
+  const R = useMemo(() => resolveRuleset(sheet.gameSystem || CLASSIC_ID), [sheet.gameSystem]);
+  const isPulp = R.id !== CLASSIC_ID;
+  const occupations = useMemo(
+    () => (R.id === CLASSIC_ID ? [...OCCUPATIONS, ...(customOccupations || [])] : R.occupations),
+    [R, customOccupations],
+  );
   const chosenRuleSet = useMemo(
     () => (ruleSets || []).find((s) => s.id === sheet.ruleSetId) || null,
     [ruleSets, sheet.ruleSetId],
@@ -385,7 +671,12 @@ export default function CharacterEditor({
   const rulePageNow = Math.min(rulePage, rulePages);
   const pagedRuleSets = filteredRuleSets.slice((rulePageNow - 1) * RULE_PAGE, rulePageNow * RULE_PAGE);
   useEffect(() => { setRulePage(1); }, [ruleQuery]);
-  const ctx = useMemo(() => ({ customOccupations, houseRules }), [customOccupations, houseRules]);
+  const ignoreAge = useMemo(() => houseRules.some((r) => r?.type === 'ignoreAge'), [houseRules]);
+  const ctx = useMemo(() => ({
+    customOccupations, houseRules, ignoreAge,
+    auditRules: chosenRuleSet?.auditRules,
+    ruleset: R,
+  }), [customOccupations, houseRules, ignoreAge, chosenRuleSet, R]);
 
   /**
    * 编辑既有角色卡时加载数据。
@@ -610,18 +901,29 @@ export default function CharacterEditor({
   // ---------------------------------------------------------- 属性生成
   const luckTwice = derived.ageAdjust.luckRolls > 1;   // 15-19 岁：幸运掷两次取高
 
+  /** 通克核心属性：(1D6+13)×5 → 70–95 */
+  const rollPulpCore = () => (Math.floor(Math.random() * 6 + 1) + 13) * 5;
+  /** 通克初始幸运：(2D6+6)×5 → 40–90 */
+  const rollPulpLuck = () => {
+    const d1 = Math.floor(Math.random() * 6 + 1);
+    const d2 = Math.floor(Math.random() * 6 + 1);
+    return { value: (d1 + d2 + 6) * 5, detail: `${d1}+${d2}+6` };
+  };
+
   const doRollAll = () => {
     const { chars } = rollCharacteristics();
-    const luck = rollLuck(luckTwice);
+    const core = isPulp ? (sheet.coreChar || derived.archetype?.coreChar?.[0] || '') : '';
+    if (core) chars[core] = rollPulpCore();
+    const luck = isPulp ? rollPulpLuck() : rollLuck(luckTwice);
     setSheet((prev) => ({ ...prev, chars: { ...chars, Luck: luck.value } }));
     setDirty(true);
-    showToast(`已生成属性（幸运 ${luck.value}）`);
+    showToast(`已生成属性（幸运 ${luck.value}${core ? ` · 核心 ${CHAR_LABEL[core]} ${chars[core]}` : ''}）`);
   };
 
   const doRollLuck = () => {
-    const luck = rollLuck(luckTwice);
+    const luck = isPulp ? rollPulpLuck() : rollLuck(luckTwice);
     setChar('Luck', luck.value);
-    showToast(`幸运重掷为 ${luck.value}`);
+    showToast(isPulp ? `幸运掷出 ${luck.detail} = ${luck.value}` : `幸运重掷为 ${luck.value}`);
   };
 
   /** 把一组解析结果填进属性；缺失项保持原值 */
@@ -803,7 +1105,7 @@ export default function CharacterEditor({
       const next = occupations.find((o) => String(o.id) === String(id)) || null;
       // 官方只给了一个专攻方向时（如 牧师 → 外语（拉丁语））顺手替玩家选好，避免漏填；
       // 每个技能组只填一个空槽位，玩家已经选过方向的就不动。
-      const singles = occupationBranchHints(next).filter((h) => h.options.length === 1);
+      const singles = occupationBranchHints(next, R).filter((h) => h.options.length === 1);
       let skills = prev.skills;
       if (singles.length) {
         const hasCustom = new Set(prev.skills.filter((s) => s.custom).map((s) => s.key));
@@ -928,9 +1230,9 @@ export default function CharacterEditor({
   /** 官方指定的专攻方向（如 牧师 → 外语（拉丁语）），按技能键索引 */
   const branchHints = useMemo(() => {
     const map = new Map();
-    for (const h of occupationBranchHints(occ)) map.set(h.key, h);
+    for (const h of occupationBranchHints(occ, R)) map.set(h.key, h);
     return map;
-  }, [occ]);
+  }, [occ, R]);
 
   const skillCols = useMemo(() => {
     // 同一个技能的多行（例如两条「格斗」/两条「射击」专攻槽）必须留在同一栏；
@@ -979,12 +1281,12 @@ export default function CharacterEditor({
                                 : <span className="shrink-0 font-bold text-ochre" title="原本职技能">★</span>)
                               : <span className="shrink-0 text-ink-mute/60">·</span>)}
                           <span className={cx('truncate text-ink-soft', (isCredit || isMythos) && 'font-bold text-ink')}>
-                            {SKILL_BY_KEY[s.key]?.name || s.name}
+                            {(R.skillByKey[s.key]?.name) || s.name}
                           </span>
                           {s.spec ? (
-                            <SpecPicker skillKey={s.key} value={s.custom} onChange={(v) => setSkillCustom(s.id, v)} />
+                            <SpecPicker skillKey={s.key} value={s.custom} R={R} onChange={(v) => setSkillCustom(s.id, v)} />
                           ) : null}
-                          {isNamedSkill(s.key) ? (
+                          {(R.skillByKey[s.key]?.flags || []).includes('named') ? (
                             <input
                               value={s.custom}
                               onChange={(e) => setSkillCustom(s.id, e.target.value.slice(0, 24))}
@@ -993,6 +1295,14 @@ export default function CharacterEditor({
                               className={cx('w-[5.5rem] shrink-0 rounded-[2px] border bg-paper-raised px-1.5 py-0.5 text-[12.5px] text-ink',
                                 s.custom ? 'border-line-strong' : 'border-amber-600/60')}
                             />
+                          ) : null}
+                          {s.bonus > 0 ? (
+                            <span
+                              className="shrink-0 rounded-[2px] border border-amber-600/45 bg-ochre/10 px-1 text-[11.5px] text-ochre"
+                              title="英雄奖励点（原型白名单）"
+                            >
+                              +{s.bonus} 奖励
+                            </span>
                           ) : null}
                         </div>
                         {(() => {
@@ -1021,7 +1331,7 @@ export default function CharacterEditor({
                               神话知识 · 不可用点数提升
                             </span>,
                           );
-                          if (isNamedSkill(s.key) && !s.custom) bits.push(
+                          if ((R.skillByKey[s.key]?.flags || []).includes('named') && !s.custom) bits.push(
                             <span key="named" className="text-ochre">未选择{NAMED_SKILL_HINT[s.key]?.label || '名称'}</span>,
                           );
                           return bits.length ? <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11.5px]">{bits}</div> : null;
@@ -1050,6 +1360,53 @@ export default function CharacterEditor({
     return <Panel><div className="p-12 text-center text-ink-soft">正在载入角色卡…</div></Panel>;
   }
 
+  // ---------------------------------------------------------- 通俗克苏鲁（Pulp）
+  const pickSystem = (id) => {
+    const next = resolveRuleset(id);
+    setSystemPicked(true);
+    setSheet((prev) => ({
+      ...prev,
+      gameSystem: next.id,
+      occupationId: '',
+      occPicks: { free: [], social: [], choices: [] },
+      skills: blankSkills(next),
+      customSkills: [],
+      archetypeId: '',
+      coreChar: '',
+      talents: [],
+      keyConnection: '',
+      ruleSetId: '',
+    }));
+    setDirty(true);
+  };
+
+  const setTone = (id) => patch({ pulpTone: id });
+
+  const pickArchetype = (id) => {
+    const a = id ? R.archetypeById?.[id] : null;
+    patch({
+      archetypeId: id,
+      coreChar: a && (a.coreChar || []).length === 1 ? a.coreChar[0] : '',
+      // 换原型后旧的奖励点可能不再在白名单里，统一清零避免隐性超支
+      skills: (sheet.skills || []).map((s) => ({ ...s, bonus: 0 })),
+    });
+  };
+
+  const toggleTalent = (id) => {
+    const forced = derived.archetype?.talentForced || [];
+    const row = R.talentById?.[id];
+    if (row && forced.includes(id)) {
+      showToast('该天赋由原型强制指定，不能取消', 'error');
+      return;
+    }
+    const cur = sheet.talents || [];
+    patch({ talents: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
+  };
+
+  if (!systemPicked) {
+    return <SystemPicker onPick={pickSystem} />;
+  }
+
   const totalSkills = derived.skills.length;
   const usedCount = derived.skills.filter((s) => s.used).length;
 
@@ -1068,6 +1425,7 @@ export default function CharacterEditor({
               </span>
               {guest ? <Badge tone="amber" className="!text-[14px]">访客模式 · 仅存本机</Badge> : null}
               {dirty ? <Badge tone="amber" className="!text-[14px]">未保存</Badge> : <Badge tone="emerald" className="!text-[14px]">已同步</Badge>}
+              {isPulp ? <Badge tone="amber" className="!text-[14px]">通俗克苏鲁</Badge> : null}
             </div>
             <div className="mt-1.5 text-[14px] text-ink-soft">
               {occ ? occ.name : '未选择职业'} · {sheet.age} 岁 · {STATUS_LABEL[sheet.status]}
@@ -1115,6 +1473,9 @@ export default function CharacterEditor({
           <ProgressBar used={derived.spent.occupation} total={derived.budget.occupation} label="职业技能点" />
           <ProgressBar used={derived.spent.interest} total={derived.budget.interest} label="兴趣技能点" hint="（智力×2）" />
         </div>
+        {isPulp ? (
+          <ProgressBar used={derived.spent.bonus} total={derived.budget.bonus} label="英雄奖励点" hint="（每原型 100 点，仅限原型技能）" />
+        ) : null}
         {warnings.length > 0 && <WarningList items={warnings} />}
       </Panel>
 
@@ -1127,6 +1488,18 @@ export default function CharacterEditor({
       {/* ---------------------------------------------------- 属性与职业 */}
       {tab === 'base' && (
         <div className="space-y-5 animate-in fade-in">
+          {isPulp ? (
+            <HeroPanel
+              sheet={sheet}
+              derived={derived}
+              R={R}
+              onTone={setTone}
+              onArchetype={pickArchetype}
+              onCoreChar={(k) => patch({ coreChar: k })}
+              onToggleTalent={toggleTalent}
+            />
+          ) : null}
+          {isPulp ? <PulpReference /> : null}
           <div className="grid lg:grid-cols-3 gap-5">
             <Panel className="space-y-5 p-5 sm:p-6 lg:col-span-2">
               <div className="grid gap-4 sm:grid-cols-2 sm:gap-5">
@@ -1135,8 +1508,8 @@ export default function CharacterEditor({
                 </Field>
                 <Field className={FIELD} label="玩家名"><Input value={sheet.playerName} maxLength={40} onChange={(e) => patch({ playerName: e.target.value })} /></Field>
                 <Field className={FIELD} label="年龄"
-                  hint={sheet.agePenaltyWaived ? 'KP 已豁免年龄减益：可填任意非负整数' : '15-120 之间；影响属性补正与教育增强'}>
-                  <NumberInput min={sheet.agePenaltyWaived ? 0 : 15} max={sheet.agePenaltyWaived ? 999 : 120} value={sheet.age} onChange={setAge} />
+                  hint={(ignoreAge || sheet.agePenaltyWaived) ? (ignoreAge ? '当前房规忽略年龄规则：可填任意非负整数' : 'KP 已豁免年龄减益：可填任意非负整数') : '15-120 之间；影响属性补正与教育增强'}>
+                  <NumberInput min={(ignoreAge || sheet.agePenaltyWaived) ? 0 : 15} max={(ignoreAge || sheet.agePenaltyWaived) ? 999 : 120} value={sheet.age} onChange={setAge} />
                 </Field>
                 <Field className={FIELD} label="性别"><Input value={sheet.gender} maxLength={20} onChange={(e) => patch({ gender: e.target.value })} /></Field>
                 <Field className={FIELD} label="住地"><Input value={sheet.residence} maxLength={40} onChange={(e) => patch({ residence: e.target.value })} /></Field>
@@ -1166,7 +1539,7 @@ export default function CharacterEditor({
                 <Button variant="ghost" onClick={doRollLuck}>重掷幸运</Button>
                 <Button
                   variant="ghost"
-                  onClick={() => showConfirm('清空所有属性与技能投入？', () => patch({ chars: blankSheet().chars, skills: blankSkills(), customSkills: [] }))}
+                  onClick={() => showConfirm('清空所有属性与技能投入？', () => patch({ chars: blankSheet().chars, skills: blankSkills(R), customSkills: [] }))}
                 >
                   <Trash2 className="w-4 h-4" />清空
                 </Button>
@@ -1260,7 +1633,7 @@ export default function CharacterEditor({
                     <p className="mb-2 text-[14px] font-semibold tracking-[0.04em] text-ink-soft">固定本职技能</p>
                     <div className="flex flex-wrap gap-1.5">
                       {[...new Set(occ.keys)].map((k) => (
-                        <Badge key={k} tone="emerald" className="!text-[14px] !tracking-[0.02em]">★ {SKILL_BY_KEY[k]?.name || k}</Badge>
+                        <Badge key={k} tone="emerald" className="!text-[14px] !tracking-[0.02em]">★ {R.skillByKey[k]?.name || k}</Badge>
                       ))}
                       <Badge tone="amber" className="!text-[14px] !tracking-[0.02em]">★ 信用评级</Badge>
                     </div>
@@ -1294,7 +1667,7 @@ export default function CharacterEditor({
                               className={cx('rounded-[2px] border px-2.5 py-1.5 text-[14px] font-semibold transition',
                                 on ? 'border-forest bg-forest text-paper-raised' : 'border-line-strong bg-paper-raised text-ink-soft hover:border-forest/50')}
                             >
-                              {SKILL_BY_KEY[k]?.name || k}
+                              {R.skillByKey[k]?.name || k}
                             </button>
                           );
                         })}
@@ -1303,7 +1676,7 @@ export default function CharacterEditor({
                   ))}
 
                   {specGroups.map((g) => (
-                    <SpecialtyPicker key={g.type} group={g} onToggle={togglePick} />
+                    <SpecialtyPicker key={g.type} group={g} onToggle={togglePick} R={R} />
                   ))}
                 </div>
               )}
@@ -1324,6 +1697,11 @@ export default function CharacterEditor({
                 <span className="text-[14px] text-ink-mute">{derived.ageAdjust.label}</span>
               </div>
             </div>
+            {isPulp ? (
+              <p className="mb-4 border-l-2 border-amber-600/50 bg-amber-500/[0.06] px-3.5 py-2.5 text-[14px] leading-[1.75] text-ink-soft">
+                通俗克苏鲁不套用年龄补正与教育增强：属性直接使用掷骰结果，年龄只作记录（本页下方的补正控件在该规则下不参与计算）。
+              </p>
+            ) : null}
             {currentUser?.role === 'admin' ? (
               <div className="mb-4 space-y-3 rounded-[2px] border border-amber-600/40 bg-amber-500/[0.06] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1444,19 +1822,25 @@ export default function CharacterEditor({
             </div>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Toggle
-                checked={sheet.applyAgeAdjust}
-                onChange={(v) => patch({ applyAgeAdjust: v })}
-                label="自动套用年龄补正"
-                hint="外貌为固定减值；力量/体型/体质/敏捷为合计减 N 点，由玩家自行分配"
-              />
+              {ignoreAge ? (
+                <div className="rounded-[2px] border border-amber-600/40 bg-amber-500/[0.06] px-4 py-3 text-[14px] leading-[1.7] text-ink-soft">
+                  当前房规启用了「忽略年龄规则」：不套用年龄补正，也不进行教育增强。
+                </div>
+              ) : (
+                <Toggle
+                  checked={sheet.applyAgeAdjust}
+                  onChange={(v) => patch({ applyAgeAdjust: v })}
+                  label="自动套用年龄补正"
+                  hint="外貌为固定减值；力量/体型/体质/敏捷为合计减 N 点，由玩家自行分配"
+                />
+              )}
               <Field className={FIELD} label="护甲减值（可选）" hint="穿戴重型护甲时移动力下降">
                 <NumberInput min={0} max={10} value={sheet.armorPenalty} onChange={(v) => patch({ armorPenalty: v === '' ? 0 : v })} />
               </Field>
             </div>
 
             {/* 年龄补正分配：除外貌外都是「合计 −N，自行分配」*/}
-            {sheet.applyAgeAdjust && derived.ageAdjust.poolPoints > 0 && (
+            {!ignoreAge && sheet.applyAgeAdjust && derived.ageAdjust.poolPoints > 0 && (
               <div className={cx('mt-4 p-4 rounded-[3px] border',
                 derived.ageAdjust.allocComplete ? 'border-line-strong bg-paper-deep' : 'border-amber-600/45 bg-amber-500/[0.06]')}>
                 <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
@@ -1512,7 +1896,7 @@ export default function CharacterEditor({
               </div>
             )}
 
-            {sheet.applyAgeAdjust && (
+            {!ignoreAge && sheet.applyAgeAdjust && (
               <div className="mt-4 space-y-3 rounded-[2px] border border-moon/35 bg-moon/[0.05] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="text-[14px] leading-[1.8] text-ink-soft">
@@ -1659,6 +2043,10 @@ export default function CharacterEditor({
             <ProgressBar used={derived.spent.occupation} total={derived.budget.occupation} label="职业技能点" />
             <ProgressBar used={derived.spent.interest} total={derived.budget.interest} label="兴趣技能点" hint="（智力×2）" />
           </div>
+
+          {isPulp ? (
+            <BonusPanel derived={derived} onSetBonus={(id, v) => setSkill(id, 'bonus', v)} />
+          ) : null}
 
           {occ && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[14px] leading-[1.7] text-ink-soft">
@@ -1911,6 +2299,18 @@ export default function CharacterEditor({
                   value={sheet.background?.[key] || ''}
                   onChange={(e) => patch({ background: { ...sheet.background, [key]: e.target.value } })}
                 />
+                {isPulp ? (
+                  <button
+                    type="button"
+                    onClick={() => patch({ keyConnection: sheet.keyConnection === key ? '' : key })}
+                    className={cx('mt-1.5 rounded-[2px] border px-2 py-1 text-[13px] font-semibold transition',
+                      sheet.keyConnection === key
+                        ? 'border-amber-600/60 bg-ochre/10 text-ochre'
+                        : 'border-line-strong bg-paper-raised text-ink-mute hover:border-ochre/50 hover:text-ochre')}
+                  >
+                    {sheet.keyConnection === key ? '★ 关键连接（SAN 自救锚点）' : '☆ 设为关键连接'}
+                  </button>
+                ) : null}
               </Field>
             ))}
           </div>
@@ -1994,6 +2394,11 @@ export default function CharacterEditor({
                         {checks.length ? (
                           <span className="mt-1 block text-[13.5px] leading-relaxed text-ink-mute">
                             另有 {checks.length} 条审卡要求（不改变数值，提交后由守秘人复核）。
+                          </span>
+                        ) : null}
+                        {(set.houseRules || []).some((r) => r?.type === 'ignoreAge') ? (
+                          <span className="mt-1 block text-[13.5px] leading-relaxed text-ochre">
+                            含「忽略年龄规则」：不套用年龄补正，也不进行教育增强。
                           </span>
                         ) : null}
                       </span>
@@ -2375,6 +2780,7 @@ export default function CharacterEditor({
       </Drawer>
 
       <OccupationPicker
+        R={R}
         open={occOpen}
         onClose={() => setOccOpen(false)}
         occupations={occupations}
@@ -2387,21 +2793,22 @@ export default function CharacterEditor({
 }
 
 // ------------------------------------------------------------------ 职业选择
-function OccupationPicker({ open, onClose, onPick, current, derived, occupations }) {
+function OccupationPicker({ open, onClose, onPick, current, derived, occupations, R }) {
+  const defs = R?.skillByKey || SKILL_BY_KEY;
   const [q, setQ] = useState('');
   const list = useMemo(() => {
     const kw = q.trim().toLowerCase();
     if (!kw) return occupations;
     return occupations.filter((o) => o.name.toLowerCase().includes(kw)
       || (o.desc || '').toLowerCase().includes(kw)
-      || o.keys.some((k) => (SKILL_BY_KEY[k]?.name || '').includes(kw)));
-  }, [q, occupations]);
+      || o.keys.some((k) => (defs[k]?.name || '').includes(kw)));
+  }, [q, occupations, defs]);
 
   return (
     <Modal open={open} onClose={onClose} title="选择职业" wide>
       <div className="space-y-4">
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索职业名、简介或本职技能…" autoFocus />
-        <div className="text-[14px] text-ink-mute">共 {list.length} 个职业（含 KP 自定义模板）</div>
+        <div className="text-[14px] text-ink-mute">共 {list.length} 个职业{R?.id === CLASSIC_ID ? '（含 KP 自定义模板）' : '（通俗克苏鲁职业表）'}</div>
         <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
           {list.map((o) => {
             const budget = o.pts
@@ -2432,7 +2839,7 @@ function OccupationPicker({ open, onClose, onPick, current, derived, occupations
                 <div className="flex flex-wrap gap-1 mt-2">
                   {[...new Set(o.keys)].slice(0, 10).map((k) => (
                     <span key={k} className="rounded-[2px] bg-paper-deep px-1.5 py-0.5 text-[14px] text-ink-soft">
-                      {SKILL_BY_KEY[k]?.name || k}
+                      {defs[k]?.name || k}
                     </span>
                   ))}
                   {o.choices?.length ? <span className="rounded-[2px] bg-ochre/10 px-1.5 py-0.5 text-[14px] text-ochre">任选其一 ×{o.choices.length}</span> : null}
@@ -2451,7 +2858,7 @@ function OccupationPicker({ open, onClose, onPick, current, derived, occupations
           {list.length === 0 && <p className="py-8 text-center text-[16px] text-ink-mute">没有匹配的职业</p>}
         </div>
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[16px] leading-[1.7] text-ink-soft">必须从列表中选一个职业；规则书没有的职业请让 KP 在「审卡中心 → 职业模板」里添加。</p>
+          <p className="text-[16px] leading-[1.7] text-ink-soft">{R?.id === CLASSIC_ID ? '必须从列表中选一个职业；规则书没有的职业请让 KP 在「审卡中心 → 职业模板」里添加。' : '通俗克苏鲁使用固定的 68 个职业模板，职业点数与信用评级区间按原书公式。'}</p>
           <Button variant="ghost" onClick={onClose}>关闭</Button>
         </div>
       </div>

@@ -84,6 +84,9 @@ function CharacterCard({
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <Badge tone={STATUS_TONE[item.status] || 'slate'} className="!text-[14px] !tracking-[0.08em]">{STATUS_LABEL[item.status] || item.status}</Badge>
+              {item.gameSystem === 'pulp' ? (
+                <Badge tone="amber" className="!text-[14px] !tracking-[0.08em]">通克 · {item.archetypeName || '未选原型'}</Badge>
+              ) : null}
               {guest
                 ? <Badge tone="amber" className="!text-[14px] !tracking-[0.08em]">本机草稿</Badge>
                 : (item.reviewStatus && item.reviewStatus !== 'none'

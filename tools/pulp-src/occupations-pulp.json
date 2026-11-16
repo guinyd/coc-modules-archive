@@ -1,0 +1,2743 @@
+{
+ "source": "Pulp Cthulhu 中文版 第二章 第四步「确定职业」(书 p.24-34; md:2245-3517)",
+ "note": "68 个职业,按书内出现顺序。points.terms 为必选加项;points.anyOf 为书中「或」分支(取最大),max=true。creditRange 为二元数组[min,max],书中单值会写成[n,n]。enVerified=true 仅表示书内原印英文名(全书仅 Exorcist/Itinerant Worker/Yogi 3 处)。",
+ "occupations": [
+  {
+   "id": "film_actor",
+   "zh": "电影演员",
+   "en": "Film Actor",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "APP",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    20,
+    90
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术(表演)",
+    "乔装",
+    "汽车驾驶",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "心理学",
+    "任意两项其他个人或时代特长(如骑术或格斗)"
+   ],
+   "skillsRaw": "艺术(表演),乔装,汽车驾驶,两项社交技能(取悦、话术、恐吓、说服),心理学,任意两项其他个人或时代特长(如骑术或格斗)。",
+   "contacts": "电影工作室,媒体评论员,作家。",
+   "page": 24,
+   "kpClause": ""
+  },
+  {
+   "id": "stage_actor",
+   "zh": "戏剧演员",
+   "en": "Stage Actor",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "APP",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    9,
+    40
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术(表演)",
+    "乔装",
+    "格斗",
+    "历史",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "心理学",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "艺术(表演),乔装,格斗,历史,两项社交技能(取悦、话术、恐吓、说服),心理学,任意一项其他个人或时代特长。",
+   "contacts": "戏剧产业,报刊艺术批评家,演员公会。",
+   "page": 24,
+   "kpClause": ""
+  },
+  {
+   "id": "investigator",
+   "zh": "事务所侦探",
+   "en": "Investigator",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    20,
+    45
+   ],
+   "creditNote": "",
+   "skills": [
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "格斗(斗殴)",
+    "射击",
+    "法律",
+    "图书馆",
+    "心理学",
+    "潜行",
+    "追踪"
+   ],
+   "skillsRaw": "一项社交技能(取悦、话术、恐吓、说服),格斗(斗殴),射击,法律,图书馆,心理学,潜行,追踪。骰点其他天赋1凶神恶煞:进行恐吓检定时降低一级难度等级,或者获得一个奖励骰,由守秘人判断。奇妙道具:游戏开始时获得一个奇妙道具,见怪奇技术,86页。2吉人天相:回复幸运时,额外投一个1D10。3神话知识:游戏开始时获得10点克苏鲁神话技能。4怪奇技术:可以制造和修理怪奇技术制品,见怪奇技术,86页。5遁入暗影:进行潜行检定时降低一级难度等级,或者获得一个奖励骰,由守秘人判断。如果目标未能6察觉,在暴露之前可以进行两次突袭。能工巧匠:进行操作重型机械、机械维修和电气维修检定时降低一级难度等级,或者获得一个奖励7骰,由守秘人判断。动物朋友:游戏开始时获得一只可靠的动物伙伴,比如猫、狗、鹦鹉;进行驯兽检定时获得一个8奖励骰。伪装大师:进行乔装或艺术/手艺(表演)检定时,可以花费10点幸运来获得一个奖励骰;可以使用腹9语,让声音听起来是从别处发出的;如果有人试图看穿伪装,其侦查或心理学检定提升为困难难度。10早有准备:需要的东西似乎总在手边;可以花费10点幸运(而非幸运检定)在附近找到有用的道具,如手电筒、够长的绳索、武器等。",
+   "contacts": "本地执法机构,客户。",
+   "page": 24,
+   "kpClause": ""
+  },
+  {
+   "id": "archaeologist",
+   "zh": "考古学家",
+   "en": "Archaeologist",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    10,
+    40
+   ],
+   "creditNote": "",
+   "skills": [
+    "估价",
+    "考古",
+    "历史",
+    "外语",
+    "图书馆",
+    "侦查",
+    "机械维修",
+    "导航或科学(任意:如化学、物理、地理等)"
+   ],
+   "skillsRaw": "估价,考古,历史,外语,图书馆,侦查,机械维修,导航或科学(任意:如化学、物理、地理等)。",
+   "contacts": "赞助人,博物馆,大学。",
+   "page": 26,
+   "kpClause": ""
+  },
+  {
+   "id": "artist",
+   "zh": "艺术家",
+   "en": "Artist",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "POW",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    9,
+    50
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术/手艺(任意)",
+    "历史或博物学",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "外语",
+    "心理学",
+    "侦查",
+    "任意两项其他个人或时代特长"
+   ],
+   "skillsRaw": "艺术/手艺(任意),历史或博物学,一项社交技能(取悦、话术、恐吓、说服),外语,心理学,侦查,任意两项其他个人或时代特长。",
+   "contacts": "美术馆,美术评论家,富有的赞助人,广告业者。",
+   "page": 26,
+   "kpClause": ""
+  },
+  {
+   "id": "athlete",
+   "zh": "运动员",
+   "en": "Athlete",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    9,
+    70
+   ],
+   "creditNote": "",
+   "skills": [
+    "攀爬",
+    "跳跃",
+    "格斗(斗殴)",
+    "骑术",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "游泳",
+    "投掷",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "攀爬,跳跃,格斗(斗殴),骑术,一项社交技能(取悦、话术、恐吓、说服),游泳,投掷,任意一项其他个人或时代特长。",
+   "contacts": "体育界,体育专栏作家,其他明星。",
+   "page": 26,
+   "kpClause": ""
+  },
+  {
+   "id": "writer",
+   "zh": "作家",
+   "en": "Writer",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    9,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术(文学)",
+    "历史",
+    "图书馆",
+    "博物学或神秘学",
+    "外语",
+    "母语",
+    "心理学",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "艺术(文学),历史,图书馆,博物学或神秘学,外语,母语,心理学,任意一项其他个人或时代特长。",
+   "contacts": "出版社,文学评论家,历史学家等。",
+   "page": 26,
+   "kpClause": ""
+  },
+  {
+   "id": "stunt_pilot",
+   "zh": "特技飞行员",
+   "en": "Stunt Pilot",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "DEX",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    30,
+    60
+   ],
+   "creditNote": "",
+   "skills": [
+    "会计",
+    "电气维修",
+    "聆听",
+    "机械维修",
+    "导航",
+    "操纵(飞行器)",
+    "侦查",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "会计,电气维修,聆听,机械维修,导航,操纵(飞行器),侦查,任意一项其他个人或时代特长。",
+   "contacts": "前部队关系人,其他飞行员,机场地勤技术人员,商人。",
+   "page": 27,
+   "kpClause": ""
+  },
+  {
+   "id": "bank_robber",
+   "zh": "银行劫匪",
+   "en": "Bank Robber",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    5,
+    75
+   ],
+   "creditNote": "",
+   "skills": [
+    "汽车驾驶",
+    "电气维修或机械维修",
+    "格斗",
+    "射击",
+    "恐吓",
+    "锁匠",
+    "操作重型机械",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "汽车驾驶,电气维修或机械维修,格斗,射击,恐吓,锁匠,操作重型机械,任意一项其他个人或时代特长。",
+   "contacts": "同伙(不论是现在还是以前的),独行罪犯,犯罪组织。",
+   "page": 27,
+   "kpClause": ""
+  },
+  {
+   "id": "bartender",
+   "zh": "酒保",
+   "en": "Bartender",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "APP",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    8,
+    25
+   ],
+   "creditNote": "",
+   "skills": [
+    "会计",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "格斗(斗殴)",
+    "聆听",
+    "心理学",
+    "侦查",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "会计,两项社交技能(取悦、话术、恐吓、说服),格斗(斗殴),聆听,心理学,侦查,任意一项其他个人或时代特长。",
+   "contacts": "常客,犯罪组织。",
+   "page": 27,
+   "kpClause": ""
+  },
+  {
+   "id": "police_officer",
+   "zh": "警官",
+   "en": "Police Officer",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    9,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "格斗(斗殴)",
+    "射击",
+    "急救",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "法律",
+    "心理学",
+    "侦查和下面的一种个人特长:汽车驾驶或骑术"
+   ],
+   "skillsRaw": "格斗(斗殴),射击,击,急救,一项社交技能(取悦、话术、恐吓、说服),法律,心理学,侦查和下面的一种个人特长:汽车驾驶或骑术。",
+   "contacts": "执法机构,本地企业与居民,街头罪犯,犯罪组织。",
+   "page": 27,
+   "kpClause": ""
+  },
+  {
+   "id": "hunter",
+   "zh": "猎人",
+   "en": "Hunter",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    20,
+    50
+   ],
+   "creditNote": "",
+   "skills": [
+    "射击",
+    "聆听或侦查",
+    "博物学",
+    "导航",
+    "外语或生存(任意)",
+    "科学(生物学或植物学)",
+    "潜行",
+    "追踪"
+   ],
+   "skillsRaw": "射击,聆听或侦查,博物学,导航,外语或生存(任意),科学(生物学或植物学),潜行,追踪。",
+   "contacts": "外国政府官员,狩猎监管人员,前客户(大多很有钱),黑市商人与黑社会,动物园主。",
+   "page": 27,
+   "kpClause": ""
+  },
+  {
+   "id": "bounty_hunter",
+   "zh": "赏金猎人",
+   "en": "Bounty Hunter",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    9,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "汽车驾驶",
+    "电子学或电气维修",
+    "格斗或射击",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "法律",
+    "心理学",
+    "追踪",
+    "潜行"
+   ],
+   "skillsRaw": "汽车驾驶,电子学或电气维修,格斗或射击,一项社交技能(取悦、话术、恐吓、说服),法律,心理学,追踪,潜行。",
+   "contacts": "保释业者,本地警察,线人。",
+   "page": 27,
+   "kpClause": ""
+  },
+  {
+   "id": "boxer_wrestler",
+   "zh": "拳击手/摔跤手",
+   "en": "Boxer/Wrestler",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "STR",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    9,
+    60
+   ],
+   "creditNote": "",
+   "skills": [
+    "闪避",
+    "格斗(斗殴)",
+    "恐吓",
+    "跳跃",
+    "心理学",
+    "侦查",
+    "任意两项其他个人或时代特长"
+   ],
+   "skillsRaw": "闪避,格斗(斗殴),恐吓,跳跃,心理学,侦查,任意两项其他个人或时代特长。",
+   "contacts": "运动会主办者,记者,犯罪组织,专业训练人员。",
+   "page": 27,
+   "kpClause": ""
+  },
+  {
+   "id": "butler_maid",
+   "zh": "管家/男女仆",
+   "en": "Butler/Maid",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    9,
+    40
+   ],
+   "creditNote": "取决于雇主家的社会地位和信用等级",
+   "skills": [
+    "会计或估价",
+    "艺术/手艺(任意:如烹饪、裁缝、理发)",
+    "急救",
+    "聆听",
+    "心理学",
+    "侦查",
+    "任意两项其他个人或时代特长"
+   ],
+   "skillsRaw": "会计或估价,艺术/手艺(任意:如烹饪、裁缝、理发),急救,聆听,心理学,侦查,任意两项其他个人或时代特长。",
+   "contacts": "其他家政服务人员、本地企业、家庭用品供应商。",
+   "page": 27,
+   "kpClause": ""
+  },
+  {
+   "id": "burglar",
+   "zh": "窃贼",
+   "en": "Burglar",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "DEX",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    5,
+    40
+   ],
+   "creditNote": "",
+   "skills": [
+    "估价",
+    "攀爬",
+    "电气维修或机械维修",
+    "聆听",
+    "锁匠",
+    "妙手",
+    "潜行",
+    "侦查"
+   ],
+   "skillsRaw": "估价,攀爬,电气维修或机械维修,聆听,锁匠,妙手,潜行,侦查。",
+   "contacts": "赃物贩子,其他的盗贼。",
+   "page": 28,
+   "kpClause": ""
+  },
+  {
+   "id": "chauffeur",
+   "zh": "私人司机",
+   "en": "Chauffeur",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "DEX",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    10,
+    40
+   ],
+   "creditNote": "",
+   "skills": [
+    "汽车驾驶",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "聆听",
+    "机械维修",
+    "导航",
+    "侦查",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "汽车驾驶,两项社交技能(取悦、话术、恐吓、说服),聆听,机械维修,导航,侦查,任意一项其他个人或时代特长。",
+   "contacts": "成功商界人士(包括罪犯),政要。",
+   "page": 28,
+   "kpClause": ""
+  },
+  {
+   "id": "con_man",
+   "zh": "欺诈师",
+   "en": "Con Man",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "APP",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    10,
+    65
+   ],
+   "creditNote": "",
+   "skills": [
+    "估价",
+    "艺术(表演)",
+    "法律或外语",
+    "聆听",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "心理学",
+    "妙手"
+   ],
+   "skillsRaw": "估价,艺术(表演),法律或外语,聆听,两项社交技能(取悦、话术、恐吓、说服),心理学,妙手。",
+   "contacts": "其他的诈骗师,独行罪犯。",
+   "page": 28,
+   "kpClause": ""
+  },
+  {
+   "id": "lone_wolf",
+   "zh": "独行罪犯",
+   "en": "Lone Wolf",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "APP",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    5,
+    65
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术(表演)或乔装",
+    "估价",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "格斗或射击",
+    "锁匠或机械维修",
+    "潜行",
+    "心理学",
+    "侦查"
+   ],
+   "skillsRaw": "艺术(表演)或乔装,估价,一项社交技能(取悦、话术、恐吓、说服),格斗或射击,锁匠或机械维修,潜行,心理学,侦查。",
+   "contacts": "其他罪犯,本地执法机构。",
+   "page": 28,
+   "kpClause": ""
+  },
+  {
+   "id": "cult_leader",
+   "zh": "教团首领",
+   "en": "Cult Leader",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "APP",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    30,
+    60
+   ],
+   "creditNote": "",
+   "skills": [
+    "会计",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "神秘学",
+    "心理学",
+    "侦查",
+    "任意其他两项其他个人特长"
+   ],
+   "skillsRaw": "会计,两项社交技能(取悦、话术、恐吓、说服),神秘学,心理学,侦查,任意其他两项其他个人特长。",
+   "contacts": "主要的信徒都是普通人。不过首领的魅力越高,信徒当中有电影明星或者富有的寡妇之类名人的可能性就越大。",
+   "page": 28,
+   "kpClause": ""
+  },
+  {
+   "id": "dilettante",
+   "zh": "业余艺术爱好者",
+   "en": "Dilettante",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "APP",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    50,
+    99
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术/手艺(任意)",
+    "射击",
+    "外语",
+    "骑术",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "任意三项其他个人或时代特长"
+   ],
+   "skillsRaw": "艺术/手艺(任意),射击,外语,骑术,一项社交技能(取悦、话术、恐吓、说服),任意三项其他个人或时代特长。",
+   "contacts": "多种多样,但通常是背景和趣味相近的人。同好会组织、波希米亚主义者、上流社会。",
+   "page": 28,
+   "kpClause": ""
+  },
+  {
+   "id": "doctor",
+   "zh": "医生",
+   "en": "Doctor",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    30,
+    80
+   ],
+   "creditNote": "",
+   "skills": [
+    "急救",
+    "医学",
+    "外语(拉丁文)",
+    "心理学",
+    "科学(生物学,药学)",
+    "任两种其他学术或个人特长"
+   ],
+   "skillsRaw": "急救、医学、外语(拉丁文)、心理学、科学(生物学,药学),任两种其他学术或个人特长。",
+   "contacts": "其他医生,医护工作者,病人和前病人。",
+   "page": 28,
+   "kpClause": ""
+  },
+  {
+   "id": "drifter",
+   "zh": "流浪者",
+   "en": "Drifter",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "APP",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    0,
+    5
+   ],
+   "creditNote": "",
+   "skills": [
+    "攀爬",
+    "跳跃",
+    "聆听",
+    "导航",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "潜行",
+    "任意两项其他个人或时代特长"
+   ],
+   "skillsRaw": "攀爬,跳跃,聆听,导航,一项社交技能(取悦、话术、恐吓、说服),潜行,任意两项其他个人或时代特长。",
+   "contacts": "其他流浪者,少数友善的铁路工人,城镇里众多的好心人。",
+   "page": 28,
+   "kpClause": ""
+  },
+  {
+   "id": "governor",
+   "zh": "州长",
+   "en": "Governor",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "APP",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    50,
+    90
+   ],
+   "creditNote": "",
+   "skills": [
+    "取悦",
+    "历史",
+    "恐吓",
+    "话术",
+    "聆听",
+    "母语",
+    "说服",
+    "心理学"
+   ],
+   "skillsRaw": "取悦,历史,恐吓,话术,聆听,母语,说服,心理学。",
+   "contacts": "公务员,政府,新闻媒体,企业,外国政府,可能有犯罪组织。",
+   "page": 29,
+   "kpClause": ""
+  },
+  {
+   "id": "engineer",
+   "zh": "工程师",
+   "en": "Engineer",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    30,
+    60
+   ],
+   "creditNote": "",
+   "skills": [
+    "手艺(技术制图)",
+    "电气维修",
+    "图书馆",
+    "机械维修",
+    "操作重型机械",
+    "科学(工程学,物理)",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "手艺(技术制图),电气维修,图书馆,机械维修,操作重型机械,科学(工程学,物理),任意一项其他个人或时代特长。",
+   "contacts": "生意伙伴或部队同事,地方政府,建筑师。",
+   "page": 29,
+   "kpClause": ""
+  },
+  {
+   "id": "entertainer",
+   "zh": "艺人",
+   "en": "Entertainer",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "APP",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    9,
+    70
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术(表演类,如表演、声乐、喜剧等)",
+    "乔装",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "聆听",
+    "心理学",
+    "任意两项其他个人或时代特长"
+   ],
+   "skillsRaw": "艺术(表演类,如表演、声乐、喜剧等),乔装,两项社交技能(取悦、话术、恐吓、说服),聆听,心理学,任意两项其他个人或时代特长。",
+   "contacts": "歌舞杂技团,剧院,电影工作室,娱乐评论家,犯罪组织,电视台(现代)。",
+   "page": 29,
+   "kpClause": ""
+  },
+  {
+   "id": "exorcist",
+   "zh": "驱魔师(Exorcist)",
+   "en": "Exorcist",
+   "enVerified": true,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    25,
+    55
+   ],
+   "creditNote": "",
+   "skills": [
+    "人类学",
+    "历史",
+    "图书馆使用",
+    "聆听",
+    "神秘学",
+    "语言",
+    "心理学",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "人类学,历史,图书馆使用,聆听,神秘学,语言,心理学,任意一项其他个人或时代特长。",
+   "contacts": "宗教组织。",
+   "page": 29,
+   "kpClause": ""
+  },
+  {
+   "id": "explorer",
+   "zh": "探险家",
+   "en": "Explorer",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "APP",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    55,
+    80
+   ],
+   "creditNote": "",
+   "skills": [
+    "攀爬或游泳",
+    "射击",
+    "历史",
+    "跳跃",
+    "博物学",
+    "导航",
+    "外语",
+    "生存"
+   ],
+   "skillsRaw": "攀爬或游泳,射击,历史,跳跃,博物学,导航,外语,生存。",
+   "contacts": "大图书馆,大学,博物馆,富有的赞助者,其他探险家,出版社,外国政府官员,本地土著。",
+   "page": 29,
+   "kpClause": ""
+  },
+  {
+   "id": "federal_agent",
+   "zh": "联邦探员",
+   "en": "Federal Agent",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    20,
+    40
+   ],
+   "creditNote": "",
+   "skills": [
+    "汽车驾驶",
+    "格斗(斗殴)",
+    "射击",
+    "法律",
+    "说服",
+    "潜行",
+    "侦查",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "汽车驾驶,格斗(斗殴),射击,法律,说服,潜行,侦查,任意一项其他个人或时代特长。",
+   "contacts": "联邦司法机构,执法机构,犯罪组织。",
+   "page": 29,
+   "kpClause": ""
+  },
+  {
+   "id": "gambler",
+   "zh": "赌徒",
+   "en": "Gambler",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "APP",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    8,
+    50
+   ],
+   "creditNote": "",
+   "skills": [
+    "会计",
+    "艺术(表演)",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "聆听",
+    "心理学",
+    "妙手",
+    "侦查"
+   ],
+   "skillsRaw": "会计,艺术(表演),两项社交技能(取悦、话术、恐吓、说服),聆听,心理学,妙手,侦查。",
+   "contacts": "其他赌徒,犯罪组织,街头路人。",
+   "page": 29,
+   "kpClause": ""
+  },
+  {
+   "id": "gang_boss",
+   "zh": "黑帮老大",
+   "en": "Gang Boss",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "APP",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    60,
+    95
+   ],
+   "creditNote": "",
+   "skills": [
+    "格斗",
+    "射击",
+    "法律",
+    "聆听",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "心理学",
+    "侦查"
+   ],
+   "skillsRaw": "格斗,射击,法律,聆听,两项社交技能(取悦、话术、恐吓、说服),心理学,侦查。",
+   "contacts": "犯罪组织,街头罪犯,警察,地方政府,政治家,法官,工会,律师,同社区居民。",
+   "page": 29,
+   "kpClause": ""
+  },
+  {
+   "id": "mobster",
+   "zh": "马仔",
+   "en": "Mobster",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    9,
+    20
+   ],
+   "creditNote": "",
+   "skills": [
+    "汽车驾驶",
+    "格斗",
+    "射击",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "心理学",
+    "任意两项其他个人或时代特长"
+   ],
+   "skillsRaw": "汽车驾驶,格斗,射击,两项社交技能(取悦、话术、恐吓、说服),心理学,任意两项其他个人或时代特长。",
+   "contacts": "街头罪犯,警察,企业,同社区居民。",
+   "page": 29,
+   "kpClause": ""
+  },
+  {
+   "id": "driver",
+   "zh": "司机",
+   "en": "Driver",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    9,
+    20
+   ],
+   "creditNote": "",
+   "skills": [
+    "会计",
+    "汽车驾驶",
+    "聆听",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "机械维修",
+    "导航",
+    "心理学",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "会计,汽车驾驶,聆听,一项社交技能(取悦、话术、恐吓、说服),机械维修,导航,心理学,任意一项其他个人或时代特长。",
+   "contacts": "顾客,企业,执法机构和街头路人。",
+   "page": 30,
+   "kpClause": ""
+  },
+  {
+   "id": "femme_fatale",
+   "zh": "女飞贼",
+   "en": "Femme Fatale",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "APP",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    10,
+    80
+   ],
+   "creditNote": "收入很大程度上取决于男伴的收入",
+   "skills": [
+    "艺术/手艺(任意)",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "格斗(斗殴)或射击(手枪)",
+    "汽车驾驶",
+    "聆听",
+    "潜行",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "艺术/手艺(任意),两项社交技能(取悦、话术、恐吓、说服),格斗(斗殴)或射击(手枪),汽车驾驶,聆听,潜行,任意一项其他个人或时代特长。",
+   "contacts": "黑帮,执法机构,本地企业。",
+   "page": 30,
+   "kpClause": ""
+  },
+  {
+   "id": "gentleman_lady",
+   "zh": "绅士、淑女",
+   "en": "Gentleman/Lady",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "APP",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    40,
+    90
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术/手艺(任意)",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "射击(步霰)",
+    "历史",
+    "外语(任意)",
+    "导航",
+    "骑术"
+   ],
+   "skillsRaw": "艺术/手艺(任意),两项社交技能(取悦、话术、恐吓、说服),射击(步霰),历史,外语(任意),导航,骑术。",
+   "contacts": "上流社会和乡绅,政治家,仆人和农民。",
+   "page": 30,
+   "kpClause": ""
+  },
+  {
+   "id": "thug",
+   "zh": "打手、暴徒",
+   "en": "Thug",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "STR",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    5,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "汽车驾驶",
+    "格斗",
+    "射击",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "心理学",
+    "潜行",
+    "侦查"
+   ],
+   "skillsRaw": "汽车驾驶,格斗,射击,两项社交技能(取悦、话术、恐吓、说服),心理学,潜行,侦查。",
+   "contacts": "犯罪组织,本地执法机构,本地企业。",
+   "page": 30,
+   "kpClause": ""
+  },
+  {
+   "id": "assassin",
+   "zh": "刺客",
+   "en": "Assassin",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    30,
+    60
+   ],
+   "creditNote": "",
+   "skills": [
+    "乔装",
+    "电气维修",
+    "格斗",
+    "射击",
+    "锁匠",
+    "机械维修",
+    "潜行",
+    "心理学"
+   ],
+   "skillsRaw": "乔装,电气维修,格斗,射击,锁匠,机械维修,潜行,心理学。",
+   "contacts": "很少,大都是黑社会的人,人们尽量避免和他们交情过深。最强大的杀手也可能得到一个可畏的名声。",
+   "page": 30,
+   "kpClause": ""
+  },
+  {
+   "id": "hobo",
+   "zh": "游民",
+   "en": "Hobo",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "APP",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    0,
+    5
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术/手艺(任意)",
+    "攀爬",
+    "跳跃",
+    "聆听",
+    "锁匠或妙手",
+    "导航",
+    "潜行",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "艺术/手艺(任意),攀爬,跳跃,聆听,锁匠或妙手,导航,潜行,任意一项其他个人或时代特长。",
+   "contacts": "其他游民,少数友好的铁路员工,许多城镇里的好心人。",
+   "page": 30,
+   "kpClause": ""
+  },
+  {
+   "id": "sex_worker",
+   "zh": "性工作者",
+   "en": "Sex Worker",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "APP",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    5,
+    50
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术/手艺(任意)",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "闪避",
+    "心理学",
+    "妙手",
+    "潜行",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "艺术/手艺(任意),两项社交技能(取悦、话术、恐吓、说服),闪避,心理学,妙手,潜行,任意一项其他个人或时代特长。",
+   "contacts": "街头路人,警察,可能有犯罪组织,私人客户。",
+   "page": 30,
+   "kpClause": ""
+  },
+  {
+   "id": "itinerant_worker",
+   "zh": "临时工(Itinerant Worker)",
+   "en": "Itinerant Worker",
+   "enVerified": true,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    0,
+    10
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术/手艺(任意)",
+    "攀爬",
+    "妙手",
+    "机械维修",
+    "博物学",
+    "导航",
+    "任意两项其他个人或时代特长"
+   ],
+   "skillsRaw": "艺术/手艺(任意),攀爬,妙手,机械维修,博物学,导航,任意两项其他个人或时代特长。",
+   "contacts": "流浪汉,司机,农民,执法者。",
+   "page": 30,
+   "kpClause": ""
+  },
+  {
+   "id": "investigative_reporter",
+   "zh": "调查记者",
+   "en": "Investigative Reporter",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    9,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术/手艺(艺术或摄影)",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "历史",
+    "图书馆",
+    "母语",
+    "心理学",
+    "任意两项其他个人或时代特长"
+   ],
+   "skillsRaw": "艺术/手艺(艺术或摄影),一项社交技能(取悦、话术、恐吓、说服),历史,图书馆,母语,心理学,任意两项其他个人或时代特长。",
+   "contacts": "新闻界,政治家,街头罪犯和执法机构。",
+   "page": 30,
+   "kpClause": ""
+  },
+  {
+   "id": "unskilled_worker",
+   "zh": "非熟练工人",
+   "en": "Unskilled Worker",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "DEX",
+      "mul": 2
+     },
+     {
+      "stat": "STR",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    5,
+    20
+   ],
+   "creditNote": "",
+   "skills": [
+    "汽车驾驶",
+    "电气维修",
+    "格斗",
+    "急救",
+    "机械维修",
+    "操作重型机械",
+    "投掷",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "汽车驾驶,电气维修,格斗,急救,机械维修,操作重型机械,投掷,任意一项其他个人或时代特长。",
+   "contacts": "其他工人和行业主管。",
+   "page": 31,
+   "kpClause": ""
+  },
+  {
+   "id": "librarian",
+   "zh": "图书馆管理员",
+   "en": "Librarian",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    9,
+    35
+   ],
+   "creditNote": "",
+   "skills": [
+    "会计",
+    "图书馆",
+    "外语",
+    "母语",
+    "任意四项其他个人特长或专业书籍主题"
+   ],
+   "skillsRaw": "会计,图书馆,外语,母语,任意四项其他个人特长或专业书籍主题。",
+   "contacts": "书商,社会团体,专业研究人员。",
+   "page": 31,
+   "kpClause": ""
+  },
+  {
+   "id": "technician",
+   "zh": "技师",
+   "en": "Technician",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    9,
+    40
+   ],
+   "creditNote": "",
+   "skills": [
+    "手艺(木工、焊接、管道工等)",
+    "攀爬",
+    "汽车驾驶",
+    "电气维修",
+    "机械维修",
+    "操作重型机械",
+    "任意两项其他个人或时代或技术特长"
+   ],
+   "skillsRaw": "手艺(木工、焊接、管道工等),攀爬,汽车驾驶,电气维修,机械维修,操作重型机械,任意两项其他个人或时代或技术特长。",
+   "contacts": "工会成员,其他专业技术人员。",
+   "page": 31,
+   "kpClause": ""
+  },
+  {
+   "id": "military_officer",
+   "zh": "军官",
+   "en": "Military Officer",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    20,
+    70
+   ],
+   "creditNote": "",
+   "skills": [
+    "会计",
+    "射击",
+    "导航",
+    "急救",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "心理学",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "会计,射击,导航,急救,两项社交技能(取悦、话术、恐吓、说服),心理学,任意一项其他个人或时代特长。",
+   "contacts": "部队,联邦政府。",
+   "page": 31,
+   "kpClause": ""
+  },
+  {
+   "id": "missionary",
+   "zh": "传教士",
+   "en": "Missionary",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "APP",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    0,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术/手艺(任意)",
+    "急救",
+    "机械维修",
+    "医学",
+    "博物学",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "任意两项其他个人或时代特长"
+   ],
+   "skillsRaw": "艺术/手艺(任意),急救,机械维修,医学,博物学,一项社交技能(取悦、话术、恐吓、说服),任意两项其他个人或时代特长。",
+   "contacts": "教会阶层,外国官员。",
+   "page": 31,
+   "kpClause": ""
+  },
+  {
+   "id": "musician",
+   "zh": "音乐家",
+   "en": "Musician",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "APP",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    9,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术(器乐)",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "聆听",
+    "心理学",
+    "四项其他技能"
+   ],
+   "skillsRaw": "艺术(器乐),一项社交技能(取悦、话术、恐吓、说服),聆听,心理学,四项其他技能。",
+   "contacts": "俱乐部老板,音乐家协会,犯罪组织,街头罪犯。",
+   "page": 31,
+   "kpClause": ""
+  },
+  {
+   "id": "nurse",
+   "zh": "护士",
+   "en": "Nurse",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    9,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "急救",
+    "聆听",
+    "医学",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "心理学",
+    "科学(生物学,化学)",
+    "侦查"
+   ],
+   "skillsRaw": "急救,聆听,医学,一项社交技能(取悦、话术、恐吓、说服),心理学,科学(生物学,化学),侦查。",
+   "contacts": "护工,医生,社区工作人员。",
+   "page": 31,
+   "kpClause": ""
+  },
+  {
+   "id": "occultist",
+   "zh": "神秘学家",
+   "en": "Occultist",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    10,
+    80
+   ],
+   "creditNote": "",
+   "skills": [
+    "人类学",
+    "历史",
+    "图书馆",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "神秘学",
+    "外语",
+    "科学(天文)",
+    "任意一项其他个人或时代特长※"
+   ],
+   "skillsRaw": "人类学,历史,图书馆,一项社交技能(取悦、话术、恐吓、说服),神秘学,外语,科学(天文),任意一项其他个人或时代特长※。※经过KP允许,可以包含「克苏鲁神话」技能(建议一开始限制在20%以内)。",
+   "contacts": "图书馆员,神秘学学会或者同好会,其他神秘学家。",
+   "page": 31,
+   "kpClause": "经KP允许,可以包含「克苏鲁神话」技能(建议一开始限制在20%以内)"
+  },
+  {
+   "id": "parapsychologist",
+   "zh": "超心理学家",
+   "en": "Parapsychologist",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    9,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "人类学",
+    "艺术(摄影)",
+    "历史",
+    "图书馆",
+    "神秘学",
+    "外语",
+    "心理学",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "人类学,艺术(摄影),历史,图书馆,神秘学,外语,心理学,任意一项其他个人或时代特长。",
+   "contacts": "大学,超心理学刊物。",
+   "page": 32,
+   "kpClause": ""
+  },
+  {
+   "id": "photographer",
+   "zh": "摄影师",
+   "en": "Photographer",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    9,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术(摄影)",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "心理学",
+    "科学(化学)",
+    "潜行",
+    "侦查",
+    "任意两项其他个人或时代特长"
+   ],
+   "skillsRaw": "艺术(摄影),一项社交技能(取悦、话术、恐吓、说服),心理学,科学(化学),潜行,侦查,任意两项其他个人或时代特长。",
+   "contacts": "广告业,本地客户(包括政治团体和报纸)。",
+   "page": 32,
+   "kpClause": ""
+  },
+  {
+   "id": "detective",
+   "zh": "警探",
+   "en": "Detective",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    20,
+    50
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术(表演)或乔装",
+    "射击",
+    "法律",
+    "聆听",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "心理学",
+    "侦查",
+    "一项其他技能"
+   ],
+   "skillsRaw": "艺术(表演)或乔装,射击,法律,聆听,一项社交技能(取悦、话术、恐吓、说服),心理学,侦查,一项其他技能。",
+   "contacts": "执法机构,街头罪犯,尸检部门,司法部门,犯罪组织。",
+   "page": 32,
+   "kpClause": ""
+  },
+  {
+   "id": "clergy",
+   "zh": "神职人员",
+   "en": "Clergy",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    9,
+    60
+   ],
+   "creditNote": "",
+   "skills": [
+    "会计",
+    "历史",
+    "图书馆",
+    "聆听",
+    "外语",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "心理学",
+    "任意一项其他技能"
+   ],
+   "skillsRaw": "会计,历史,图书馆,聆听,外语,一项社交技能(取悦、话术、恐吓、说服),心理学,任意一项其他技能。",
+   "contacts": "教会高层、地方教会、社区领导。",
+   "page": 32,
+   "kpClause": ""
+  },
+  {
+   "id": "private_investigator",
+   "zh": "私家侦探",
+   "en": "Private Investigator",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    9,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术(摄影)",
+    "乔装",
+    "法律",
+    "图书馆",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "心理学",
+    "侦查",
+    "一项其他个人或时代特长(如计算机、锁匠、格斗、射击)"
+   ],
+   "skillsRaw": "艺术(摄影),乔装,法律,图书馆,一项社交技能(取悦、话术、恐吓、说服),心理学,侦查,一项其他个人或时代特长(如计算机、锁匠、格斗、射击)。",
+   "contacts": "执法机构,客户。",
+   "page": 32,
+   "kpClause": ""
+  },
+  {
+   "id": "professor",
+   "zh": "教授",
+   "en": "Professor",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    20,
+    70
+   ],
+   "creditNote": "",
+   "skills": [
+    "图书馆",
+    "外语",
+    "母语",
+    "心理学",
+    "任意四项其他学术",
+    "时代或个人特长"
+   ],
+   "skillsRaw": "图书馆,外语,母语,心理学,任意四项其他学术、时代或个人特长。",
+   "contacts": "学者,大学,图书馆。",
+   "page": 32,
+   "kpClause": ""
+  },
+  {
+   "id": "traveler",
+   "zh": "旅行家",
+   "en": "Traveler",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    5,
+    20
+   ],
+   "creditNote": "",
+   "skills": [
+    "射击",
+    "急救",
+    "聆听",
+    "博物学",
+    "导航",
+    "侦查",
+    "生存(任意)",
+    "追踪"
+   ],
+   "skillsRaw": "射击,急救,聆听,博物学,导航,侦查,生存(任意),追踪。",
+   "contacts": "本地居民,土著,贸易商。",
+   "page": 32,
+   "kpClause": ""
+  },
+  {
+   "id": "correspondent",
+   "zh": "通讯记者",
+   "en": "Correspondent",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    9,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术(表演)",
+    "历史",
+    "聆听",
+    "母语",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "心理学",
+    "潜行",
+    "侦查"
+   ],
+   "skillsRaw": "艺术(表演),历史,聆听,母语,一项社交技能(取悦、话术、恐吓、说服),心理学,潜行,侦查。",
+   "contacts": "新闻媒体,政治团体与政府,商界,执法机构,街头罪犯,上流社会。",
+   "page": 32,
+   "kpClause": ""
+  },
+  {
+   "id": "navy_sailor",
+   "zh": "军舰海员",
+   "en": "Navy Sailor",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    9,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "电工或机械维修",
+    "格斗",
+    "射击",
+    "急救",
+    "导航",
+    "操纵(船)",
+    "生存(海上)",
+    "游泳"
+   ],
+   "skillsRaw": "电工或机械维修,格斗,射击,急救,导航,操纵(船),生存(海上),游泳。",
+   "contacts": "军队,退伍军人协会。",
+   "page": 32,
+   "kpClause": ""
+  },
+  {
+   "id": "scientist",
+   "zh": "科学家",
+   "en": "Scientist",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    9,
+    50
+   ],
+   "creditNote": "",
+   "skills": [
+    "任意三项科学专业领域",
+    "计算机或图书馆",
+    "外语",
+    "母语",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "侦查"
+   ],
+   "skillsRaw": "任意三项科学专业领域,计算机或图书馆,外语,母语,一项社交技能(取悦、话术、恐吓、说服),侦查。",
+   "contacts": "其他科学家和学术界人士,大学,所在企业和前员工。",
+   "page": 33,
+   "kpClause": ""
+  },
+  {
+   "id": "secretary",
+   "zh": "秘书",
+   "en": "Secretary",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "APP",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    9,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "会计",
+    "工艺(打字或速记)",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "母语",
+    "图书馆或计算机",
+    "心理学",
+    "任意一项其他个人或时代特长"
+   ],
+   "skillsRaw": "会计,工艺(打字或速记),两项社交技能(取悦、话术、恐吓、说服),母语,图书馆或计算机,心理学,任意一项其他个人或时代特长。",
+   "contacts": "其他办公室人员,客户公司的高管。",
+   "page": 33,
+   "kpClause": ""
+  },
+  {
+   "id": "soldier",
+   "zh": "士兵",
+   "en": "Soldier",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    9,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "攀爬或游泳",
+    "闪避",
+    "格斗",
+    "射击",
+    "潜行",
+    "生存",
+    "下面任选两项:急救",
+    "机械维修",
+    "外语"
+   ],
+   "skillsRaw": "攀爬或游泳,闪避,格斗,射击,潜行,生存,下面任选两项:急救、机械维修、外语。",
+   "contacts": "军队,退伍军人协会。",
+   "page": 33,
+   "kpClause": ""
+  },
+  {
+   "id": "spy",
+   "zh": "间谍",
+   "en": "Spy",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "APP",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    20,
+    60
+   ],
+   "creditNote": "",
+   "skills": [
+    "艺术(表演)或乔装",
+    "射击",
+    "聆听",
+    "外语",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "心理学",
+    "妙手",
+    "潜行"
+   ],
+   "skillsRaw": "艺术(表演)或乔装,射击,聆听,外语,一项社交技能(取悦、话术、恐吓、说服),心理学,妙手,潜行。",
+   "contacts": "一般只有自己的上线,可能还有其他的秘密关系人。",
+   "page": 33,
+   "kpClause": ""
+  },
+  {
+   "id": "hoodlum",
+   "zh": "混混",
+   "en": "Hoodlum",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "DEX",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "STR",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    3,
+    10
+   ],
+   "creditNote": "",
+   "skills": [
+    "攀爬",
+    "一项社交技能(取悦、话术、恐吓、说服)",
+    "格斗",
+    "射击",
+    "跳跃",
+    "妙手",
+    "潜行",
+    "投掷"
+   ],
+   "skillsRaw": "攀爬,一项社交技能(取悦、话术、恐吓、说服),格斗,射击,跳跃,妙手,潜行,投掷。",
+   "contacts": "其他轻罪罪犯,其他混混,本地的赃物贩子,黑帮,当然还有警察。",
+   "page": 33,
+   "kpClause": ""
+  },
+  {
+   "id": "student_intern",
+   "zh": "学生、实习生",
+   "en": "Student/Intern",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    5,
+    10
+   ],
+   "creditNote": "",
+   "skills": [
+    "语言(母语或外语)",
+    "图书馆",
+    "聆听",
+    "三个和学习内容相关的专业技能",
+    "任意两项其他个人或时代特长"
+   ],
+   "skillsRaw": "语言(母语或外语),图书馆,聆听,三个和学习内容相关的专业技能,任意两项其他个人或时代特长。",
+   "contacts": "学院、其他学生,实习生也可能有商人等。",
+   "page": 33,
+   "kpClause": ""
+  },
+  {
+   "id": "tribesman",
+   "zh": "部落成员",
+   "en": "Tribesman",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     },
+     {
+      "stat": "DEX",
+      "mul": 2
+     },
+     {
+      "stat": "STR",
+      "mul": 2
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    0,
+    15
+   ],
+   "creditNote": "",
+   "skills": [
+    "攀爬",
+    "格斗或投掷",
+    "聆听",
+    "博物学",
+    "神秘学",
+    "侦查",
+    "游泳",
+    "生存(任意)"
+   ],
+   "skillsRaw": "攀爬,格斗或投掷,聆听,博物学,神秘学,侦查,游泳,生存(任意)。",
+   "contacts": "其他部落成员。",
+   "page": 33,
+   "kpClause": ""
+  },
+  {
+   "id": "union_activist",
+   "zh": "工会活动家",
+   "en": "Union Activist",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    5,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "会计",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "格斗(斗殴)",
+    "法律",
+    "聆听",
+    "操作重型机械",
+    "心理学"
+   ],
+   "skillsRaw": "会计,两项社交技能(取悦、话术、恐吓、说服),格斗(斗殴),法律,聆听,操作重型机械,心理学。",
+   "contacts": "其他劳动领袖,政治伙伴,可能有犯罪组织。在1920年代,还有社会主义者、共产主义者、无政府主义者。",
+   "page": 33,
+   "kpClause": ""
+  },
+  {
+   "id": "yogi",
+   "zh": "瑜伽修士(Yogi)",
+   "en": "Yogi",
+   "enVerified": true,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 4
+     }
+    ],
+    "max": false
+   },
+   "creditRange": [
+    6,
+    60
+   ],
+   "creditNote": "",
+   "skills": [
+    "急救",
+    "历史",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "博物学",
+    "神秘学",
+    "语言",
+    "任意两项其他个人或时代特长"
+   ],
+   "skillsRaw": "急救,历史,两项社交技能(取悦、话术、恐吓、说服),博物学,神秘学,语言,任意两项**其他个人或时代特长**若KP允许可以包含灵能技能。",
+   "contacts": "部落成员,神秘学或修行组织,有钱的主顾。",
+   "page": 34,
+   "kpClause": "若KP允许,可以包含灵能技能"
+  },
+  {
+   "id": "zealot",
+   "zh": "狂热者",
+   "en": "Zealot",
+   "enVerified": false,
+   "points": {
+    "terms": [
+     {
+      "stat": "EDU",
+      "mul": 2
+     }
+    ],
+    "anyOf": [
+     [
+      {
+       "stat": "APP",
+       "mul": 2
+      }
+     ],
+     [
+      {
+       "stat": "POW",
+       "mul": 2
+      }
+     ]
+    ],
+    "max": true
+   },
+   "creditRange": [
+    0,
+    30
+   ],
+   "creditNote": "",
+   "skills": [
+    "历史",
+    "两项社交技能(取悦、话术、恐吓、说服)",
+    "心理学",
+    "潜行",
+    "任意三项其他个人或时代特长"
+   ],
+   "skillsRaw": "历史,两项社交技能(取悦、话术、恐吓、说服),心理学,潜行,任意三项其他个人或时代特长。通俗克苏鲁中的技能大多与克苏鲁的呼唤规则书中的技能描述相同,因此大部分技能不在此赘述。而通俗克苏鲁中修改过的技能可以在后面找到。选择职业后,使用职业指定的方式计算本职技能点数。将这些点数分配给本职技能——英雄的专业技能。",
+   "contacts": "宗教或兄弟会团体,新闻媒体。",
+   "page": 34,
+   "kpClause": ""
+  }
+ ]
+}

@@ -19,6 +19,7 @@ import {
   ALL_CHARS, BACKGROUND_FIELDS, CHAR_LABEL, CHARS, MODULE_ROLES, REVIEW_LABEL,
   SKILL_BY_KEY, STATUS_LABEL, grantEduReroll, resetEduGrowth,
 } from '../../../shared/coc7e.js';
+import { CLASSIC_ID, resolveRuleset } from '../../../shared/rulesets/index.js';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api.js';
 import {
   Badge, Button, Combobox, EmptyState, Field, Input, Modal, Panel, Select, Tabs, Textarea, WarningList, cx,
@@ -209,6 +210,10 @@ export default function CharacterDetail({
   if (!c) return null;
 
   const d = c.derived;
+  const R = resolveRuleset(c.gameSystem || CLASSIC_ID);
+  const isPulp = R.id !== CLASSIC_ID;
+  const talentNames = (Array.isArray(c.talents) ? c.talents : [])
+    .map((id) => R.talentById?.[id]?.zh || id);
   const usedSkills = d.skills.filter((s) => s.used || s.occ > 0 || s.interest > 0 || s.growth > 0 || s.houseBase);
   const shownSkills = showAllSkills ? d.skills : usedSkills;
   const attrSum = CHARS.reduce((n, k) => n + (Number(d.eff?.[k]) || 0), 0);
@@ -260,10 +265,17 @@ export default function CharacterDetail({
                   <Badge tone={REVIEW_TONE[review.status]} className="!text-[14px]">{REVIEW_LABEL[review.status]}</Badge>
                 ) : null}
                 {c.isPublic ? <Badge tone="cyan" className="!text-[14px]">公开只读</Badge> : null}
+                {isPulp ? <Badge tone="amber" className="!text-[14px]">通俗克苏鲁</Badge> : null}
               </h2>
               <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[16px] leading-[1.7] text-ink-soft">
                 <span className="flex items-center gap-1"><UserIcon className="w-3.5 h-3.5" />{c.ownerName}</span>
                 <span>{d.occupation?.name || '无职业'}</span>
+                {isPulp && d.archetype ? (
+                  <span className="flex items-center gap-1">
+                    <Sword className="w-3.5 h-3.5" />原型 {d.archetype.zh}
+                    {d.coreChar ? `（核心 ${CHAR_LABEL[d.coreChar] || d.coreChar}）` : ''}
+                  </span>
+                ) : null}
                 <span>{c.age} 岁</span>
                 <span>{c.era}</span>
                 {c.gender ? <span>{c.gender}</span> : null}
@@ -386,7 +398,22 @@ export default function CharacterDetail({
         <div className="grid gap-2 text-[14.5px] leading-[1.8] text-ink-soft sm:grid-cols-2">
           <div>职业技能点：<b className="font-mono text-[14px] font-bold tabular text-ink">{d.spent.occupation}</b> / {d.budget.occupation}</div>
           <div>兴趣技能点：<b className="font-mono text-[14px] font-bold tabular text-ink">{d.spent.interest}</b> / {d.budget.interest}（智力×2）</div>
+          {isPulp ? (
+            <div>
+              英雄奖励点：<b className="font-mono text-[14px] font-bold tabular text-ink">{d.spent?.bonus ?? 0}</b> / {d.budget?.bonus ?? 0}
+              <span className="text-ink-mute">（仅限原型白名单 {d.bonusAllowedKeys?.length ?? 0} 项技能）</span>
+            </div>
+          ) : null}
           <div className="sm:col-span-2">属性总和：<b className="font-mono text-[14px] font-bold tabular text-ink">{attrSum}</b> / {attrWithLuck}（不含运 / 含运）</div>
+          {isPulp ? (
+            <div className="sm:col-span-2">
+              天赋（{talentNames.length} 项）：{talentNames.length ? talentNames.join('、') : '未选择'}
+              <span className="mx-2 text-ink-mute">·</span>
+              关键连接：{BACKGROUND_FIELDS.find(([k]) => k === c.keyConnection)?.[1] || '未指定'}
+              <span className="mx-2 text-ink-mute">·</span>
+              档位：{R.chargen?.tones?.find((t) => t.id === (c.pulpTone || 'standard'))?.label || '默认通俗'}
+            </div>
+          ) : null}
         </div>
         <WarningList items={c.warnings} />
       </Panel>

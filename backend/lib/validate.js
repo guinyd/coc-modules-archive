@@ -16,11 +16,15 @@ import {
   OCCUPATION_BY_ID, blankSkills, blankWeapons, DEFAULT_AUDIT_RULES, AUDIT_RULE_META,
   currenciesFor, DEFAULT_CURRENCY, BUILTIN_WEAPON, WEAPON_BY_NAME,
   blankEduGrowth, normalizeEduGrowth, blankLegendary, normalizeLegendary,
-  blankLegendaryBonus, PLAYER_TITLES, KP_TITLES,
+  blankLegendaryBonus, PLAYER_TITLES, KP_TITLES, BACKGROUND_FIELDS,
 } from '../../shared/coc7e.js';
 import { normalizeSpells, normalizeTomes } from '../../shared/occult.js';
+import { CLASSIC_ID, RULESETS, resolveRuleset } from '../../shared/rulesets/index.js';
+import { PULP_TONE_IDS } from '../../shared/rulesets/pulp.js';
 
 const ID_RE = /^[A-Za-z0-9_-]{1,48}$/;
+/** 背景栏键名集合（关键连接只能指向其中之一） */
+const BACKGROUND_KEYS = Object.fromEntries(BACKGROUND_FIELDS.map(([k]) => [k, true]));
 
 export function vId(value, field, { required = true } = {}) {
   const s = typeof value === 'string' ? value.trim() : '';
@@ -225,7 +229,7 @@ function parseChars(value) {
   return out;
 }
 
-/** 职业 id：内置职业为数字字符串，KP 自定义职业为 c_ 开头的字符串 */
+/** 职业 id：内置职业为数字字符串，KP 自定义职业为 c_ 开头的字符串；通俗规则集只认自己的职业表 */
 export function parseOccupationId(value, ctx = {}) {
   if (value === undefined || value === null || value === '' || value === 0 || value === '0') return '';
   const raw = String(value).trim().slice(0, 40);
@@ -233,15 +237,27 @@ export function parseOccupationId(value, ctx = {}) {
   // 原型链上的键（__proto__ / constructor / prototype）不是职业，必须在查表前挡掉，
   // 否则 `OCCUPATION_BY_ID['__proto__']` 会返回对象、真值判定被绕过（SEC-19）
   if (raw === '__proto__' || raw === 'constructor' || raw === 'prototype') throw badRequest('职业不存在');
+  const R = ctx?.ruleset;
+  if (R && R.id !== CLASSIC_ID) {
+    if (R.occupationById && Object.hasOwn(R.occupationById, raw) && R.occupationById[raw]) return raw;
+    throw badRequest('职业不存在');
+  }
   const custom = (ctx.customOccupations || []).some((o) => String(o.id) === raw);
   if (custom) return raw;
   if (Object.hasOwn(OCCUPATION_BY_ID, raw) && OCCUPATION_BY_ID[raw]) return raw;
   throw badRequest('职业不存在');
 }
 
+/** 单个技能槽位的输入上限：官方 7e 为 99，通俗规则无上限（给到 999 兜底） */
+function skillInputMax(R) {
+  const cap = Number(R?.skillCap);
+  return Number.isFinite(cap) && cap > 0 ? cap : 999;
+}
+
 /** 自定义技能：玩家自命名，基础值自填；数量与长度均受限 */
-function parseCustomSkills(value) {
+function parseCustomSkills(value, R = null) {
   if (value === undefined || value === null) return [];
+  const max = skillInputMax(R);
   const arr = vArray(value, '自定义技能', { max: CUSTOM_SKILL_MAX });
   const seen = new Set();
   const out = [];
@@ -257,19 +273,76 @@ function parseCustomSkills(value) {
     out.push({
       id,
       name,
-      base: vInt(item.base, `自定义技能「${name}」基础值`, { min: 0, max: SKILL_CAP, def: 0 }),
-      occ: vInt(item.occ, `自定义技能「${name}」职业点`, { min: 0, max: SKILL_CAP, def: 0 }),
-      interest: vInt(item.interest, `自定义技能「${name}」兴趣点`, { min: 0, max: SKILL_CAP, def: 0 }),
-      growth: vInt(item.growth, `自定义技能「${name}」成长点`, { min: 0, max: SKILL_CAP, def: 0 }),
+      base: vInt(item.base, `自定义技能「${name}」基础值`, { min: 0, max, def: 0 }),
+      occ: vInt(item.occ, `自定义技能「${name}」职业点`, { min: 0, max, def: 0 }),
+      interest: vInt(item.interest, `自定义技能「${name}」兴趣点`, { min: 0, max, def: 0 }),
+      bonus: vInt(item.bonus, `自定义技能「${name}」奖励点`, { min: 0, max, def: 0 }),
+      growth: vInt(item.growth, `自定义技能「${name}」成长点`, { min: 0, max, def: 0 }),
       isOccupation: vBool(item.isOccupation, false),
     });
   }
   return out;
 }
 
+/** 规则集 id：未知值一律回退官方 7e（旧存档没有该字段时也走这里） */
+function parseGameSystem(value) {
+  if (value === undefined || value === null || value === '') return CLASSIC_ID;
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw || !Object.hasOwn(RULESETS, raw)) throw badRequest('游戏规则不存在');
+  return raw;
+}
+
+/** 通俗指示器档位（低 / 标准 / 高） */
+function parsePulpTone(value) {
+  if (value === undefined || value === null || value === '') return 'standard';
+  return vEnum(value, '通俗档位', PULP_TONE_IDS, 'standard');
+}
+
+/** 原型 id：只有本规则集里列出的原型才接受，空串表示尚未选择 */
+function parseArchetypeId(value, R) {
+  const raw = typeof value === 'string' ? value.trim().slice(0, 40) : '';
+  if (!raw) return '';
+  // 经典 7e 没有原型概念：跨规则降级时直接丢弃，不报错（否则老卡改规则会卡死）
+  if (!R?.archetypeById) return '';
+  if (!Object.hasOwn(R.archetypeById, raw)) throw badRequest('原型不存在');
+  return raw;
+}
+
+/** 核心属性：由原型限制具体可选范围，UI 之外再做一次白名单 */
+function parseCoreChar(value) {
+  const raw = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  if (!raw) return '';
+  return vEnum(raw, '核心属性', CHARS, '');
+}
+
+/** 天赋：只接受规则集内的天赋 id，去重并限制数量 */
+function parseTalents(value, R) {
+  if (value === undefined || value === null) return [];
+  const arr = vArray(value, '天赋', { max: 8 });
+  const out = [];
+  for (const item of arr) {
+    const id = typeof item === 'string' ? item.trim().slice(0, 48) : '';
+    if (!id || !R?.talentById || !Object.hasOwn(R.talentById, id)) continue;
+    if (out.includes(id)) continue;
+    out.push(id);
+  }
+  return out;
+}
+
+/** 关键连接：必须指向一条背景栏（打印时会打星标） */
+function parseKeyConnection(value) {
+  const raw = typeof value === 'string' ? value.trim().slice(0, 32) : '';
+  if (!raw) return '';
+  if (!Object.hasOwn(BACKGROUND_KEYS, raw)) throw badRequest('关键连接不合法');
+  return raw;
+}
+
 /** 技能投入：只接受已知槽位，其余字段一律忽略/重建 */
-function parseSkills(value) {
+function parseSkills(value, R = null) {
   if (value === undefined || value === null) return null;
+  const defs = R?.skillByKey || SKILL_BY_KEY;
+  const slotTable = R?.specSlots || SPEC_SLOTS;
+  const max = skillInputMax(R);
   const arr = vArray(value, '技能', { max: 200 });
   const seen = new Set();
   const out = [];
@@ -277,9 +350,10 @@ function parseSkills(value) {
     if (!item || typeof item !== 'object') continue;
     const id = typeof item.id === 'string' ? item.id : '';
     const [key, idxRaw] = id.split('#');
-    if (!SKILL_BY_KEY[key]) continue;
+    const def = defs[key];
+    if (!def) continue;
     const idx = idxRaw === undefined ? 0 : Number(idxRaw);
-    const slots = SKILLS.find((s) => s.key === key)?.spec ? (SPEC_SLOTS[SKILL_BY_KEY[key].spec] || 1) : 1;
+    const slots = def.spec ? (slotTable[def.spec] || 1) : 1;
     if (!Number.isInteger(idx) || idx < 0 || idx >= slots) continue;
     if (seen.has(id)) continue;
     seen.add(id);
@@ -287,9 +361,10 @@ function parseSkills(value) {
       id,
       key,
       custom: vStr(item.custom, '技能方向/语种', { max: 24 }),
-      occ: vInt(item.occ, '职业点', { min: 0, max: SKILL_CAP, def: 0 }),
-      interest: vInt(item.interest, '兴趣点', { min: 0, max: SKILL_CAP, def: 0 }),
-      growth: vInt(item.growth, '成长点', { min: 0, max: SKILL_CAP, def: 0 }),
+      occ: vInt(item.occ, '职业点', { min: 0, max, def: 0 }),
+      interest: vInt(item.interest, '兴趣点', { min: 0, max, def: 0 }),
+      bonus: vInt(item.bonus, '奖励点', { min: 0, max, def: 0 }),
+      growth: vInt(item.growth, '成长点', { min: 0, max, def: 0 }),
     });
   }
   return out;
@@ -356,18 +431,23 @@ function parseAgeAlloc(value) {
   return out;
 }
 
-function parseOccPicks(value, occupationId) {
-  const occ = occupationId ? OCCUPATION_BY_ID[occupationId] : null;
+function parseOccPicks(value, occupationId, R = null) {
+  const occ = occupationId
+    ? (R && R.id !== CLASSIC_ID ? (R.occupationById || {})[occupationId] : OCCUPATION_BY_ID[occupationId])
+    : null;
+  const defs = R?.skillByKey || SKILL_BY_KEY;
+  const socialSkills = R?.socialSkills || SOCIAL_SKILLS;
+  const pool = Array.isArray(occ?.freePool) && occ.freePool.length ? new Set(occ.freePool) : null;
   const b = value && typeof value === 'object' ? value : {};
   const freeRaw = vArray(b.free, '任意特长', { max: 12 });
   const socialRaw = vArray(b.social, '社交技能', { max: 12 });
   const choicesRaw = vArray(b.choices, '任选技能', { max: 12 });
 
   const free = freeRaw
-    .filter((k) => typeof k === 'string' && SKILL_BY_KEY[k] && !SKILL_BY_KEY[k].spec)
+    .filter((k) => typeof k === 'string' && defs[k] && !defs[k].spec && (!pool || pool.has(k)))
     .slice(0, occ ? Math.max(0, occ.free) : 0);
   const social = socialRaw
-    .filter((k) => typeof k === 'string' && SOCIAL_SKILLS.includes(k))
+    .filter((k) => typeof k === 'string' && socialSkills.includes(k))
     .slice(0, occ ? Math.max(0, occ.social) : 0);
   const choices = (occ?.choices || []).map((group, i) => {
     const pick = choicesRaw[i];
@@ -377,10 +457,10 @@ function parseOccPicks(value, occupationId) {
 }
 
 /** 技能标记：只有已知槽位能打勾，避免存进来一堆垃圾键 */
-function parseSkillMarks(value) {
+function parseSkillMarks(value, R = null) {
   if (value === undefined || value === null) return {};
   if (typeof value !== 'object' || Array.isArray(value)) throw badRequest('技能标记格式不正确');
-  const known = new Set(blankSkills().map((s) => s.id));
+  const known = new Set(blankSkills(R).map((s) => s.id));
   const out = {};
   let n = 0;
   for (const [k, v] of Object.entries(value)) {
@@ -445,10 +525,18 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
   const need = (k) => (!partial || has(k));
   const out = {};
 
+  // 规则集先定下来：后面技能表、职业表、上限、扩展字段全部按它切
+  const gameSystem = parseGameSystem(
+    has('gameSystem') ? b.gameSystem : (ctx?.gameSystem ?? current?.gameSystem ?? CLASSIC_ID),
+  );
+  const R = resolveRuleset(gameSystem);
+  if (need('gameSystem') || !partial) out.gameSystem = gameSystem;
+  const rctx = { ...ctx, ruleset: R };
+
   if (need('name')) out.name = vStr(b.name, '角色名', { min: 1, max: 40, required: true });
   if (need('playerName')) out.playerName = vStr(b.playerName, '玩家名', { max: 40 });
   if (has('occupationId')) {
-    out.occupationId = parseOccupationId(b.occupationId, ctx);
+    out.occupationId = parseOccupationId(b.occupationId, rctx);
   } else if (!partial) {
     out.occupationId = '';
   }
@@ -461,12 +549,20 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
     ? out.occupationId
     : (partial ? (current?.occupationId || '') : '');
   // 年龄：常规 15-120；KP 开了「豁免年龄减益」后才允许任意非负整数
-  const ageWaived = b.agePenaltyWaived === true || current?.agePenaltyWaived === true;
+  const ageWaived = b.agePenaltyWaived === true || current?.agePenaltyWaived === true || ctx?.ignoreAge === true;
   if (need('age')) out.age = vInt(b.age, '年龄', ageWaived ? { min: 0, max: 999, def: 25 } : { min: 15, max: 120, def: 25 });
   if (need('gender')) out.gender = vStr(b.gender, '性别', { max: 20 });
   if (need('residence')) out.residence = vStr(b.residence, '住地', { max: 40 });
   if (need('birthplace')) out.birthplace = vStr(b.birthplace, '故乡/出身', { max: 40 });
   if (need('era')) out.era = vEnum(b.era, '时代', ERAS, '1920s');
+
+  // —— 通俗克苏鲁扩展字段（官方 7e 卡取默认值，不影响原有推导）——
+  if (need('pulpTone')) out.pulpTone = parsePulpTone(b.pulpTone);
+  if (need('chargenMethod')) out.chargenMethod = vEnum(b.chargenMethod, '建卡方式', ['roll', 'quick'], 'roll');
+  if (need('archetypeId')) out.archetypeId = parseArchetypeId(b.archetypeId, R);
+  if (need('coreChar')) out.coreChar = parseCoreChar(b.coreChar);
+  if (need('talents')) out.talents = parseTalents(b.talents, R);
+  if (need('keyConnection')) out.keyConnection = parseKeyConnection(b.keyConnection);
 
   if (need('chars')) {
     const c = parseChars(b.chars);
@@ -490,18 +586,18 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
   if (need('agePenaltyWaived')) out.agePenaltyWaived = vBool(b.agePenaltyWaived, false);
   if (need('notes')) out.notes = vText(b.notes, '备注', { max: 4000 });
   if (need('armorPenalty')) out.armorPenalty = vInt(b.armorPenalty, '护甲减值', { min: 0, max: 10, def: 0 });
-  if (need('occPicks')) out.occPicks = parseOccPicks(b.occPicks, occId);
+  if (need('occPicks')) out.occPicks = parseOccPicks(b.occPicks, occId, R);
 
   if (has('skills')) {
-    const parsed = parseSkills(b.skills);
+    const parsed = parseSkills(b.skills, R);
     if (!parsed) throw badRequest('技能格式不正确');
     out.skills = parsed;
   } else if (!partial) {
-    out.skills = blankSkills();
+    out.skills = blankSkills(R);
   }
 
   if (has('customSkills') || !partial) {
-    out.customSkills = parseCustomSkills(b.customSkills);
+    out.customSkills = parseCustomSkills(b.customSkills, R);
   }
 
   if (has('currency')) {
@@ -514,7 +610,7 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
   if (has('extraAssets')) out.extraAssets = vText(b.extraAssets, '额外资产', { max: 400 });
   else if (!partial) out.extraAssets = '';
 
-  if (has('skillMarks')) out.skillMarks = parseSkillMarks(b.skillMarks);
+  if (has('skillMarks')) out.skillMarks = parseSkillMarks(b.skillMarks, R);
   else if (!partial) out.skillMarks = {};
 
   if (need('weapons')) out.weapons = parseWeapons(b.weapons);
@@ -590,6 +686,14 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
     out.armorPenalty = out.armorPenalty ?? 0;
     out.occPicks = out.occPicks ?? { free: [], social: [], choices: [] };
     out.customSkills = out.customSkills ?? [];
+    // 规则集与通俗扩展字段（旧卡/官方卡保持默认值）
+    out.gameSystem = out.gameSystem ?? CLASSIC_ID;
+    out.pulpTone = out.pulpTone ?? 'standard';
+    out.chargenMethod = out.chargenMethod ?? 'roll';
+    out.archetypeId = out.archetypeId ?? '';
+    out.coreChar = out.coreChar ?? '';
+    out.talents = out.talents ?? [];
+    out.keyConnection = out.keyConnection ?? '';
   }
   return out;
 }

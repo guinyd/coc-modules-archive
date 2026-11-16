@@ -16,6 +16,7 @@
 
 import React, { useMemo } from 'react';
 import { BACKGROUND_FIELDS, ALL_CHARS, CHAR_LABEL, STATUS_LABEL } from '../../../shared/coc7e.js';
+import { CLASSIC_ID, resolveRuleset } from '../../../shared/rulesets/index.js';
 
 function Line({ value, className = '' }) {
   return (
@@ -98,7 +99,7 @@ function SkillColumn({ skills }) {
       </colgroup>
       <tbody>
         {skills.map((s) => {
-          const allocated = s.occ > 0 || s.interest > 0 || s.growth > 0;
+          const allocated = s.occ > 0 || s.interest > 0 || (s.bonus || 0) > 0 || s.growth > 0;
           // 名字长的（「操作重型机械」「外语（拉丁语）」等）自动缩一档，尽量不被裁切
           const label = `${s.name}（${s.base}%）`;
           const tight = label.length >= 11;
@@ -130,11 +131,16 @@ export default function CharacterPrint({ character }) {
   const printedAt = useMemo(() => new Date().toLocaleDateString(), []);
   if (!character?.derived) return null;
   const d = character.derived;
+  const R = resolveRuleset(character.gameSystem || d.ruleset?.id || CLASSIC_ID);
+  const isPulp = R.id !== CLASSIC_ID;
+  const talentNames = (Array.isArray(character.talents) ? character.talents : [])
+    .map((id) => R.talentById?.[id]?.zh || id);
 
   // 全部技能：专攻槽位只有填了方向才打印；已投点的排前面
   const printable = d.skills.filter((s) => (s.spec ? Boolean(s.custom) : true));
-  const allocated = printable.filter((s) => s.occ > 0 || s.interest > 0 || s.growth > 0 || s.marked);
-  const untouched = printable.filter((s) => !(s.occ > 0 || s.interest > 0 || s.growth > 0 || s.marked));
+  const used = (s) => s.occ > 0 || s.interest > 0 || (s.bonus || 0) > 0 || s.growth > 0 || s.marked;
+  const allocated = printable.filter(used);
+  const untouched = printable.filter((s) => !used(s));
   const ordered = [...allocated, ...untouched];
   const per = Math.ceil(ordered.length / 3) || 1;
   const cols = [ordered.slice(0, per), ordered.slice(per, per * 2), ordered.slice(per * 2)];
@@ -152,8 +158,8 @@ export default function CharacterPrint({ character }) {
       <section className="print-paper print-page">
         <div className="border border-ink/45 p-2.5 shadow-[inset_0_0_0_1px_#dccdb1]">
           <div className="text-center border-b border-ink/45 pb-0.5 mb-1">
-            <div className="text-[11.5px] tracking-[0.5em] text-ochre">❖ {character.era || '1920s'} 调查员 · 秘密调查档案馆 ❖</div>
-            <div className="text-[21px] font-semibold font-serif tracking-[0.26em]">COC 七版 角色卡</div>
+            <div className="text-[11.5px] tracking-[0.5em] text-ochre">❖ {character.era || '1920s'}{isPulp ? ' 英雄' : ' 调查员'} · 秘密调查档案馆 ❖</div>
+            <div className="text-[21px] font-semibold font-serif tracking-[0.26em]">{isPulp ? '通俗克苏鲁 角色卡' : 'COC 七版 角色卡'}</div>
           </div>
 
           {/* 基本信息 */}
@@ -167,6 +173,17 @@ export default function CharacterPrint({ character }) {
             <div className="whitespace-nowrap">故乡：<Line value={character.birthplace} className="w-[7.4rem]" /></div>
             <div className="whitespace-nowrap">时代：<Line value={character.era} className="w-[5rem]" /></div>
             <div className="whitespace-nowrap">状态：<Line value={STATUS_LABEL[character.status] || ''} className="w-[5rem]" /></div>
+            {isPulp ? (
+              <div
+                className="col-span-3 text-[11px] text-ink-soft whitespace-nowrap overflow-hidden text-ellipsis"
+                title={`${d.archetype?.zh || '未选原型'} · 核心 ${d.coreChar || '—'} · 天赋 ${talentNames.join('、') || '未选'}`}
+              >
+                原型：<b className="text-ink">{d.archetype?.zh || '未选定'}</b>
+                <span className="mx-1.5 text-ink-mute">·</span>核心：<b className="font-mono text-ink">{d.coreChar || '—'}</b>
+                <span className="mx-1.5 text-ink-mute">·</span>天赋：<b className="text-ink">{talentNames.join('、') || '未选定'}</b>
+                <span className="mx-1.5 text-ink-mute">·</span>奖励点：<b className="font-mono text-ink">{d.spent?.bonus ?? 0}/{d.budget?.bonus ?? 0}</b>
+              </div>
+            ) : null}
           </div>
 
           {/* 属性：固定信息，只保留八项属性 */}
@@ -249,6 +266,7 @@ export default function CharacterPrint({ character }) {
               <span>调查员技能（★本职 · ✎自定义 · 加粗=已投点 · ☐=本局大成功标记 · 括号内为基础值）</span>
               <span className="font-normal text-[10px] text-ink-mute">
                 职业 {d.spent.occupation}/{d.budget.occupation} · 兴趣 {d.spent.interest}/{d.budget.interest}
+                {isPulp ? ` · 奖励 ${d.spent.bonus}/${d.budget.bonus}` : ''}
               </span>
             </div>
             <div className="grid grid-cols-3 gap-x-2 px-1.5 py-1.5">
@@ -311,7 +329,10 @@ export default function CharacterPrint({ character }) {
           <div className="grid grid-cols-2 gap-x-4 gap-y-2">
             {BACKGROUND_FIELDS.map(([key, label]) => (
               <div key={key} className="print-avoid-break">
-                <div className="text-[12.5px] font-bold text-ink border-b border-ink/25 mb-[2px]">{label}</div>
+                <div className="text-[12.5px] font-bold text-ink border-b border-ink/25 mb-[2px]">
+                  {label}
+                  {isPulp && character.keyConnection === key ? <span className="ml-1 text-ochre">★ 关键连接</span> : null}
+                </div>
                 <div className="text-[11.5px] leading-[1.55] whitespace-pre-wrap min-h-[2.9rem]">
                   {character.background?.[key] || ''}
                 </div>
@@ -391,7 +412,7 @@ export default function CharacterPrint({ character }) {
           </div>
 
           <div className="text-[10.5px] text-ink-mute mt-1.5 text-center">
-            ❖ 角色卡由「秘密调查档案馆」生成 · COC 第 7 版规则 ❖
+            ❖ 角色卡由「秘密调查档案馆」生成 · {isPulp ? '通俗克苏鲁（Pulp Cthulhu）规则' : 'COC 第 7 版规则'} ❖
           </div>
         </div>
       </section>

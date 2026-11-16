@@ -1,0 +1,150 @@
+{
+  "source": "pulp通俗克苏鲁.md md:9968-10100（书 p.88-89）；_draft/04-magic.md §4.1",
+  "note": "奇妙道具 = 书内已给出的成品范例；自制物品走『小发明 7 步』流程（§2.4）。价格与时间是『制造』成本，不是市售价。",
+  "gadgets": [
+    {
+      "id": "auto_lockpick",
+      "zh": "自动撬锁器",
+      "en": "Auto-Lockpick",
+      "price": 50,
+      "buildTime": "1D10+5 小时",
+      "difficulty": "常规",
+      "skills": [
+        "机械维修"
+      ],
+      "effect": "允许没有技能者以 40% 成功率撬开门锁。",
+      "note": "小型手持管状设备，带可伸缩头。",
+      "mdLines": [
+        9968
+      ]
+    },
+    {
+      "id": "voice_imitator",
+      "zh": "声音模仿器",
+      "en": "Voice Imitator",
+      "price": 100,
+      "buildTime": "1D10+5 小时",
+      "difficulty": "常规",
+      "skills": [
+        "电气维修"
+      ],
+      "effect": "改变声音频率高低，可伪装他人声音（男女互换亦可）。",
+      "note": "10 寸 × 5 寸黑盒，一端锥状小喇叭；贴电话话筒使用。",
+      "mdLines": [
+        9987
+      ]
+    },
+    {
+      "id": "ghost_detector",
+      "zh": "鬼魂侦测器",
+      "en": "Ghost Detector",
+      "price": 250,
+      "buildTime": "1D10+1 天",
+      "difficulty": "常规",
+      "skills": [
+        "电气维修",
+        "科学(物理学)",
+        "神秘学"
+      ],
+      "combo": true,
+      "effect": "60% 侦测灵体；20 尺内彩灯越多表示越近。",
+      "note": "书包大小，重 10 磅，通常挂在脖子上。",
+      "mdLines": [
+        10017
+      ]
+    },
+    {
+      "id": "death_ray",
+      "zh": "死亡射线枪",
+      "en": "Death Ray",
+      "price": 1000,
+      "buildTime": "1D10+5 周",
+      "difficulty": "困难",
+      "skills": [
+        "电气维修",
+        "科学(物理学)"
+      ],
+      "combo": true,
+      "effect": "1D10+5 热能伤害，忽视普通护甲（对非地球物质护甲无效）；射击(步枪)检定；1D8 发后需 10 小时充能。",
+      "note": "需双手使用。",
+      "mdLines": [
+        10053
+      ]
+    },
+    {
+      "id": "translator_headset",
+      "zh": "翻译耳机",
+      "en": "Translator Headset",
+      "price": 1500,
+      "buildTime": "1D10+5 周",
+      "difficulty": "困难",
+      "skills": [
+        "电气维修",
+        "科学(数学)"
+      ],
+      "effect": "听懂任何源自地球的语言。",
+      "mdLines": []
+    },
+    {
+      "id": "portable_phone",
+      "zh": "便携电话机",
+      "en": "Portable Phone",
+      "price": 1000,
+      "buildTime": "1D10+5 周",
+      "difficulty": "困难",
+      "skills": [
+        "电气维修",
+        "科学(物理学)"
+      ],
+      "effect": "两台一组，1 英里内通话；续航 30 分钟。",
+      "note": "每台重 20 磅。",
+      "mdLines": []
+    },
+    {
+      "id": "brain_booster",
+      "zh": "大脑增强器",
+      "en": "Brain Booster",
+      "price": 2000,
+      "buildTime": "1D10+5 周",
+      "difficulty": "困难",
+      "skills": [
+        "电气维修",
+        "科学(生物学)"
+      ],
+      "effect": "阅读时间减半（须懂该语言）。",
+      "mdLines": []
+    },
+    {
+      "id": "jetpack",
+      "zh": "喷气背包",
+      "en": "Jetpack",
+      "price": 10000,
+      "buildTime": "2D10+1 月",
+      "difficulty": "困难",
+      "skills": [
+        "机械维修",
+        "电气维修",
+        "科学(物理学)"
+      ],
+      "combo": true,
+      "effect": "一次跳跃 200 尺高 / 100 尺远；可用 4 次；换燃料 $500。",
+      "mdLines": []
+    },
+    {
+      "id": "elder_sign_bullets",
+      "zh": "旧印弹",
+      "en": "Elder Sign Bullets",
+      "price": null,
+      "buildTime": "施放旧印法术",
+      "difficulty": "—",
+      "skills": [
+        "射击",
+        "巧手"
+      ],
+      "combo": true,
+      "effect": "对特定神话生物 +1D10+1，视为魔法武器；一次可刻 6 发。",
+      "note": "不卖钱，须施法制作；可用合适技艺代替巧手。",
+      "mdLines": []
+    }
+  ]
+}

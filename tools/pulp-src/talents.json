@@ -1,0 +1,55 @@
+{
+  "source": "通克规则/pulp通俗克苏鲁.md 表3–表6（md:2205-2384，书 p.23–25）",
+  "note": "每个英雄创建时任选 2 项；4 张 d10 表，投 1D4 选表再投 1D10。id 前缀 phys/ment/comb/misc 对应 肉体/精神/战斗/其他。luckCost 为固定幸运消耗（可变消耗写 null 并在 effect 里说明）。",
+  "categories": [
+    { "key": "phys", "zh": "肉体天赋", "table": 3, "md": "2205-2227" },
+    { "key": "ment", "zh": "精神天赋", "table": 4, "md": "2297-2323" },
+    { "key": "comb", "zh": "战斗天赋", "table": 5, "md": "2325-2348" },
+    { "key": "misc", "zh": "其他天赋", "table": 6, "md": "2352-2384" }
+  ],
+  "talents": [
+    { "id": "phys-01", "cat": "phys", "roll": 1, "zh": "明察秋毫", "effect": "进行侦查检定时获得一个奖励骰。", "luckCost": null, "tags": ["bonusDie", "spotHidden"] },
+    { "id": "phys-02", "cat": "phys", "roll": 2, "zh": "快速愈合", "effect": "自然回复增加至每日 3 HP。", "luckCost": null, "tags": ["healing"] },
+    { "id": "phys-03", "cat": "phys", "roll": 3, "zh": "昏暗视觉", "effect": "降低夜间侦查检定的难度等级，忽略在夜间射击时的惩罚骰。", "luckCost": null, "tags": ["difficultyDown", "spotHidden", "noPenaltyDie"] },
+    { "id": "phys-04", "cat": "phys", "roll": 4, "zh": "耐力卓绝", "effect": "进行体质检定时获得一个奖励骰，包括建立追逐时。", "luckCost": null, "tags": ["bonusDie", "CON"] },
+    { "id": "phys-05", "cat": "phys", "roll": 5, "zh": "天生神力", "effect": "进行力量检定时获得一个奖励骰，比如用来举起某人某物。", "luckCost": null, "tags": ["bonusDie", "STR"] },
+    { "id": "phys-06", "cat": "phys", "roll": 6, "zh": "千杯不醉", "effect": "可以花费 5 点幸运来避免过度饮酒带来的效果（无视技能惩罚）。", "luckCost": 5, "tags": ["spendLuck"] },
+    { "id": "phys-07", "cat": "phys", "roll": 7, "zh": "强健体魄", "effect": "可以花费 10 点幸运使疾病和毒药的伤害和效果减半。", "luckCost": 10, "tags": ["spendLuck", "halveDamage"] },
+    { "id": "phys-08", "cat": "phys", "roll": 8, "zh": "铁骨铮铮", "effect": "可以花费 10 点幸运来吸收在一轮中受到的 5 点伤害。", "luckCost": 10, "tags": ["spendLuck", "absorbDamage"] },
+    { "id": "phys-09", "cat": "phys", "roll": 9, "zh": "耳听八方", "effect": "进行聆听检定时获得一个奖励骰。", "luckCost": null, "tags": ["bonusDie", "listen"] },
+    { "id": "phys-10", "cat": "phys", "roll": 10, "zh": "魅力四射", "effect": "进行取悦检定时获得一个奖励骰。", "luckCost": null, "tags": ["bonusDie", "charm"] },
+
+    { "id": "ment-01", "cat": "ment", "roll": 1, "zh": "坚定不移", "effect": "无视攻击人类、目睹惨烈创伤或尸体的理智损失。", "luckCost": null, "tags": ["sanityImmune", "violence"] },
+    { "id": "ment-02", "cat": "ment", "roll": 2, "zh": "百折不挠", "effect": "可以花费幸运来避免等量的理智损失（1 点幸运抵 1 点 SAN）。", "luckCost": null, "tags": ["spendLuck", "sanityLoss"] },
+    { "id": "ment-03", "cat": "ment", "roll": 3, "zh": "钢铁意志", "effect": "进行意志检定时获得一个奖励骰。", "luckCost": null, "tags": ["bonusDie", "POW"] },
+    { "id": "ment-04", "cat": "ment", "roll": 4, "zh": "一目十行", "effect": "阅读书籍和神话典籍时，略读和精读花费的时间减半。", "luckCost": null, "tags": ["readingTime"] },
+    { "id": "ment-05", "cat": "ment", "roll": 5, "zh": "语言学家", "effect": "可以了解遇到的是哪种语言或文字；进行语言检定时获得一个奖励骰。", "luckCost": null, "tags": ["bonusDie", "language", "identifyLanguage"] },
+    { "id": "ment-06", "cat": "ment", "roll": 6, "zh": "魔法亲和", "effect": "学习法术花费的时间减半；进行施法检定时获得一个奖励骰。", "luckCost": null, "tags": ["bonusDie", "spellCast", "learnTime"] },
+    { "id": "ment-07", "cat": "ment", "roll": 7, "zh": "过目不忘", "effect": "能够记住事件的诸多细节；进行知识（教育）检定时获得一个奖励骰。", "luckCost": null, "tags": ["bonusDie", "EDU"] },
+    { "id": "ment-08", "cat": "ment", "roll": 8, "zh": "博学多才", "effect": "获得学问技能的一个专攻项（如梦境学问、吸血鬼学问、狼人学问）；需要向该技能分配职业或兴趣点数。", "luckCost": null, "tags": ["grantSpec", "lore"] },
+    { "id": "ment-09", "cat": "ment", "roll": 9, "zh": "灵能觉醒", "effect": "获得一项灵能：遥视、占卜、灵媒、心灵感应、念动其中之一（见第六章）；需要向该技能分配职业或兴趣点数。", "luckCost": null, "tags": ["grantSpec", "psychic"] },
+    { "id": "ment-10", "cat": "ment", "roll": 10, "zh": "足智多谋", "effect": "能够迅速整理线索；进行智力（不是灵感）检定时获得一个奖励骰。", "luckCost": null, "tags": ["bonusDie", "INT"] },
+
+    { "id": "comb-01", "cat": "comb", "roll": 1, "zh": "处变不惊", "effect": "不会被突袭。", "luckCost": null, "tags": ["noSurprise"] },
+    { "id": "comb-02", "cat": "comb", "roll": 2, "zh": "专注打击", "effect": "在格斗中，可以花费 10 点幸运来获得额外伤害骰，数量取决于所用武器（徒手 +1D3，刀剑 +1D6）。", "luckCost": 10, "tags": ["spendLuck", "extraDamage"] },
+    { "id": "comb-03", "cat": "comb", "roll": 3, "zh": "快速装填", "effect": "选择一种武器，忽略使用该武器在同一回合装填并击发产生的惩罚骰。", "luckCost": null, "tags": ["noPenaltyDie", "reload"] },
+    { "id": "comb-04", "cat": "comb", "roll": 4, "zh": "身手敏捷", "effect": "应对枪械而寻找掩体时，不会失去下一个动作的机会。", "luckCost": null, "tags": ["actionEconomy", "cover"] },
+    { "id": "comb-05", "cat": "comb", "roll": 5, "zh": "目光如炬", "effect": "忽略瞄准体型较小目标（体格 -2）时产生的惩罚骰；忽略瞄准近战中的目标时产生的惩罚骰。", "luckCost": null, "tags": ["noPenaltyDie", "aim"] },
+    { "id": "comb-06", "cat": "comb", "roll": 6, "zh": "技巧卓绝", "effect": "使用战技时，角色的体格视为 +1。", "luckCost": null, "tags": ["build", "maneuver"] },
+    { "id": "comb-07", "cat": "comb", "roll": 7, "zh": "疾风连击", "effect": "在格斗中，可以花费 10 点幸运再进行一次攻击。", "luckCost": 10, "tags": ["spendLuck", "extraAttack"] },
+    { "id": "comb-08", "cat": "comb", "roll": 8, "zh": "动如脱兔", "effect": "在一整场战斗中，可以花费 10 点幸运来避免寡不敌众。", "luckCost": 10, "tags": ["spendLuck", "outnumbered"] },
+    { "id": "comb-09", "cat": "comb", "roll": 9, "zh": "快速拔枪", "effect": "决定回合轮次时，即使未准备好进行射击，亦视为获得 +50 DEX。", "luckCost": null, "tags": ["initiative"] },
+    { "id": "comb-10", "cat": "comb", "roll": 10, "zh": "手枪专精", "effect": "忽略手枪连射带来的惩罚骰。", "luckCost": null, "tags": ["noPenaltyDie", "firearms"] },
+
+    { "id": "misc-01", "cat": "misc", "roll": 1, "zh": "凶神恶煞", "effect": "进行恐吓检定时降低一级难度等级，或者获得一个奖励骰，由守秘人判断。", "luckCost": null, "tags": ["difficultyDown", "intimidate"] },
+    { "id": "misc-02", "cat": "misc", "roll": 2, "zh": "奇妙道具", "effect": "游戏开始时获得一个奇妙道具（见第六章怪奇技术）。", "luckCost": null, "tags": ["grantGadget"] },
+    { "id": "misc-03", "cat": "misc", "roll": 3, "zh": "吉人天相", "effect": "回复幸运时，额外投一个 1D10。", "luckCost": null, "tags": ["luckRecovery"] },
+    { "id": "misc-04", "cat": "misc", "roll": 4, "zh": "神话知识", "effect": "游戏开始时获得 10 点克苏鲁神话技能。", "luckCost": null, "tags": ["grantSkill", "cthulhu"] },
+    { "id": "misc-05", "cat": "misc", "roll": 5, "zh": "怪奇技术", "effect": "可以制造和修理怪奇技术制品（见第六章）。", "luckCost": null, "tags": ["weirdScience"] },
+    { "id": "misc-06", "cat": "misc", "roll": 6, "zh": "遁入暗影", "effect": "进行潜行检定时降低一级难度等级，或者获得一个奖励骰，由守秘人判断；如果目标未能察觉，在暴露之前可以进行两次突袭。", "luckCost": null, "tags": ["difficultyDown", "stealth", "surprise"] },
+    { "id": "misc-07", "cat": "misc", "roll": 7, "zh": "能工巧匠", "effect": "进行操作重型机械、机械维修和电气维修检定时降低一级难度等级，或者获得一个奖励骰，由守秘人判断。", "luckCost": null, "tags": ["difficultyDown", "repair"] },
+    { "id": "misc-08", "cat": "misc", "roll": 8, "zh": "动物朋友", "effect": "游戏开始时获得一只可靠的动物伙伴（猫、狗、鹦鹉等）；进行驯兽检定时获得一个奖励骰。", "luckCost": null, "tags": ["companion", "bonusDie", "animalHandling"] },
+    { "id": "misc-09", "cat": "misc", "roll": 9, "zh": "伪装大师", "effect": "进行乔装或艺术/手艺（表演）检定时，可以花费 10 点幸运获得一个奖励骰；可以使用腹语；若有人试图看穿伪装，其侦查或心理学检定提升为困难难度。", "luckCost": 10, "tags": ["spendLuck", "disguise"] },
+    { "id": "misc-10", "cat": "misc", "roll": 10, "zh": "早有准备", "effect": "需要的东西似乎总在手边；可以花费 10 点幸运（而非幸运检定）在附近找到有用的道具，如手电筒、绳索、武器等。", "luckCost": 10, "tags": ["spendLuck", "convenientItem"] }
+  ]
+}

@@ -12,6 +12,7 @@ import {
   ALL_CHARS, BACKGROUND_FIELDS, CHAR_LABEL, STATUS_LABEL,
   blankSheet, clampInt, computeSheet, skillName,
 } from './coc7e.js';
+import { CLASSIC_ID, resolveRuleset } from './rulesets/index.js';
 import { normalizeSpells, normalizeTomes } from './occult.js';
 
 /** 允许在记录里传输的字段（其余一律丢弃） */
@@ -21,6 +22,8 @@ const FIELDS = [
   'agePenaltyWaived',
   'occPicks', 'skills', 'customSkills', 'weapons', 'equipment', 'equipmentItems', 'spells', 'tomes', 'currency', 'extraAssets',
   'background', 'experience', 'notes', 'status',
+  // 多规则系统：游戏规则与通俗克苏鲁专属输入（官方 7e 卡这些字段为空，导出无变化）
+  'gameSystem', 'pulpTone', 'chargenMethod', 'archetypeId', 'coreChar', 'talents', 'keyConnection',
 ];
 
 // ------------------------------------------------------------------ 打包 / 解包
@@ -41,7 +44,10 @@ export function packCard(sheet) {
  */
 export function unpackCard(obj) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return { ok: false, error: '导入内容不是一张角色卡' };
-  const base = blankSheet();
+  const gameSystem = obj.gameSystem === 'pulp' || obj.gameSystem === 'classic7e'
+    ? obj.gameSystem
+    : (obj.ruleSet === 'pulp' ? 'pulp' : CLASSIC_ID);
+  const base = blankSheet('', gameSystem);
   const out = { ...base };
   const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
   const int = (v, min, max, dflt = 0) => clampInt(v, min, max, dflt);
@@ -90,6 +96,8 @@ export function unpackCard(obj) {
     };
   }
 
+  // 通俗克苏鲁没有技能上限，导入时不能按 99 截断（110% 的卡要原样还原）
+  const skillMax = gameSystem === CLASSIC_ID ? 99 : 999;
   if (Array.isArray(obj.skills)) {
     out.skills = obj.skills
       .filter((s) => s && typeof s.id === 'string' && typeof s.key === 'string')
@@ -98,9 +106,10 @@ export function unpackCard(obj) {
         id: s.id.slice(0, 32),
         key: s.key.slice(0, 32),
         custom: str(s.custom, 24),
-        occ: int(s.occ, 0, 99, 0),
-        interest: int(s.interest, 0, 99, 0),
-        growth: int(s.growth, 0, 99, 0),
+        occ: int(s.occ, 0, skillMax, 0),
+        interest: int(s.interest, 0, skillMax, 0),
+        bonus: int(s.bonus, 0, skillMax, 0),
+        growth: int(s.growth, 0, skillMax, 0),
       }));
   }
   if (Array.isArray(obj.customSkills)) {
@@ -108,9 +117,10 @@ export function unpackCard(obj) {
       id: typeof s?.id === 'string' && s.id ? s.id.slice(0, 32) : `cs_import${i}`,
       name: str(s?.name, 24),
       base: int(s?.base, 0, 99, 0),
-      occ: int(s?.occ, 0, 99, 0),
-      interest: int(s?.interest, 0, 99, 0),
-      growth: int(s?.growth, 0, 99, 0),
+      occ: int(s?.occ, 0, skillMax, 0),
+      interest: int(s?.interest, 0, skillMax, 0),
+      bonus: int(s?.bonus, 0, skillMax, 0),
+      growth: int(s?.growth, 0, skillMax, 0),
       isOccupation: Boolean(s?.isOccupation),
     })).filter((s) => s.name);
   }
@@ -140,6 +150,15 @@ export function unpackCard(obj) {
   out.experience = str(obj.experience, 4000);
   out.notes = str(obj.notes, 4000);
   out.status = ['draft', 'active', 'retired', 'dead'].includes(obj.status) ? obj.status : 'draft';
+  out.gameSystem = gameSystem;
+  out.pulpTone = ['low', 'standard', 'high'].includes(obj.pulpTone) ? obj.pulpTone : 'standard';
+  out.chargenMethod = obj.chargenMethod === 'quick' ? 'quick' : 'roll';
+  out.archetypeId = str(obj.archetypeId, 40);
+  out.coreChar = ALL_CHARS.includes(obj.coreChar) ? obj.coreChar : '';
+  out.talents = Array.isArray(obj.talents)
+    ? obj.talents.filter((t) => typeof t === 'string' && t).slice(0, 8)
+    : [];
+  out.keyConnection = str(obj.keyConnection, 40);
   // 导入的卡一律从「未提交审核」的草稿开始，且不带传奇标记（那要 KP 单独给）
   out.legendary = { ...base.legendary };
   out.legendaryBonus = { ...base.legendaryBonus };
@@ -152,6 +171,13 @@ export function unpackCard(obj) {
 
 // ------------------------------------------------------------------ Markdown 生成
 const text = (v) => String(v ?? '').trim();
+
+/** 通俗档位的中文名（未知档位回落到默认档） */
+function pulpToneLabel(R, id) {
+  const list = (R.chargen && R.chargen.tones) || [];
+  const hit = list.find((t) => t.id === id);
+  return hit ? hit.label : '默认通俗';
+}
 const cell = (v) => String(v ?? '').replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>') || '—';
 const body = (v, empty = '（未填写）') => (text(v) || empty);
 
@@ -167,21 +193,25 @@ function attrTotals(sheet, derived) {
 }
 
 function skillTotal(row) {
-  return (row.base || 0) + (row.occ || 0) + (row.interest || 0) + (row.growth || 0);
+  return (row.base || 0) + (row.occ || 0) + (row.interest || 0) + (row.bonus || 0) + (row.growth || 0);
 }
 
-function skillRows(sheet, derived) {
+function skillRows(sheet, derived, R) {
   const rows = [];
   for (const s of derived?.skills || []) {
     rows.push({
-      name: skillName(s.key, s.custom) + (s.houseBase ? '（房规调整）' : ''),
-      base: s.base, occ: s.occ || 0, interest: s.interest || 0, growth: s.growth || 0, total: s.total,
-      used: Boolean(s.used || s.houseBase || s.occ > 0 || s.interest > 0 || s.growth > 0),
+      name: skillName(s.key, s.custom, R) + (s.houseBase ? '（房规调整）' : ''),
+      base: s.base, occ: s.occ || 0, interest: s.interest || 0, bonus: s.bonus || 0,
+      growth: s.growth || 0, total: s.total,
+      used: Boolean(s.used || s.houseBase || s.occ > 0 || s.interest > 0 || s.bonus > 0 || s.growth > 0),
     });
   }
   for (const s of sheet.customSkills || []) {
     if (!s?.name) continue;
-    const row = { name: `${s.name}（自建）`, base: s.base || 0, occ: s.occ || 0, interest: s.interest || 0, growth: s.growth || 0 };
+    const row = {
+      name: `${s.name}（自建）`, base: s.base || 0, occ: s.occ || 0,
+      interest: s.interest || 0, bonus: s.bonus || 0, growth: s.growth || 0,
+    };
     row.total = skillTotal(row);
     rows.push(row);
   }
@@ -195,13 +225,16 @@ function skillRows(sheet, derived) {
  */
 export function buildCardMarkdown(character, derived) {
   const s = character || {};
-  const d = derived || computeSheet(s);
+  const gameR = resolveRuleset(s.gameSystem || CLASSIC_ID);
+  const isPulp = gameR.id !== CLASSIC_ID;
+  const d = derived || computeSheet(s, { ruleset: gameR });
   const lines = [];
   const name = text(s.name) || '未命名调查员';
 
   lines.push(`# 调查员档案 · ${name}`, '');
   lines.push(`> 导出时间：${new Date().toLocaleString('zh-CN', { hour12: false })}`);
   const set = s.ruleSet || s.ruleSnapshot || null;
+  lines.push(`> 游戏规则：${gameR.name}（${gameR.short}）`)
   lines.push(`> 规则集：${set?.name || set?.setName || '官方规则书'}`);
   lines.push('> 本文件只记录玩家填写的车卡内容，不含归属账号、审核状态与模组经历。', '');
 
@@ -214,6 +247,13 @@ export function buildCardMarkdown(character, derived) {
   lines.push(`- 时代：${body(s.era)}`);
   lines.push(`- 居住地：${body(s.residence)}`);
   lines.push(`- 出生地：${body(s.birthplace)}`);
+  if (isPulp) {
+    const tone = gameR.chargen?.quick ? (pulpToneLabel(gameR, s.pulpTone)) : '默认通俗';
+    lines.push(`- 英雄原型：${body(d.archetype?.zh, '未选择原型')}`);
+    lines.push(`- 核心属性：${d.coreChar ? `${CHAR_LABEL[d.coreChar] || d.coreChar} ${d.coreChar}` : '未指定'}`);
+    lines.push(`- 通俗档位：${tone}`);
+    lines.push(`- 车卡方式：${s.chargenMethod === 'quick' ? '速建' : '逐项掷骰'}`);
+  }
   lines.push(`- 状态：${STATUS_LABEL[s.status] || '草稿'}`, '');
 
   lines.push('## 属性', '', '| 属性 | 数值 | 成长 |', '| --- | --- | --- |');
@@ -240,12 +280,31 @@ export function buildCardMarkdown(character, derived) {
   }
   lines.push('');
 
-  lines.push('## 技能（全部）', '', '| 技能 | 基础 | 职业 | 兴趣 | 成长 | 合计 |', '| --- | --- | --- | --- | --- | --- |');
-  const rows = skillRows(s, d);
+  if (isPulp) {
+    const talentNames = (Array.isArray(s.talents) ? s.talents : [])
+      .map((id) => gameR.talentById?.[id]?.zh || id);
+    const keyConn = BACKGROUND_FIELDS.find(([k]) => k === s.keyConnection);
+    lines.push('## 天赋与关键连接', '');
+    lines.push(`- 天赋（${talentNames.length} 项）：${talentNames.length ? talentNames.join('、') : '未选择'}`);
+    lines.push(`- 英雄奖励点：已用 ${d.spent?.bonus ?? 0} / ${d.budget?.bonus ?? 0}`);
+    lines.push(`- 关键连接：${keyConn ? keyConn[1] : '未指定'}`);
+    const bonusSkill = gameR.chargen?.bonusPoints ? `（白名单 ${d.bonusAllowedKeys?.length ?? 0} 项技能）` : '';
+    if (bonusSkill) lines.push(`- 奖励点可投${bonusSkill}`);
+    lines.push('');
+  }
+
+  lines.push('## 技能（全部）', '',
+    isPulp ? '| 技能 | 基础 | 职业 | 兴趣 | 奖励 | 成长 | 合计 |' : '| 技能 | 基础 | 职业 | 兴趣 | 成长 | 合计 |',
+    isPulp ? '| --- | --- | --- | --- | --- | --- | --- |' : '| --- | --- | --- | --- | --- | --- |');
+  const rows = skillRows(s, d, gameR);
   if (rows.length) {
-    for (const r of rows) lines.push(`| ${cell(r.name)} | ${r.base} | ${r.occ} | ${r.interest} | ${r.growth} | ${r.total} |`);
+    for (const r of rows) {
+      lines.push(isPulp
+        ? `| ${cell(r.name)} | ${r.base} | ${r.occ} | ${r.interest} | ${r.bonus || 0} | ${r.growth} | ${r.total} |`
+        : `| ${cell(r.name)} | ${r.base} | ${r.occ} | ${r.interest} | ${r.growth} | ${r.total} |`);
+    }
   } else {
-    lines.push('| （无技能数据） | — | — | — | — | — |');
+    lines.push(isPulp ? '| （无技能数据） | — | — | — | — | — | — |' : '| （无技能数据） | — | — | — | — | — |');
   }
   lines.push('');
 

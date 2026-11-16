@@ -1,0 +1,1136 @@
+{
+ "source": "Pulp Cthulhu 中文版 第二章 第五步「技能」技能表(书 p.36; md:3733-3745)",
+ "note": "52 个主项(含 格斗/射击 两个父项)+ 15 个子项 = 67;另补录原书漏印的 潜行(=20,baseSource=7e-unconfirmed)与 5 项灵能技能,合计 73。flags: pulpAdjusted=书内加粗表示通俗版调整过;psychic=灵能;rare=书中标[罕见](未印在通俗角色卡上);spec=书中标[专业](分化为多个子技能)。艺术和手艺/科学/语言/学识/操纵/生存 的子项书中未给基础值,故只列父项。",
+ "skills": [
+  {
+   "id": "accounting",
+   "zh": "会计",
+   "en": "Accounting",
+   "group": "通识",
+   "base": {
+    "type": "value",
+    "value": 5
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "animal_handling",
+   "zh": "驯兽",
+   "en": "Animal Handling",
+   "group": "技艺",
+   "base": {
+    "type": "value",
+    "value": 5
+   },
+   "flags": [],
+   "spec": false,
+   "rare": true,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "anthropology",
+   "zh": "人类学",
+   "en": "Anthropology",
+   "group": "学术",
+   "base": {
+    "type": "value",
+    "value": 1
+   },
+   "flags": [],
+   "spec": false,
+   "rare": true,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "appraise",
+   "zh": "估价",
+   "en": "Appraise",
+   "group": "通识",
+   "base": {
+    "type": "value",
+    "value": 5
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "archaeology",
+   "zh": "考古学",
+   "en": "Archaeology",
+   "group": "学术",
+   "base": {
+    "type": "value",
+    "value": 1
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "art_craft",
+   "zh": "艺术和手艺",
+   "en": "Art/Craft",
+   "group": "技艺",
+   "base": {
+    "type": "value",
+    "value": 5
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "artillery",
+   "zh": "炮术",
+   "en": "Artillery",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 1
+   },
+   "flags": [],
+   "spec": false,
+   "rare": true,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "charm",
+   "zh": "取悦",
+   "en": "Charm",
+   "group": "社交",
+   "base": {
+    "type": "value",
+    "value": 15
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "climb",
+   "zh": "攀爬",
+   "en": "Climb",
+   "group": "运动",
+   "base": {
+    "type": "value",
+    "value": 20
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "computer_use",
+   "zh": "计算机使用",
+   "en": "Computer Use",
+   "group": "机械",
+   "base": {
+    "type": "value",
+    "value": 0
+   },
+   "flags": [
+    "pulpAdjusted"
+   ],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "credit_rating",
+   "zh": "信用评级",
+   "en": "Credit Rating",
+   "group": "社交",
+   "base": {
+    "type": "value",
+    "value": 0
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "cthulhu_mythos",
+   "zh": "克苏鲁神话",
+   "en": "Cthulhu Mythos",
+   "group": "神秘",
+   "base": {
+    "type": "value",
+    "value": 0
+   },
+   "flags": [
+    "pulpAdjusted"
+   ],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "demolitions",
+   "zh": "爆破",
+   "en": "Demolitions",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 1
+   },
+   "flags": [],
+   "spec": false,
+   "rare": true,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "disguise",
+   "zh": "乔装",
+   "en": "Disguise",
+   "group": "技艺",
+   "base": {
+    "type": "value",
+    "value": 5
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "diving",
+   "zh": "潜水",
+   "en": "Diving",
+   "group": "运动",
+   "base": {
+    "type": "value",
+    "value": 1
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": true,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "dodge",
+   "zh": "闪避",
+   "en": "Dodge",
+   "group": "运动",
+   "base": {
+    "type": "attr",
+    "expr": "DEX/2"
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "drive_auto",
+   "zh": "汽车驾驶",
+   "en": "Drive Auto",
+   "group": "机械",
+   "base": {
+    "type": "value",
+    "value": 20
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "electrical_repair",
+   "zh": "电气维修",
+   "en": "Electrical Repair",
+   "group": "机械",
+   "base": {
+    "type": "value",
+    "value": 10
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "fast_talk",
+   "zh": "话术",
+   "en": "Fast Talk",
+   "group": "社交",
+   "base": {
+    "type": "value",
+    "value": 5
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "fighting",
+   "zh": "格斗",
+   "en": "Fighting",
+   "group": "战斗",
+   "base": {
+    "type": "zero"
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "firearms",
+   "zh": "射击",
+   "en": "Firearms",
+   "group": "战斗",
+   "base": {
+    "type": "zero"
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "first_aid",
+   "zh": "急救",
+   "en": "First Aid",
+   "group": "学术",
+   "base": {
+    "type": "value",
+    "value": 30
+   },
+   "flags": [
+    "pulpAdjusted"
+   ],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "history",
+   "zh": "历史",
+   "en": "History",
+   "group": "学术",
+   "base": {
+    "type": "value",
+    "value": 5
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "hypnosis",
+   "zh": "催眠",
+   "en": "Hypnosis",
+   "group": "学术",
+   "base": {
+    "type": "value",
+    "value": 1
+   },
+   "flags": [],
+   "spec": false,
+   "rare": true,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "intimidate",
+   "zh": "恐吓",
+   "en": "Intimidate",
+   "group": "社交",
+   "base": {
+    "type": "value",
+    "value": 15
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "jump",
+   "zh": "跳跃",
+   "en": "Jump",
+   "group": "运动",
+   "base": {
+    "type": "value",
+    "value": 20
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "language",
+   "zh": "语言",
+   "en": "Language",
+   "group": "学术",
+   "base": {
+    "type": "value",
+    "value": 1
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "language_own",
+   "zh": "母语",
+   "en": "Language (Own)",
+   "group": "学术",
+   "base": {
+    "type": "attr",
+    "expr": "EDU"
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "law",
+   "zh": "法律",
+   "en": "Law",
+   "group": "学术",
+   "base": {
+    "type": "value",
+    "value": 5
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "library_use",
+   "zh": "图书馆使用",
+   "en": "Library Use",
+   "group": "学术",
+   "base": {
+    "type": "value",
+    "value": 20
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "listen",
+   "zh": "聆听",
+   "en": "Listen",
+   "group": "感知",
+   "base": {
+    "type": "value",
+    "value": 20
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "locksmith",
+   "zh": "锁匠",
+   "en": "Locksmith",
+   "group": "机械",
+   "base": {
+    "type": "value",
+    "value": 1
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "lore",
+   "zh": "学识",
+   "en": "Lore",
+   "group": "学术",
+   "base": {
+    "type": "value",
+    "value": 1
+   },
+   "flags": [],
+   "spec": true,
+   "rare": true,
+   "newInPulp": true,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "mechanical_repair",
+   "zh": "机械维修",
+   "en": "Mechanical Repair",
+   "group": "机械",
+   "base": {
+    "type": "value",
+    "value": 10
+   },
+   "flags": [
+    "pulpAdjusted"
+   ],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "medicine",
+   "zh": "医学",
+   "en": "Medicine",
+   "group": "学术",
+   "base": {
+    "type": "value",
+    "value": 1
+   },
+   "flags": [
+    "pulpAdjusted"
+   ],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "natural_world",
+   "zh": "博物学",
+   "en": "Natural World",
+   "group": "学术",
+   "base": {
+    "type": "value",
+    "value": 10
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "navigate",
+   "zh": "导航",
+   "en": "Navigate",
+   "group": "通识",
+   "base": {
+    "type": "value",
+    "value": 10
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "occult",
+   "zh": "神秘学",
+   "en": "Occult",
+   "group": "神秘",
+   "base": {
+    "type": "value",
+    "value": 5
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "operate_heavy",
+   "zh": "操作重型机械",
+   "en": "Operate Heavy Machinery",
+   "group": "机械",
+   "base": {
+    "type": "value",
+    "value": 1
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "persuade",
+   "zh": "说服",
+   "en": "Persuade",
+   "group": "社交",
+   "base": {
+    "type": "value",
+    "value": 10
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "pilot",
+   "zh": "操纵",
+   "en": "Pilot",
+   "group": "机械",
+   "base": {
+    "type": "value",
+    "value": 1
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "psychoanalysis",
+   "zh": "精神分析",
+   "en": "Psychoanalysis",
+   "group": "学术",
+   "base": {
+    "type": "value",
+    "value": 1
+   },
+   "flags": [
+    "pulpAdjusted"
+   ],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "psychology",
+   "zh": "心理学",
+   "en": "Psychology",
+   "group": "学术",
+   "base": {
+    "type": "value",
+    "value": 10
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "read_lips",
+   "zh": "读唇",
+   "en": "Read Lips",
+   "group": "感知",
+   "base": {
+    "type": "value",
+    "value": 1
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": true,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "ride",
+   "zh": "骑术",
+   "en": "Ride",
+   "group": "运动",
+   "base": {
+    "type": "value",
+    "value": 5
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "science",
+   "zh": "科学",
+   "en": "Science",
+   "group": "学术",
+   "base": {
+    "type": "value",
+    "value": 1
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "sleight_of_hand",
+   "zh": "妙手",
+   "en": "Sleight of Hand",
+   "group": "技艺",
+   "base": {
+    "type": "value",
+    "value": 10
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "spot_hidden",
+   "zh": "侦察",
+   "en": "Spot Hidden",
+   "group": "感知",
+   "base": {
+    "type": "value",
+    "value": 25
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "stealth",
+   "zh": "潜行",
+   "en": "Stealth",
+   "group": "感知",
+   "base": {
+    "type": "value",
+    "value": 20
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "7e-unconfirmed"
+  },
+  {
+   "id": "survival",
+   "zh": "生存",
+   "en": "Survival",
+   "group": "通识",
+   "base": {
+    "type": "value",
+    "value": 10
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "swim",
+   "zh": "游泳",
+   "en": "Swim",
+   "group": "运动",
+   "base": {
+    "type": "value",
+    "value": 20
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "throw",
+   "zh": "投掷",
+   "en": "Throw",
+   "group": "运动",
+   "base": {
+    "type": "value",
+    "value": 20
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "track",
+   "zh": "追踪",
+   "en": "Track",
+   "group": "感知",
+   "base": {
+    "type": "value",
+    "value": 10
+   },
+   "flags": [],
+   "spec": false,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36"
+  },
+  {
+   "id": "fighting_axe",
+   "zh": "格斗(斧)",
+   "en": "Fighting (Axe)",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 15
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36",
+   "parent": "fighting"
+  },
+  {
+   "id": "fighting_bow",
+   "zh": "格斗(弓)",
+   "en": "Fighting (Bow)",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 15
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36",
+   "parent": "fighting"
+  },
+  {
+   "id": "fighting_brawl",
+   "zh": "格斗(斗殴)",
+   "en": "Fighting (Brawl)",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 25
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36",
+   "parent": "fighting"
+  },
+  {
+   "id": "fighting_chainsaw",
+   "zh": "格斗(链锯)",
+   "en": "Fighting (Chainsaw)",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 10
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36",
+   "parent": "fighting"
+  },
+  {
+   "id": "fighting_flail",
+   "zh": "格斗(连枷)",
+   "en": "Fighting (Flail)",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 10
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36",
+   "parent": "fighting"
+  },
+  {
+   "id": "fighting_garrote",
+   "zh": "格斗(绞索)",
+   "en": "Fighting (Garrote)",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 15
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36",
+   "parent": "fighting"
+  },
+  {
+   "id": "fighting_sword",
+   "zh": "格斗(刀剑)",
+   "en": "Fighting (Sword)",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 20
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36",
+   "parent": "fighting"
+  },
+  {
+   "id": "fighting_whip",
+   "zh": "格斗(鞭)",
+   "en": "Fighting (Whip)",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 5
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36",
+   "parent": "fighting"
+  },
+  {
+   "id": "firearms_flamethrower",
+   "zh": "射击(火焰喷射器)",
+   "en": "Firearms (Flamethrower)",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 10
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36",
+   "parent": "firearms"
+  },
+  {
+   "id": "firearms_handgun",
+   "zh": "射击(手枪)",
+   "en": "Firearms (Handgun)",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 20
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36",
+   "parent": "firearms"
+  },
+  {
+   "id": "firearms_heavy",
+   "zh": "射击(重武器)",
+   "en": "Firearms (Heavy Weapons)",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 10
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36",
+   "parent": "firearms"
+  },
+  {
+   "id": "firearms_machinegun",
+   "zh": "射击(机关枪)",
+   "en": "Firearms (Machine Gun)",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 10
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36",
+   "parent": "firearms"
+  },
+  {
+   "id": "firearms_rifle",
+   "zh": "射击(步枪/霰弹枪)",
+   "en": "Firearms (Rifle/Shotgun)",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 25
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36",
+   "parent": "firearms"
+  },
+  {
+   "id": "firearms_spear",
+   "zh": "射击(矛)",
+   "en": "Firearms (Spear)",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 20
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36",
+   "parent": "firearms"
+  },
+  {
+   "id": "firearms_smg",
+   "zh": "射击(冲锋枪)",
+   "en": "Firearms (Submachine Gun)",
+   "group": "战斗",
+   "base": {
+    "type": "value",
+    "value": 15
+   },
+   "flags": [],
+   "spec": true,
+   "rare": false,
+   "newInPulp": false,
+   "baseSource": "pulp-p36",
+   "parent": "firearms"
+  },
+  {
+   "id": "psychic_clairvoyance",
+   "zh": "遥视",
+   "en": "Clairvoyance",
+   "group": "灵能",
+   "base": {
+    "type": "value",
+    "value": 0
+   },
+   "flags": [
+    "psychic"
+   ],
+   "spec": false,
+   "rare": false,
+   "newInPulp": true,
+   "baseSource": "pulp"
+  },
+  {
+   "id": "psychic_divination",
+   "zh": "占卜",
+   "en": "Divination",
+   "group": "灵能",
+   "base": {
+    "type": "value",
+    "value": 0
+   },
+   "flags": [
+    "psychic"
+   ],
+   "spec": false,
+   "rare": false,
+   "newInPulp": true,
+   "baseSource": "pulp"
+  },
+  {
+   "id": "psychic_medium",
+   "zh": "灵媒",
+   "en": "Medium",
+   "group": "灵能",
+   "base": {
+    "type": "value",
+    "value": 0
+   },
+   "flags": [
+    "psychic"
+   ],
+   "spec": false,
+   "rare": false,
+   "newInPulp": true,
+   "baseSource": "pulp"
+  },
+  {
+   "id": "psychic_telepathy",
+   "zh": "心灵感应",
+   "en": "Telepathy",
+   "group": "灵能",
+   "base": {
+    "type": "value",
+    "value": 0
+   },
+   "flags": [
+    "psychic"
+   ],
+   "spec": false,
+   "rare": false,
+   "newInPulp": true,
+   "baseSource": "pulp"
+  },
+  {
+   "id": "psychic_psychokinesis",
+   "zh": "念动",
+   "en": "Psychokinesis",
+   "group": "灵能",
+   "base": {
+    "type": "value",
+    "value": 0
+   },
+   "flags": [
+    "psychic"
+   ],
+   "spec": false,
+   "rare": false,
+   "newInPulp": true,
+   "baseSource": "pulp"
+  }
+ ]
+}

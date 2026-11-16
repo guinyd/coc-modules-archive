@@ -147,6 +147,16 @@ try {
   await page.send('Runtime.enable');
   await page.send('Page.enable');
 
+  /** 新建角色卡现在要先选游戏规则：默认选「克苏鲁的呼唤 第七版」 */
+  async function pickClassic() {
+    await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('克苏鲁的呼唤 第七版'));
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(1200);
+  }
+
   console.log('\n== 加载站点 ==');
   await page.send('Page.navigate', { url: BASE });
   await sleep(2500);
@@ -192,6 +202,7 @@ try {
       return Boolean(btn);
     })()`);
     await sleep(1600);
+    await pickClassic();
     const editorText = await page.eval('document.body.innerText');
     ok('编辑器渲染属性面板', editorText.includes('属性明细与年龄补正'));
     ok('编辑器渲染派生值', editorText.includes('生命值 HP') && editorText.includes('移动力 MOV'));
@@ -426,6 +437,7 @@ try {
       return Boolean(b);
     })()`);
     await sleep(1600);
+    await pickClassic();
     const guestEditor = await page.eval('document.body.innerText');
     ok('访客可打开车卡编辑器', guestEditor.includes('属性明细与年龄补正'));
     ok('访客编辑器提示仅存本机', guestEditor.includes('本机浏览器'));
@@ -518,6 +530,7 @@ try {
       return Boolean(b);
     })()`);
     await sleep(900);
+    await pickClassic();
     // 选职业（现在职业是必选）
     await page.eval(`(() => {
       const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('选择职业'));
@@ -860,6 +873,7 @@ try {
     await sleep(1400);
     await page.eval(`(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('新建角色卡'));b&&b.click();return 1})()`);
     await sleep(1600);
+    await pickClassic();
     await page.eval(`(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('技能分配'));b&&b.click();return 1})()`);
     await sleep(1000);
     const langInput = await page.eval(`(()=>{const i=[...document.querySelectorAll('input')].find(x=>x.placeholder&&x.placeholder.includes('例：中文')); return i?i.placeholder:'无'})()`);
@@ -913,6 +927,81 @@ try {
     })()`);
     ok('详情页头图也有档案封印', Boolean(heroCover) && heroCover.text.includes('档案编号'), String(heroCover?.text));
     ok('详情页头图保留四角套准角标', (heroCover?.corners || 0) >= 4, `角标 ${heroCover?.corners}`);
+
+    console.log('\n== 通俗克苏鲁车卡器（v10.9） ==');
+    await page.send('Page.navigate', { url: BASE });
+    await sleep(2200);
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('我的角色卡')); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(1500);
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('新建角色卡')); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(1500);
+    const systemPicker = await page.eval('document.body.innerText');
+    ok('新建卡先选游戏规则（7e / 通克 两张卡）',
+      systemPicker.includes('克苏鲁的呼唤 第七版') && systemPicker.includes('通俗克苏鲁'), systemPicker.slice(0, 140));
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('通俗克苏鲁')); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(1600);
+    let pulpText = await page.eval('document.body.innerText');
+    ok('通克编辑器渲染原型与档位区', pulpText.includes('英雄原型与通俗档位') && pulpText.includes('低通俗') && pulpText.includes('高通俗'));
+    ok('通克编辑器渲染四张天赋表', pulpText.includes('四张 d10 表') && pulpText.includes('肉体天赋'));
+    ok('通克编辑器提示必须选原型', pulpText.includes('必须先选原型'));
+
+    const archePicked = await page.eval(`(() => {
+      const sel = [...document.querySelectorAll('select')].find((s) => [...s.options].some((o) => (o.textContent || '').includes('冒险家')));
+      if (!sel) return { ok: false, reason: '找不到原型下拉' };
+      const opt = [...sel.options].find((o) => (o.textContent || '').includes('冒险家'));
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setter.call(sel, opt.value);
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      return { ok: true, value: opt.value };
+    })()`);
+    await sleep(1200);
+    pulpText = await page.eval('document.body.innerText');
+    ok('选中原型后显示奖励点与白名单',
+      archePicked.ok && pulpText.includes('奖励点') && pulpText.includes('冒险家'), JSON.stringify(archePicked));
+    const coreVal = await page.eval(`(() => {
+      const sel = [...document.querySelectorAll('select')].find((s) => [...s.options].some((o) => (o.textContent || '').includes('敏捷')));
+      return sel ? sel.value : '';
+    })()`);
+    ok('核心属性自动落在原型属性上', coreVal === 'DEX' || coreVal === 'APP' || coreVal === '', coreVal);
+
+    // 天赋勾选
+    await page.eval(`(() => {
+      const rows = [...document.querySelectorAll('button')].filter((b) => (b.textContent || '').includes('明察秋毫'));
+      if (rows[0]) rows[0].click();
+      return Boolean(rows[0]);
+    })()`);
+    await sleep(600);
+    const talentOn = await page.eval('document.body.innerText.includes(\'已选 1 项\')');
+    ok('天赋可勾选并计数', talentOn === true);
+
+    // 填名字 + 选职业 → 保存
+    await page.eval(`(() => {
+      const input = [...document.querySelectorAll('input')].find((i) => (i.placeholder || '').includes('约翰'));
+      if (!input) return false;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '通克自检英雄');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    })()`);
+    await sleep(400);
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('选择职业')); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(900);
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('警官')); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(900);
+    // 通克必须先把属性掷出来（全 0 会被校验拦住，存不进库）
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('一键掷骰生成属性')); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(700);
+    const occText = await page.eval('document.body.innerText');
+    ok('通克职业列表可用（68 个职业）', occText.includes('警官') || occText.includes('职业要求'), occText.slice(0, 80));
+    const savedPulp = await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.includes('保存角色卡'));
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(2200);
+    const listText = await page.eval('document.body.innerText');
+    ok('通克卡保存后列表出现「通克」标记',
+      savedPulp === true && listText.includes('通克'), listText.slice(0, 160));
 
     const shot = await page.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(path.join(SHOTS, 'editor.png'), Buffer.from(shot.data, 'base64'));

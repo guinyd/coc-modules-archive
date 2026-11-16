@@ -959,6 +959,8 @@ try {
 
   const queue = await api('GET', '/api/admin/reviews', { token: A });
   ok('KP 审核队列包含该卡', queue.json.items.some((x) => x.id === usingTpl.json.id));
+  const queueCard = queue.json.items.find((x) => x.id === usingTpl.json.id);
+  ok('审核队列带提交时间 submittedAt', typeof queueCard?.review?.submittedAt === 'number' && queueCard.review.submittedAt > 0);
   const playerQueue = await api('GET', '/api/admin/reviews', { token: playerToken });
   ok('玩家访问审核队列 → 403', playerQueue.status === 403);
 
@@ -1159,12 +1161,107 @@ try {
   await api('DELETE', `/api/rule-sets/${rs2}`, { token: A });
   await api('DELETE', `/api/characters/${card2.json.id}`, { token: A });
 
+  // 忽略年龄规则：房规命中后可超出 15-120，且提示里不再出现年龄条目
+  const mkSetAge = await api('POST', '/api/rule-sets', {
+    token: A,
+    body: { name: '忽略年龄房规', scope: 'personal', houseRules: [{ type: 'ignoreAge' }] },
+  });
+  const rsAge = mkSetAge.json?.item?.id;
+  ok('忽略年龄规则可作为房规保存', mkSetAge.status === 201 && mkSetAge.json.item.houseRules[0]?.type === 'ignoreAge');
+  const oldCard = await api('POST', '/api/characters', {
+    token: A,
+    body: { ...blank, name: '百岁调查员', occupationId: 2, age: 130, applyAgeAdjust: true, ruleSetId: rsAge },
+  });
+  ok('忽略年龄规则允许录入 130 岁', oldCard.status === 200 && oldCard.json.age === 130);
+  ok('忽略年龄规则不再提示年龄/教育问题',
+    !oldCard.json.warnings.some((x) => x.includes('年龄')) && !oldCard.json.audit.findings.some((f) => String(f.id).includes('age') || String(f.id).includes('edu')));
+  await api('DELETE', `/api/rule-sets/${rsAge}`, { token: A });
+  await api('DELETE', `/api/characters/${oldCard.json.id}`, { token: A });
+
   const pSet = await api('POST', '/api/rule-sets', { token: playerToken, body: { name: '玩家房规' } });
   ok('玩家不能创建规则集 → 403', pSet.status === 403);
   const pAct = await api('PUT', `/api/rule-sets/${rsId}/active`, { token: playerToken });
   ok('玩家不能启用规则集 → 403', pAct.status === 403);
   await api('DELETE', `/api/rule-sets/${rsId}`, { token: A });
   await api('DELETE', `/api/characters/${houseCard.json.id}`, { token: A });
+
+  section('多规则系统：通俗克苏鲁（v10.9）');
+  const pulpBody = {
+    name: '通克冒烟卡', playerName: '测试', gameSystem: 'pulp', occupationId: 'police_officer',
+    archetypeId: 'adventurer', coreChar: 'DEX', talents: ['phys-01', 'phys-02'],
+    keyConnection: 'appearance', pulpTone: 'standard', chargenMethod: 'roll',
+    age: 30, gender: '男', era: '1920s',
+    chars: { STR: 50, CON: 60, SIZ: 60, DEX: 70, APP: 60, INT: 60, POW: 60, EDU: 60, Luck: 65 },
+    background: { appearance: '总穿一件旧风衣' },
+    skills: [{ id: 'spotHidden', key: 'spotHidden', occ: 50, interest: 30, bonus: 20 }],
+  };
+  const pc = await api('POST', '/api/characters', { token: A, body: pulpBody });
+  ok('可创建通俗克苏鲁角色卡', pc.status === 200, JSON.stringify(pc.json).slice(0, 200));
+  ok('通克 HP 按 ⌊(体质+体型)/5⌋ = 24', pc.json?.derived?.hp === 24, `实际 ${pc.json?.derived?.hp}`);
+  ok('通克发放 100 点英雄奖励点', pc.json?.derived?.budget?.bonus === 100);
+  ok('本职 50 + 兴趣 30 + 奖励 20 = 125（三池叠加）',
+    pc.json?.derived?.skills?.find((s) => s.key === 'spotHidden')?.total === 125);
+  ok('规则标识回读为 pulp', pc.json?.gameSystem === 'pulp');
+  ok('奖励点随卡保存', pc.json?.skills?.find((s) => s.key === 'spotHidden')?.bonus === 20);
+
+  const pcRead = await api('GET', `/api/characters/${pc.json.id}`, { token: A });
+  ok('原型 / 核心属性 / 天赋 / 关键连接完整回读',
+    pcRead.json?.archetypeId === 'adventurer' && pcRead.json?.coreChar === 'DEX'
+    && Array.isArray(pcRead.json?.talents) && pcRead.json.talents.length === 2
+    && pcRead.json?.keyConnection === 'appearance');
+  ok('派生值里带原型摘要（核心属性与奖励白名单）',
+    pcRead.json?.derived?.archetype?.id === 'adventurer'
+    && Array.isArray(pcRead.json?.derived?.bonusAllowedKeys) && pcRead.json.derived.bonusAllowedKeys.length > 0);
+
+  // 审卡：通克专属规则项只在通克卡上触发
+  const pulpMissing = await api('POST', '/api/characters', {
+    token: A, body: { ...pulpBody, name: '缺原型的通克卡', archetypeId: '', coreChar: '' },
+  });
+  const pulpAudit = await api('POST', `/api/admin/audit/${pulpMissing.json.id}`, { token: A });
+  const pulpIds = (pulpAudit.json?.findings || []).map((f) => f.id);
+  ok('通克卡未选原型 → 审卡报 archetypeRequired', pulpIds.includes('archetypeRequired'), JSON.stringify(pulpIds));
+  ok('通克卡审卡结果标记所属游戏规则', pulpAudit.json?.stats?.gameSystem === 'pulp', JSON.stringify(pulpAudit.json?.stats));
+
+  // 经典卡不受通克规则影响（单独建一张，避免依赖前面段落里那张卡的生命周期）
+  const classicCard = await api('POST', '/api/characters', {
+    token: A,
+    body: {
+      name: '七版对照卡', occupationId: 2, age: 30,
+      chars: { STR: 50, CON: 50, SIZ: 50, DEX: 50, APP: 50, INT: 50, POW: 50, EDU: 60 },
+      skills: [{ id: 'accounting', key: 'accounting', occ: 40, interest: 0, growth: 0 }],
+    },
+  });
+  const classicAudit = await api('POST', `/api/admin/audit/${classicCard.json.id}`, { token: A });
+  const classicIds = (classicAudit.json?.findings || []).map((f) => f.id);
+  ok('官方 7e 卡不会出现通克规则项',
+    !classicIds.includes('archetypeRequired') && !classicIds.includes('keyConnectionMissing'));
+  ok('官方 7e 卡的审卡统计仍是 classic7e', classicAudit.json?.stats?.gameSystem === 'classic7e',
+    JSON.stringify(classicAudit.json?.stats));
+  await api('DELETE', `/api/characters/${classicCard.json.id}`, { token: A });
+
+  // 非法输入
+  const badSystem = await api('POST', '/api/characters', { token: A, body: { ...pulpBody, gameSystem: 'gurps' } });
+  ok('未知游戏规则 → 400', badSystem.status === 400);
+  const badArche = await api('POST', '/api/characters', { token: A, body: { ...pulpBody, archetypeId: 'nope' } });
+  ok('未知原型 → 400', badArche.status === 400);
+  const badKeyConn = await api('POST', '/api/characters', { token: A, body: { ...pulpBody, keyConnection: 'nope' } });
+  ok('关键连接必须指向背景栏 → 400', badKeyConn.status === 400);
+
+  // 跨规则降级：通克卡 PUT 成经典规则时，通克技能与奖励点被清掉而不是崩
+  const downgrade = await api('PUT', `/api/characters/${pc.json.id}`, {
+    token: A,
+    body: {
+      name: '通克冒烟卡（改七版）', gameSystem: 'classic7e', occupationId: 2, age: 30,
+      chars: { STR: 50, CON: 60, SIZ: 60, DEX: 70, APP: 60, INT: 60, POW: 60, EDU: 60, Luck: 65 },
+      skills: [], background: {},
+    },
+  });
+  ok('通克卡改存为经典规则不报错', downgrade.status === 200, JSON.stringify(downgrade.json).slice(0, 160));
+  ok('降级后技能表切回 7e（64 槽）', downgrade.json?.derived?.skills?.length === 64,
+    `实际 ${downgrade.json?.derived?.skills?.length}`);
+
+  await api('DELETE', `/api/characters/${pc.json.id}`, { token: A });
+  await api('DELETE', `/api/characters/${pulpMissing.json.id}`, { token: A });
 
   section('多 KP 权限（v10.1）');
   const suffix = Date.now().toString(36);
