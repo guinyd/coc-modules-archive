@@ -21,6 +21,7 @@ import {
   ALL_CHARS, AUDIT_RULE_META, CHAR_LABEL, DEFAULT_AUDIT_RULES, REVIEW_LABEL, SKILLS, SKILL_BY_KEY,
   SOCIAL_SKILLS, STATUS_LABEL, houseRuleSummary,
 } from '../../../shared/coc7e.js';
+import { CLASSIC_ID, GAME_SYSTEMS, resolveRuleset } from '../../../shared/rulesets/index.js';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../../lib/api.js';
 import { eduGrowthLabel, grantEduReroll } from '../../../shared/coc7e.js';
 import EduQuickModal from './EduQuickModal.jsx';
@@ -610,6 +611,16 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
   const [draft, setDraft] = useState(blankDraft);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [gameSystem, setGameSystem] = useState(CLASSIC_ID);
+
+  const R = useMemo(() => resolveRuleset(gameSystem), [gameSystem]);
+  const isPulp = R.id !== CLASSIC_ID;
+  // 每套游戏规则各有自己的官方基线：官方 7e 用内置默认，通克再叠加规则集里的差异项
+  const baseRules = useMemo(() => ({ ...DEFAULT_AUDIT_RULES, ...(R.auditRules || {}) }), [R]);
+  const systemSets = useMemo(
+    () => sets.filter((s) => (s.gameSystem || CLASSIC_ID) === gameSystem),
+    [sets, gameSystem],
+  );
 
   const selected = useMemo(() => sets.find((s) => s.id === selectedId) || null, [sets, selectedId]);
   const isDraft = !selectedId;
@@ -620,41 +631,50 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
   const allowDeriveBase = !isDraft;
   const visibleHouseRules = allowDeriveBase ? houseRules : houseRules.filter((r) => r.type !== 'deriveBase');
 
-  const fillDraftView = (data) => {
+  const fillDraftView = useCallback((data) => {
     setSelectedId('');
     setSetName('');
-    setRules({ ...DEFAULT_AUDIT_RULES, ...(data?.rules || {}) });
+    setRules({ ...baseRules, ...(data?.rules || {}) });
     setHouseRules((data?.houseRules || []).map((r) => ({ ...r })));
-  };
+  }, [baseRules]);
 
-  const fillSet = (set) => {
+  const fillSet = useCallback((set) => {
     setSelectedId(set.id);
     setSetName(set.name || '');
-    setRules({ ...DEFAULT_AUDIT_RULES, ...(set.auditRules || {}) });
+    setRules({ ...baseRules, ...(set.auditRules || {}) });
     setHouseRules((set.houseRules || []).map((r) => ({ ...r })));
-  };
+  }, [baseRules]);
 
-  const refresh = useCallback(async (preferId) => {
+  const refresh = useCallback(async (preferId, systemOverride) => {
+    const sys = systemOverride || gameSystem;
     setLoading(true);
     try {
       const [res, rs] = await Promise.all([
-        apiGet('/api/admin/audit-rules'),
+        apiGet(`/api/admin/audit-rules?gameSystem=${sys}`),
         apiGet('/api/rule-sets'),
       ]);
-      const list = Array.isArray(rs.items) ? rs.items : [];
+      const list = (Array.isArray(rs.items) ? rs.items : [])
+        .filter((s) => (s.gameSystem || CLASSIC_ID) === sys);
       setSets(list);
       const view = {
-        rules: res.draftRules || { ...DEFAULT_AUDIT_RULES },
+        rules: res.draftRules || baseRules,
         houseRules: Array.isArray(res.draftHouseRules) ? res.draftHouseRules : [],
       };
       setDraftData(view);
-      const wanted = preferId !== undefined ? preferId : (res.activeSetId || rs.activeId || '');
+      const wanted = preferId !== undefined ? preferId : (res.activeSetId || '');
       const pick = list.find((s) => s.id === wanted) || null;
       if (pick) fillSet(pick); else fillDraftView(view);
     } catch (err) { showToast(err.message, 'error'); } finally { setLoading(false); }
-  }, [showToast]);
+  }, [showToast, gameSystem, baseRules, fillDraftView, fillSet]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  const switchSystem = (next) => {
+    if (next === gameSystem) return;
+    setGameSystem(next);
+    setSelectedId('');
+    setSetName('');
+  };
 
   // 临时规则模式不允许技能基础值
   useEffect(() => {
@@ -675,7 +695,7 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
     if (!id) {
       setBusy(true);
       try {
-        await apiPut('/api/rule-sets/active', { id: null });
+        await apiPut('/api/rule-sets/active', { id: null, gameSystem });
         fillDraftView(draftData);
         showToast('已切换到临时规则：只对你生效，不会生成规则集');
       } catch (err) { showToast(err.message, 'error'); } finally { setBusy(false); }
@@ -690,12 +710,14 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
     runSet(async () => {
       if (isDraft) {
         await apiPut('/api/admin/audit-rules', {
+          gameSystem,
           auditRules: rules,
           houseRules: houseRules.filter((r) => r.type !== 'deriveBase'),
         });
       } else {
         await apiPut(`/api/rule-sets/${selected.id}`, {
           name: (setName || '').trim() || '我的规则集',
+          gameSystem,
           auditRules: rules,
           houseRules,
         });
@@ -706,9 +728,10 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
   const newSet = async () => {
     setBusy(true);
     try {
-      const mineCount = sets.filter((s) => s.isMine).length;
+      const mineCount = systemSets.filter((s) => s.isMine).length;
       const created = await apiPost('/api/rule-sets', {
-        name: `我的规则集 ${mineCount + 1}`, scope: 'personal', auditRules: {}, houseRules: [],
+        name: `${isPulp ? '通克规则集' : '我的规则集'} ${mineCount + 1}`,
+        gameSystem, scope: 'personal', auditRules: {}, houseRules: [],
       });
       await refresh(created?.item?.id || '');
       showToast('已新建规则集：编辑内容后点「保存规则集」');
@@ -734,7 +757,7 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
 
   const activate = () => {
     if (!selected) return;
-    runSet(() => apiPut('/api/rule-sets/active', { id: selected.id }), '已设为当前规则集', selected.id);
+    runSet(() => apiPut('/api/rule-sets/active', { id: selected.id, gameSystem }), '已设为当前规则集', selected.id);
   };
 
   const publishGlobal = () => {
@@ -742,6 +765,7 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
     showConfirm(`把【${selected.name}】发布为全局规则集？所有守秘人与玩家都会看到这套规则。`, () => (
       runSet(async () => {
         await apiPut('/api/admin/audit-rules/global', {
+          gameSystem,
           auditRules: rules, houseRules, name: setName || selected.name,
         });
       }, '已发布为全局规则集', selectedId)
@@ -751,11 +775,11 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
   const resetCurrent = () => {
     if (locked) return;
     if (isDraft) {
-      runSet(() => apiDelete('/api/admin/audit-rules'), '已清空临时规则', '');
+      runSet(() => apiDelete(`/api/admin/audit-rules?gameSystem=${gameSystem}`), '已清空临时规则', '');
       return;
     }
     runSet(() => apiPut(`/api/rule-sets/${selected.id}`, {
-      name: setName || selected.name, auditRules: {}, houseRules: [],
+      name: setName || selected.name, gameSystem, auditRules: {}, houseRules: [],
     }), '已重置这套规则集', selectedId);
   };
 
@@ -791,9 +815,10 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
     showToast(isDraft ? '已加入临时规则，点「保存临时规则」后生效' : '已加入规则集，点「保存规则集」后生效');
   };
 
-  const skillOptions = SKILLS.filter((s) => !s.spec);
+  // 通克的技能表与官方 7e 不同（58 项，含灵能），房规里的技能门槛要按当前规则取
+  const skillOptions = R.skills.filter((s) => !s.spec);
 
-  const ruleMeta = AUDIT_RULE_META.filter((m) => m.group === 'rule');
+  const ruleMeta = AUDIT_RULE_META.filter((m) => m.group === 'rule' || (isPulp && m.group === 'pulp'));
   const featureMeta = AUDIT_RULE_META.filter((m) => m.group === 'feature');
   const numbers = ruleMeta.filter((m) => m.type === 'number');
   const booleans = ruleMeta.filter((m) => m.type === 'boolean');
@@ -804,7 +829,8 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
     : locked ? (selected.scope === 'global' ? '全局规则（只读）' : '其他守秘人的规则（只读）') : '个人规则中';
   const stateTone = isDraft ? 'amber' : locked ? 'slate' : 'cyan';
 
-  const typeOptions = HOUSE_TYPES.filter((t) => allowDeriveBase || t.key !== 'deriveBase');
+  // 通克没有年龄补正与教育增强，「忽略年龄」房规对通克无意义
+  const typeOptions = HOUSE_TYPES.filter((t) => (allowDeriveBase || t.key !== 'deriveBase') && !(isPulp && t.key === 'ignoreAge'));
 
   return (
     <div className="space-y-5">
@@ -816,7 +842,7 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
             <h3 className="flex items-center gap-2 font-serif text-[19px] font-bold tracking-[0.02em] text-slate-100">
               <Scale className="h-4 w-4 text-amber-500" strokeWidth={1.7} />规则集
             </h3>
-            <Badge className={BADGE_LG} tone="slate">{sets.length} 套</Badge>
+            <Badge className={BADGE_LG} tone="slate">{systemSets.length} 套</Badge>
           </div>
           <span className="text-[14px] text-slate-500">房规与审卡规则同源</span>
         </div>
@@ -825,6 +851,33 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
             一套规则集同时包含审卡规则与自定义规则。你可以保存多套、随时切换；玩家在车卡「房规」页选用，
             提交审核时服务端会把当时这套规则冻结到卡上。
           </p>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[14px] text-slate-500">适用游戏规则</span>
+              {GAME_SYSTEMS.map((g) => {
+                const on = g.id === gameSystem;
+                return (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => switchSystem(g.id)}
+                    disabled={loading || busy}
+                    className={cx(
+                      'rounded-[2px] border px-3 py-1.5 text-[14.5px] transition-colors disabled:opacity-60',
+                      on
+                        ? 'border-amber-600 bg-amber-600 font-bold text-paper-raised'
+                        : 'border-line-strong text-slate-300 hover:border-amber-600/60 hover:text-amber-500',
+                    )}
+                  >
+                    {g.name}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[14px] leading-relaxed text-slate-500">
+              两套规则各有一套规则集与临时规则：互不影响，玩家也只会看到自己那张卡所属规则的规则集。
+            </p>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="选择规则集">
               <Select
@@ -833,7 +886,7 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
                 disabled={loading || busy}
               >
                 <option value="">— 未选择 —</option>
-                {sets.map((s) => (
+                {systemSets.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}{s.scope === 'global' ? '（全局）' : `（${s.ownerName || '守秘人'}）`}{s.isActive ? ' · 当前使用' : ''}
                   </option>
@@ -893,7 +946,7 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
         </div>
         <div className="space-y-5 p-5">
           <p className="text-[16px] leading-relaxed text-slate-500">
-            默认值全部来自<b className="text-slate-300">官方规则书</b>。
+            默认值全部来自<b className="text-slate-300">{R.name}</b>的官方规则书{isPulp ? '（含通克专属的原型、天赋、奖励点与技能上限校验）' : ''}。
           </p>
 
           <fieldset disabled={locked} className={cx('m-0 min-w-0 space-y-5 border-0 p-0', locked && 'opacity-70')}>
@@ -1045,7 +1098,7 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
 
                 {draft.type === 'deriveBase' ? (
                   <>
-                    <Field label="匹配目标" hint={`规则书基础值 ${SKILL_BY_KEY[draft.skill]?.base ?? 0}（特殊技能按属性计算）`}>
+                    <Field label="匹配目标" hint={`规则书基础值 ${R.skillByKey?.[draft.skill]?.base ?? 0}（特殊技能按属性计算）`}>
                       <Select value={draft.skill} onChange={(e) => setDraft({ ...draft, skill: e.target.value })}>
                         {skillOptions.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
                       </Select>
@@ -1192,6 +1245,7 @@ function OccupationsTab({ showToast, showConfirm, currentUser }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
+  const [sysFilter, setSysFilter] = useState('all');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1213,6 +1267,12 @@ function OccupationsTab({ showToast, showConfirm, currentUser }) {
     } catch (err) { showToast(err.message, 'error'); }
   });
 
+  const visible = useMemo(
+    () => (sysFilter === 'all' ? items : items.filter((o) => (o.gameSystem || CLASSIC_ID) === sysFilter)),
+    [items, sysFilter],
+  );
+  const countOf = (id) => (id === 'all' ? items.length : items.filter((o) => (o.gameSystem || CLASSIC_ID) === id).length);
+
   const isChief = currentUser?.kpRank === 'chief';
   /** 首席不限制；普通守秘人只能改自己发布的模板（与后端权限一致） */
   const canManage = (occ) => isChief || Boolean(occ.createdBy && occ.createdBy === currentUser?.id);
@@ -1226,28 +1286,55 @@ function OccupationsTab({ showToast, showConfirm, currentUser }) {
             <h3 className="flex items-center gap-2 font-serif text-[19px] font-bold tracking-[0.02em] text-slate-100">
               <Wand2 className="h-4 w-4 text-amber-500" strokeWidth={1.7} />自定义职业模板
             </h3>
-            <span className="border border-line-strong bg-paper px-2 py-0.5 font-mono text-[14px] tracking-[0.12em] text-slate-500 tabular">{items.length} 项</span>
+            <span className="border border-line-strong bg-paper px-2 py-0.5 font-mono text-[14px] tracking-[0.12em] text-slate-500 tabular">{visible.length} 项</span>
           </div>
           <Button className="!text-[14.5px]" onClick={() => setEditing(blankTemplate())}><Plus className="w-4 h-4" />新建职业模板</Button>
         </div>
 
         <div className="p-5">
-          <p className="mb-5 text-[16px] leading-relaxed text-slate-500">
+          <p className="mb-4 text-[16px] leading-relaxed text-slate-500">
             规则书没有、或本桌特有的职业：自己勾选本职技能、设定信用评级区间与技能点算法，玩家车卡时能直接选。
+            模板按游戏规则分开存放，只出现在对应规则的车卡职业列表里。
             {isChief ? '' : '编辑与删除仅限自己发布的模板，其他守秘人发布的模板只读。'}
           </p>
 
-          {items.length === 0 ? (
+          <div className="mb-5 flex flex-wrap items-center gap-2">
+            {[{ id: 'all', label: '全部' }, ...GAME_SYSTEMS.map((g) => ({ id: g.id, label: g.short }))].map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setSysFilter(opt.id)}
+                aria-pressed={sysFilter === opt.id}
+                className={cx('border px-3 py-1.5 font-mono text-[14px] tracking-[0.1em] transition-colors',
+                  sysFilter === opt.id
+                    ? 'border-amber-600 bg-amber-600 text-paper-raised'
+                    : 'border-line-strong bg-paper text-slate-500 hover:border-amber-600/60')}
+              >
+                {opt.label} · {countOf(opt.id)}
+              </button>
+            ))}
+          </div>
+
+          {visible.length === 0 ? (
             <EmptyState icon={Wand2} title={loading ? '载入中…' : '还没有自定义职业'} desc="例如「深潜者信徒」「业余神秘学家」这类房规职业。" />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
-              {items.map((o) => (
+              {visible.map((o) => (
                 <article key={o.id} className="folder relative overflow-hidden">
                   <span aria-hidden="true" className="absolute inset-y-0 left-0 w-[3px] bg-indigo" />
                   <div className="space-y-3 py-4 pl-5 pr-4">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="font-serif text-[16.5px] font-bold leading-snug text-slate-100">{o.name}</div>
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <span className="font-serif text-[16.5px] font-bold leading-snug text-slate-100">{o.name}</span>
+                          <span className={cx('border px-1.5 py-0.5 font-mono text-[13px] tracking-[0.08em]',
+                            (o.gameSystem || CLASSIC_ID) === CLASSIC_ID
+                              ? 'border-line-strong text-slate-500'
+                              : 'border-amber-600/60 bg-amber-600/10 text-amber-600')}
+                          >
+                            {resolveRuleset(o.gameSystem || CLASSIC_ID).short}
+                          </span>
+                        </div>
                         <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 font-mono text-[14px] tracking-[0.06em] text-slate-500 tabular">
                           <span>信用评级 {o.cr[0]}-{o.cr[1]}</span>
                           <span aria-hidden="true" className="h-2.5 w-px bg-line-strong" />
@@ -1266,11 +1353,14 @@ function OccupationsTab({ showToast, showConfirm, currentUser }) {
                       ) : null}
                     </div>
                     <div className="flex flex-wrap gap-1.5 border-t border-line pt-2.5">
-                      {o.keys.slice(0, 8).map((k) => (
-                        <span key={k} className="border border-line-strong bg-paper px-2 py-1 text-[14px] leading-none tracking-wide text-slate-400">
-                          {SKILL_BY_KEY[k]?.name || k}
-                        </span>
-                      ))}
+                      {o.keys.slice(0, 8).map((k) => {
+                        const defs = resolveRuleset(o.gameSystem || CLASSIC_ID).skillByKey;
+                        return (
+                          <span key={k} className="border border-line-strong bg-paper px-2 py-1 text-[14px] leading-none tracking-wide text-slate-400">
+                            {defs[k]?.name || k}
+                          </span>
+                        );
+                      })}
                       {o.free ? <span className="border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-[14px] leading-none tracking-wide text-cyan-600">任意 ×{o.free}</span> : null}
                       {o.social ? <span className="border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-[14px] leading-none tracking-wide text-cyan-600">社交 ×{o.social}</span> : null}
                     </div>
@@ -1315,7 +1405,7 @@ function formatDay(value) {
 
 function blankTemplate() {
   return {
-    id: '', name: '', crMin: 0, crMax: 99, attr: '教育×4',
+    id: '', gameSystem: CLASSIC_ID, name: '', crMin: 0, crMax: 99, attr: '教育×4',
     pts: { terms: [{ stat: 'EDU', mult: 4 }], max: [] },
     keys: [], customKeys: [], choices: [], social: 0, free: 0, desc: '',
   };
@@ -1345,6 +1435,8 @@ function DrawerField({ label, hint, required, className, children }) {
 /** 职业模板编辑器：勾选本职技能 + 组合技能点公式（右侧抽屉，避免宽表被裁切） */
 function TemplateEditor({ value, onClose, onSaved, showToast }) {
   const [form, setForm] = useState(() => ({ ...blankTemplate(), ...value, customKeys: value.customKeys || [] }));
+  const R = useMemo(() => resolveRuleset(form.gameSystem || CLASSIC_ID), [form.gameSystem]);
+  const defs = R.skillByKey;
   const [q, setQ] = useState('');
   const [customKey, setCustomKey] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1369,7 +1461,7 @@ function TemplateEditor({ value, onClose, onSaved, showToast }) {
   const addCustomKey = (raw) => {
     const name = String(raw || '').trim().slice(0, 24);
     if (!name) return;
-    if (SKILL_BY_KEY[name] || SKILLS.some((s) => s.name === name)) {
+    if (defs[name] || R.skills.some((s) => s.name === name)) {
       return showToast('这是内置技能，直接在上面勾选即可', 'error');
     }
     if ((form.customKeys || []).includes(name)) return showToast('已经加过了', 'error');
@@ -1383,8 +1475,8 @@ function TemplateEditor({ value, onClose, onSaved, showToast }) {
   }));
 
   const skills = useMemo(
-    () => SKILLS.filter((s) => !q.trim() || s.name.includes(q.trim())),
-    [q],
+    () => R.skills.filter((s) => !q.trim() || s.name.includes(q.trim())),
+    [R, q],
   );
 
   const toggleKey = (key) => {
@@ -1422,6 +1514,7 @@ function TemplateEditor({ value, onClose, onSaved, showToast }) {
     setBusy(true);
     try {
       const payload = {
+        gameSystem: form.gameSystem || CLASSIC_ID,
         name: form.name,
         crMin: form.crMin,
         crMax: form.crMax,
@@ -1486,6 +1579,28 @@ function TemplateEditor({ value, onClose, onSaved, showToast }) {
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-5 py-5 sm:px-7">
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <DrawerField
+              className="sm:col-span-2"
+              label="适用游戏规则"
+              hint="模板只出现在所选规则的车卡职业列表里；切换规则会清空已勾选的内置本职技能"
+            >
+              <div className="flex flex-wrap gap-2">
+                {GAME_SYSTEMS.map((g) => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, gameSystem: g.id, keys: prev.gameSystem === g.id ? prev.keys : [] }))}
+                    className={cx('border px-3.5 py-2 text-[14px] font-semibold transition-colors',
+                      (form.gameSystem || CLASSIC_ID) === g.id
+                        ? 'border-amber-600 bg-amber-600 text-paper-raised'
+                        : 'border-line-strong bg-paper-raised text-slate-400 hover:border-amber-600/60')}
+                  >
+                    {g.name}
+                  </button>
+                ))}
+              </div>
+            </DrawerField>
+
             <DrawerField className="sm:col-span-2" label="职业名称" required>
               <Input
                 className={EDITOR_INPUT}
@@ -1671,7 +1786,7 @@ function TemplateEditor({ value, onClose, onSaved, showToast }) {
                 </div>
                 <p className="text-[14px] leading-relaxed text-slate-500">
                   提示：加进来的自定义技能会自动成为该职业的本职技能；玩家车卡时在「自定义技能」里填同名即可用职业点提升。
-                  社交技能组当前为 {SOCIAL_SKILLS.map((k) => SKILL_BY_KEY[k]?.name).join('、')}；信用评级会自动对所有职业开放。
+                  社交技能组当前为 {R.socialSkills.map((k) => defs[k]?.name || k).join('、')}；信用评级会自动对所有职业开放。
                 </p>
               </div>
             </DrawerField>

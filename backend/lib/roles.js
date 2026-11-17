@@ -13,6 +13,7 @@ import { audit } from './audit.js';
 import { db } from './db.js';
 import { forbidden } from './errors.js';
 import { CHIEF_KP_TITLE, DEFAULT_AUDIT_RULES, KP_TITLES, normalizeHouseRules } from '../../shared/coc7e.js';
+import { resolveRuleset } from '../../shared/rulesets/index.js';
 
 /** 任何守秘人（含首席） */
 export function isKeeper(user) {
@@ -105,23 +106,37 @@ export function canReviewCard(actor, character) {
  * 「重置为默认」= 清掉个人覆盖，回到全局默认（全局默认未设时即官方基线）；
  * 首席编辑自己的规则不会自动写进全局默认，必须显式保存。
  */
-export function officialAuditRules() {
-  return { ...DEFAULT_AUDIT_RULES };
+export function officialAuditRules(gameSystem) {
+  return baseAuditRules(gameSystem);
 }
 
-export function globalAuditRules() {
-  const legacy = db().settings?.auditRules || {};
-  const set = globalAuditSet();
-  return { ...DEFAULT_AUDIT_RULES, ...legacy, ...(set?.auditRules || {}) };
+/** 游戏规则：除通俗（pulp）以外一律按官方第七版处理（兼容所有旧数据） */
+export function systemOf(value) {
+  return value === 'pulp' ? 'pulp' : 'classic7e';
 }
 
-export function auditRulesFor(actor) {
-  const base = globalAuditRules();
+/** 某套游戏规则的官方审卡基线：官方 7e 用内置默认，通克再叠加规则集自带的差异项 */
+export function baseAuditRules(gameSystem) {
+  const R = resolveRuleset(systemOf(gameSystem));
+  return { ...DEFAULT_AUDIT_RULES, ...(R.auditRules || {}) };
+}
+
+export function globalAuditRules(gameSystem) {
+  const sys = systemOf(gameSystem);
+  const legacy = sys === 'classic7e' ? (db().settings?.auditRules || {}) : {};
+  const set = globalAuditSet(sys);
+  return { ...baseAuditRules(sys), ...legacy, ...(set?.auditRules || {}) };
+}
+
+export function auditRulesFor(actor, gameSystem) {
+  const sys = systemOf(gameSystem);
+  const base = globalAuditRules(sys);
   if (!actor) return base;
-  const set = activeRuleSet(actor);
-  // 选了规则集就只用这套；未选择时用「临时规则」（user.auditRules，只对自己生效）
+  const set = activeRuleSet(actor, sys);
+  // 选了规则集就只用这套；未选择时用「临时规则」（按规则分开存，只对自己生效）
   if (set) return { ...base, ...(set.auditRules || {}) };
-  const draft = isKeeper(actor) && actor.auditRules && typeof actor.auditRules === 'object' ? actor.auditRules : null;
+  const raw = isKeeper(actor) ? (sys === 'pulp' ? actor.auditRulesPulp : actor.auditRules) : null;
+  const draft = raw && typeof raw === 'object' ? raw : null;
   return { ...base, ...(draft || {}) };
 }
 
@@ -146,26 +161,35 @@ export function ruleSetById(id) {
   return allRuleSets().find((s) => s.id === id) || null;
 }
 
-/** 某个守秘人当前启用的规则集；未选择时为 null（改用临时规则） */
-export function activeRuleSet(user) {
-  if (!isKeeper(user) || !user.activeRuleSetId) return null;
-  return ruleSetById(user.activeRuleSetId);
+/** 某个守秘人当前启用的规则集（按游戏规则各有一套）；未选择时为 null（改用临时规则） */
+export function activeRuleSet(user, gameSystem) {
+  if (!isKeeper(user)) return null;
+  const sys = systemOf(gameSystem);
+  const id = sys === 'pulp' ? user.activeRuleSetPulpId : user.activeRuleSetId;
+  if (!id) return null;
+  const set = ruleSetById(id);
+  // 规则集与游戏规则必须匹配；旧数据没有 gameSystem 的一律算官方七版
+  if (!set || systemOf(set.gameSystem) !== sys) return null;
+  return set;
 }
 
 /** 该守秘人实际生效的房规（全局集 + 个人集叠加，同 id 以后者为准） */
-export function houseRulesFor(actor) {
-  const base = normalizeHouseRules(globalAuditSet()?.houseRules || []);
+export function houseRulesFor(actor, gameSystem) {
+  const sys = systemOf(gameSystem);
+  const base = normalizeHouseRules(globalAuditSet(sys)?.houseRules || []);
   if (!actor || !isKeeper(actor)) return base;
-  const set = activeRuleSet(actor);
-  const extra = set ? (set.houseRules || []) : (actor.draftHouseRules || []);
+  const set = activeRuleSet(actor, sys);
+  const fallback = sys === 'pulp' ? (actor.draftHouseRulesPulp || []) : (actor.draftHouseRules || []);
+  const extra = set ? (set.houseRules || []) : fallback;
   const merged = new Map(base.map((r) => [r.id, r]));
   for (const r of normalizeHouseRules(extra)) merged.set(r.id, r);
   return [...merged.values()];
 }
 
-/** 全局规则集（第一套 scope=global；没有时退回旧的 settings.auditRules） */
-export function globalAuditSet() {
-  return (db().settings?.ruleSets || []).find((s) => s && s.scope === 'global') || null;
+/** 全局规则集（每套游戏规则各取第一套 scope=global；没有时退回旧的 settings.auditRules） */
+export function globalAuditSet(gameSystem) {
+  const sys = systemOf(gameSystem);
+  return (db().settings?.ruleSets || []).find((s) => s && s.scope === 'global' && systemOf(s.gameSystem) === sys) || null;
 }
 
 /** 给前端的规则集摘要（不含内部字段） */
@@ -174,6 +198,7 @@ export function ruleSetSummary(set) {
   return {
     id: set.id,
     name: set.name,
+    gameSystem: systemOf(set.gameSystem),
     scope: set.scope === 'global' ? 'global' : 'personal',
     ownerId: set.ownerId || null,
     ownerName: set.ownerName || '',
@@ -191,6 +216,7 @@ export function snapshotRuleSet(set) {
   return {
     setId: s.id,
     setName: s.name,
+    gameSystem: s.gameSystem,
     ownerName: s.ownerName,
     scope: s.scope,
     houseRules: s.houseRules,

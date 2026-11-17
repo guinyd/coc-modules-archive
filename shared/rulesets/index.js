@@ -36,8 +36,8 @@ export const DEFAULT_SPECS = { 'fighting#0': '斗殴', 'firearms#0': '手枪' };
 export const CLASSIC_RULESET = {
   id: CLASSIC_ID,
   name: '克苏鲁的呼唤 第七版',
-  short: '7e',
-  tag: '官方原版',
+  short: 'coc7th',
+  tag: '官方规则',
   desc: '经典调查员：年龄补正、教育增强、职业点与兴趣点两套预算，技能成功率上限 99%。',
   bullets: [
     '(3D6)×5 与 (2D6+6)×5 生成属性，可逐项掷骰或手填',
@@ -113,8 +113,8 @@ export const GAME_SYSTEMS = [
   {
     id: CLASSIC_ID,
     name: '克苏鲁的呼唤 第七版',
-    short: '7e',
-    tag: '官方原版',
+    short: 'coc7th',
+    tag: '官方规则',
     desc: CLASSIC_RULESET.desc,
     bullets: CLASSIC_RULESET.bullets,
   },

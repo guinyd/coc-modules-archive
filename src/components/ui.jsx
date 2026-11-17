@@ -291,6 +291,7 @@ export function Badge({ tone = 'slate', children, className }) {
     amber: 'bg-ochre/12 text-ochre border-ochre/45',
     red: 'bg-vermilion/10 text-vermilion border-vermilion/50',
     cyan: 'bg-moon/10 text-moon border-moon/45',
+    violet: 'bg-violet/12 text-violet border-violet/45',
   };
   return (
     <span className={cx(

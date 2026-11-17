@@ -195,6 +195,8 @@ export function parseModule(body, { partial = false } = {}) {
   if (need('series')) out.series = vStr(b.series, '合集/系列', { max: 40 });
   if (need('region')) out.region = vStr(b.region, '地区', { max: 40 });
   if (need('era')) out.era = vEnum(b.era, '时代', ERAS, '1920s');
+  // 适配游戏规则：'' = 通用（两套规则都能用）
+  if (need('gameSystem')) out.gameSystem = vEnum(b.gameSystem, '游戏规则', ['', 'classic7e', 'pulp'], '');
   if (need('players')) out.players = vStr(b.players, '人数', { max: 20 });
   if (need('duration')) out.duration = vStr(b.duration, '时长', { max: 20 });
   if (need('description')) out.description = vText(b.description, '简介', { max: 4000 });
@@ -238,12 +240,13 @@ export function parseOccupationId(value, ctx = {}) {
   // 否则 `OCCUPATION_BY_ID['__proto__']` 会返回对象、真值判定被绕过（SEC-19）
   if (raw === '__proto__' || raw === 'constructor' || raw === 'prototype') throw badRequest('职业不存在');
   const R = ctx?.ruleset;
+  // 自定义职业模板对两套规则都开放；调用方已按 gameSystem 过滤
+  const custom = (ctx.customOccupations || []).some((o) => String(o.id) === raw);
+  if (custom) return raw;
   if (R && R.id !== CLASSIC_ID) {
     if (R.occupationById && Object.hasOwn(R.occupationById, raw) && R.occupationById[raw]) return raw;
     throw badRequest('职业不存在');
   }
-  const custom = (ctx.customOccupations || []).some((o) => String(o.id) === raw);
-  if (custom) return raw;
   if (Object.hasOwn(OCCUPATION_BY_ID, raw) && OCCUPATION_BY_ID[raw]) return raw;
   throw badRequest('职业不存在');
 }
@@ -549,7 +552,8 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
     ? out.occupationId
     : (partial ? (current?.occupationId || '') : '');
   // 年龄：常规 15-120；KP 开了「豁免年龄减益」后才允许任意非负整数
-  const ageWaived = b.agePenaltyWaived === true || current?.agePenaltyWaived === true || ctx?.ignoreAge === true;
+  const ageFree = ctx?.ruleset?.chargen?.ageAdjust?.enabled === false;
+  const ageWaived = ageFree || b.agePenaltyWaived === true || current?.agePenaltyWaived === true || ctx?.ignoreAge === true;
   if (need('age')) out.age = vInt(b.age, '年龄', ageWaived ? { min: 0, max: 999, def: 25 } : { min: 15, max: 120, def: 25 });
   if (need('gender')) out.gender = vStr(b.gender, '性别', { max: 20 });
   if (need('residence')) out.residence = vStr(b.residence, '住地', { max: 40 });
@@ -744,6 +748,7 @@ export function parseOccupationTemplate(body) {
   const crMax = vInt(b.crMax, '信用评级上限', { min: 0, max: 99, def: 99 });
   if (crMin > crMax) throw badRequest('信用评级下限不能大于上限');
   return {
+    gameSystem: vEnum(b.gameSystem, '游戏规则', ['classic7e', 'pulp'], 'classic7e'),
     name: vStr(b.name, '职业名称', { min: 1, max: 24, required: true }),
     cr: [crMin, crMax],
     attr: vStr(b.attr, '技能点说明', { max: 40 }) || '自定义公式',

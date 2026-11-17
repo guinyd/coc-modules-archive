@@ -170,6 +170,25 @@ try {
   ok('首页渲染出档案馆标题', homeText.includes('收录世界上不可名状的超自然案件'));
   ok('未登录时显示登录入口', homeText.includes('登录身份'));
 
+  // v10.10：模组「版本」口径（coc7th / 通克 / 其它）
+  const verOpts = await page.eval(`(() => {
+    const sel = document.querySelector('select[aria-label="按版本筛选"]');
+    return sel ? [...sel.options].map((o) => o.textContent.trim()) : null;
+  })()`);
+  ok('馆藏索引提供版本筛选（coc7th / 通克 / 其它）',
+    Array.isArray(verOpts) && verOpts.includes('coc7th') && verOpts.includes('通克') && verOpts.includes('其它'),
+    JSON.stringify(verOpts));
+  const coverTags = await page.eval(`(() => {
+    const plates = [...document.querySelectorAll('[data-cover-plate="card"]')];
+    const labels = plates.map((p) => p.textContent || '');
+    return {
+      total: plates.length,
+      tagged: labels.filter((t) => /coc7th|通克|其它/.test(t)).length,
+    };
+  })()`);
+  ok('封面右下角显示版本标记（coc7th / 通克 / 其它）',
+    coverTags.total > 0 && coverTags.tagged === coverTags.total, JSON.stringify(coverTags));
+
   console.log('\n== 登录 ==');
   if (seedUser) {
     const logged = await page.eval(`(async () => {
@@ -415,6 +434,30 @@ try {
         rulesText.includes('设为当前') && rulesText.includes('保存临时规则') && rulesText.includes('临时规则'));
       ok('房规改名「自定义规则」并保留编辑入口',
         rulesText.includes('自定义规则') && rulesText.includes('加入自定义规则'));
+
+      // v10.10：审卡规则与职业模板按游戏规则分开
+      ok('审卡规则页提供「适用游戏规则」切换', rulesText.includes('适用游戏规则'));
+      ok('七版规则页仍可设置「忽略年龄」房规', rulesText.includes('忽略年龄'));
+      await page.eval(`(() => {
+        const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === '通俗克苏鲁');
+        if (b) b.click();
+        return Boolean(b);
+      })()`);
+      await sleep(1600);
+      const pulpRulesText = await page.eval('document.body.innerText');
+      ok('切到通克后显示通克专属审卡项',
+        pulpRulesText.includes('必须选择原型') && pulpRulesText.includes('英雄奖励点总量'), pulpRulesText.slice(0, 160));
+      ok('通克规则页隐藏「忽略年龄」房规', !pulpRulesText.includes('忽略年龄'));
+
+      await page.eval(`(() => {
+        const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('职业模板'));
+        if (b) b.click();
+        return Boolean(b);
+      })()`);
+      await sleep(1500);
+      const occText = await page.eval('document.body.innerText');
+      ok('职业模板页可按游戏规则筛选',
+        occText.includes('coc7th') && occText.includes('通克') && occText.includes('职业模板'), occText.slice(0, 160));
     }
 
     console.log('\n== 访客模式 ==');

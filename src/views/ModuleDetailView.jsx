@@ -18,6 +18,7 @@ import {
 import { Button, SectionHeading, cx } from '../components/ui.jsx';
 import CoverPlate, { fileNumberOf } from '../components/ModuleCover.jsx';
 import { SealMark } from '../components/Emblem.jsx';
+import { moduleSystemFull, moduleSystemId, moduleSystemLabel } from '../lib/moduleSystem.js';
 import { TentacleCorner } from '../components/Ornaments.jsx';
 import { jitter } from '../lib/random.js';
 
@@ -118,6 +119,17 @@ export default function ModuleDetailView({
               {module.region || '未标注地区'}
               <span aria-hidden="true" className="h-3 w-px bg-line-strong" />
               {module.era || '年代不明'}
+            </span>
+            <span
+              className={cx('border px-1.5 py-0.5 font-mono text-[13px] tracking-[0.08em]',
+                moduleSystemId(module) === 'classic7e'
+                  ? 'border-line-strong text-ink-mute'
+                  : moduleSystemId(module) === 'pulp'
+                    ? 'border-amber-600/60 bg-amber-600/10 text-amber-600'
+                    : 'border-line-strong text-ink-mute')}
+              title={`版本：${moduleSystemFull(module)}`}
+            >
+              {moduleSystemLabel(module)}
             </span>
             <div className="detail-actions ml-auto w-full sm:w-auto">
               {canManage ? (

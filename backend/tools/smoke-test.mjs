@@ -1263,6 +1263,132 @@ try {
   await api('DELETE', `/api/characters/${pc.json.id}`, { token: A });
   await api('DELETE', `/api/characters/${pulpMissing.json.id}`, { token: A });
 
+  section('多规则系统：年龄放宽 / 职业模板与审卡规则分开（v10.10）');
+  const sysTag = Date.now().toString(36);
+
+  // 1) 通克不做年龄限制（官方 7e 仍然是 15–120）
+  const youngPulp = await api('POST', '/api/characters', {
+    token: A, body: { ...pulpBody, name: '少年通克卡', age: 6 },
+  });
+  ok('通克允许 6 岁（不再限制 15–90）', youngPulp.status === 200 && youngPulp.json?.age === 6,
+    JSON.stringify(youngPulp.json).slice(0, 160));
+  const oldPulp = await api('POST', '/api/characters', { token: A, body: { ...pulpBody, name: '高龄通克卡', age: 200 } });
+  ok('通克允许 200 岁', oldPulp.status === 200 && oldPulp.json?.age === 200);
+  const classicYoung = await api('POST', '/api/characters', {
+    token: A,
+    body: {
+      ...pulpBody, name: '七版幼童卡', age: 6, gameSystem: 'classic7e', occupationId: 2,
+      archetypeId: '', coreChar: '', talents: [], keyConnection: '',
+    },
+  });
+  ok('官方 7e 仍拒绝 6 岁 → 400', classicYoung.status === 400);
+  for (const id of [youngPulp.json?.id, oldPulp.json?.id]) {
+    if (id) await api('DELETE', `/api/characters/${id}`, { token: A });
+  }
+
+  // 2) 自定义职业模板按游戏规则分开：同名可并存，互不可用
+  const tplSeed = {
+    name: `通克模板_${sysTag}`, crMin: 20, crMax: 60, attr: '教育×2',
+    pts: { terms: [{ stat: 'EDU', mult: 2 }], max: [] },
+    keys: ['spotHidden', 'library', 'occult'], social: 1, free: 1,
+  };
+  const tplPulp = await api('POST', '/api/admin/occupations', { token: A, body: { ...tplSeed, gameSystem: 'pulp' } });
+  ok('可建通克专属职业模板', tplPulp.status === 200 && tplPulp.json?.gameSystem === 'pulp',
+    JSON.stringify(tplPulp.json).slice(0, 160));
+  const tplClassic = await api('POST', '/api/admin/occupations', { token: A, body: { ...tplSeed, gameSystem: 'classic7e' } });
+  ok('同名七版模板可以并存（按规则分开判重）', tplClassic.status === 200 && tplClassic.json?.gameSystem === 'classic7e');
+  const tplDup = await api('POST', '/api/admin/occupations', { token: A, body: { ...tplSeed, gameSystem: 'pulp' } });
+  ok('同一规则内重名仍被拒绝 → 400', tplDup.status === 400);
+  const tplList = await api('GET', '/api/admin/occupations', { token: A });
+  const tplRows = (tplList.json?.items || []).filter((o) => o.name === tplSeed.name);
+  ok('模板列表带 gameSystem 供筛选', tplRows.length === 2
+    && tplRows.some((o) => o.gameSystem === 'pulp') && tplRows.some((o) => o.gameSystem === 'classic7e'));
+
+  const pulpWithTpl = await api('POST', '/api/characters', {
+    token: A, body: { ...pulpBody, name: '通克模板卡', occupationId: tplPulp.json.id },
+  });
+  ok('通克卡可用通克模板职业', pulpWithTpl.status === 200 && pulpWithTpl.json?.occupationId === tplPulp.json.id,
+    JSON.stringify(pulpWithTpl.json).slice(0, 160));
+  const classicWithTpl = await api('POST', '/api/characters', {
+    token: A,
+    body: {
+      ...pulpBody, name: '越界模板卡', gameSystem: 'classic7e', occupationId: tplPulp.json.id,
+      archetypeId: '', coreChar: '', talents: [], keyConnection: '',
+    },
+  });
+  ok('七版卡不能用通克模板职业 → 400', classicWithTpl.status === 400);
+  if (pulpWithTpl.json?.id) await api('DELETE', `/api/characters/${pulpWithTpl.json.id}`, { token: A });
+  for (const t of [tplPulp.json, tplClassic.json]) {
+    if (t?.id) await api('DELETE', `/api/admin/occupations/${t.id}`, { token: A });
+  }
+
+  // 3) 审卡规则集按游戏规则分开：各有一套「当前启用集」
+  const setPulp = await api('POST', '/api/rule-sets', {
+    token: A,
+    body: { name: `通克规则集_${sysTag}`, gameSystem: 'pulp', scope: 'personal', auditRules: { charMax: 80 }, houseRules: [] },
+  });
+  ok('可建通克规则集并标记规则', setPulp.status === 201 && setPulp.json?.item?.gameSystem === 'pulp',
+    JSON.stringify(setPulp.json).slice(0, 160));
+  const setClassic = await api('POST', '/api/rule-sets', {
+    token: A,
+    body: { name: `七版规则集_${sysTag}`, gameSystem: 'classic7e', scope: 'personal', auditRules: { charMax: 85 }, houseRules: [] },
+  });
+  ok('可建七版规则集并标记规则', setClassic.status === 201 && setClassic.json?.item?.gameSystem === 'classic7e');
+
+  const actPulp = await api('PUT', '/api/rule-sets/active', {
+    token: A, body: { id: setPulp.json.item.id, gameSystem: 'pulp' },
+  });
+  ok('通克规则集可设为通克的当前规则', actPulp.status === 200 && actPulp.json?.activeId === setPulp.json.item.id);
+  const actCross = await api('PUT', '/api/rule-sets/active', {
+    token: A, body: { id: setPulp.json.item.id, gameSystem: 'classic7e' },
+  });
+  ok('跨规则启用规则集 → 400', actCross.status === 400);
+
+  const rulesPulp = await api('GET', '/api/admin/audit-rules?gameSystem=pulp', { token: A });
+  ok('通克审卡读到通克当前集', rulesPulp.json?.gameSystem === 'pulp'
+    && rulesPulp.json?.activeSetId === setPulp.json.item.id
+    && rulesPulp.json?.effective?.charMax === 80, JSON.stringify(rulesPulp.json?.effective || {}).slice(0, 160));
+  ok('通克基线自带通克专属规则项', rulesPulp.json?.official?.requireArchetype === true);
+  const rulesClassic = await api('GET', '/api/admin/audit-rules?gameSystem=classic7e', { token: A });
+  ok('七版审卡不受通克规则集影响', rulesClassic.json?.effective?.charMax !== 80
+    && rulesClassic.json?.official?.requireArchetype === false,
+    JSON.stringify(rulesClassic.json?.effective || {}).slice(0, 160));
+
+  const setsAll = await api('GET', '/api/rule-sets', { token: A });
+  const setRows = setsAll.json?.items || [];
+  ok('规则集列表带 gameSystem 且两套并存', setRows.some((x) => x.id === setPulp.json.item.id && x.gameSystem === 'pulp')
+    && setRows.some((x) => x.id === setClassic.json.item.id && x.gameSystem === 'classic7e'));
+  ok('启用集按规则分别记录', setsAll.json?.activeIds?.pulp === setPulp.json.item.id);
+
+  // 4) 角色卡选房规也要按规则隔离：通克卡不能挂七版规则集
+  const setCard = await api('POST', '/api/characters', {
+    token: A, body: { ...pulpBody, name: `规则集隔离卡_${sysTag}` },
+  });
+  const crossSet = await api('PUT', `/api/characters/${setCard.json.id}`, {
+    token: A,
+    body: {
+      name: pulpBody.name, chars: pulpBody.chars, occupationId: pulpBody.occupationId,
+      gameSystem: 'pulp', ruleSetId: setClassic.json.item.id,
+    },
+  });
+  ok('通克卡选七版规则集 → 400', crossSet.status === 400);
+  const sameSet = await api('PUT', `/api/characters/${setCard.json.id}`, {
+    token: A,
+    body: {
+      name: pulpBody.name, chars: pulpBody.chars, occupationId: pulpBody.occupationId,
+      gameSystem: 'pulp', ruleSetId: setPulp.json.item.id,
+    },
+  });
+  ok('通克卡选通克规则集 → 200 且回读一致',
+    sameSet.status === 200 && sameSet.json?.ruleSetId === setPulp.json.item.id,
+    JSON.stringify(sameSet.json).slice(0, 160));
+  if (setCard.json?.id) await api('DELETE', `/api/characters/${setCard.json.id}`, { token: A });
+
+  await api('PUT', '/api/rule-sets/active', { token: A, body: { id: null, gameSystem: 'pulp' } });
+  for (const r of [setPulp.json?.item, setClassic.json?.item]) {
+    if (r?.id) await api('DELETE', `/api/rule-sets/${r.id}`, { token: A });
+  }
+
   section('多 KP 权限（v10.1）');
   const suffix = Date.now().toString(36);
   const keeperName = `smoke_kp_${suffix}`;

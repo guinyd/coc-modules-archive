@@ -130,6 +130,13 @@ export default function ModuleFormView({ isEditing, formData, setFormData, uniqu
                 </Field>
                 <Field label="人数" required><Input className={line} required maxLength={20} value={formData.players} onChange={(e) => setFormData({ ...formData, players: e.target.value })} /></Field>
                 <Field label="时长" required><Input className={line} required maxLength={20} value={formData.duration} onChange={(e) => setFormData({ ...formData, duration: e.target.value })} /></Field>
+                <Field label="适配游戏规则">
+                  <Select className={line} value={formData.gameSystem || ''} onChange={(e) => setFormData({ ...formData, gameSystem: e.target.value })}>
+                    <option value="classic7e">coc7th</option>
+                    <option value="pulp">通克</option>
+                    <option value="">其它</option>
+                  </Select>
+                </Field>
               </div>
 
               <div className="mt-5">

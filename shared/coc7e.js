@@ -585,20 +585,22 @@ export function blankCustomSkill(id) {
 export function resolveOccupation(occupationId, ctx = {}) {
   if (occupationId === undefined || occupationId === null || occupationId === '') return null;
   const R = rulesetOf(null, ctx);
+  // KP 自定义职业模板优先（按游戏规则分开存放，调用方已按规则过滤）
+  const custom = (ctx.customOccupations || []).find((o) => String(o.id) === String(occupationId));
+  if (custom) return custom;
   if (!isClassicRuleset(R)) {
     const table = R.occupationById || {};
     return table[occupationId] || table[String(occupationId)] || null;
   }
-  const custom = (ctx.customOccupations || []).find((o) => String(o.id) === String(occupationId));
-  if (custom) return custom;
   return OCCUPATION_BY_ID[occupationId] || OCCUPATION_BY_ID[String(occupationId)] || null;
 }
 
 /** 全部职业（内置 + KP 自定义），供选择器使用 */
 export function allOccupations(ctx = {}) {
   const R = rulesetOf(null, ctx);
-  if (!isClassicRuleset(R)) return [...(R.occupations || [])];
-  return [...OCCUPATIONS, ...(ctx.customOccupations || [])];
+  const custom = ctx.customOccupations || [];
+  if (!isClassicRuleset(R)) return [...(R.occupations || []), ...custom];
+  return [...OCCUPATIONS, ...custom];
 }
 
 /** 职业点预算：按职业公式（教育×4 / 教育×2＋敏捷×2 / MAX(...)）计算 */
@@ -922,6 +924,7 @@ export function computeSheet(sheet, ctx = {}) {
       hpDivisor,
       bonusPoints: budget.bonus,
       interestFormula: budget.interest === (effBase.INT || 0) * 2 ? 'INT×2' : '自定义',
+      ageRulesOff,
     },
     /** 原型（通俗克苏鲁专属；官方 7e 恒为 null） */
     archetype: (() => {
@@ -953,6 +956,7 @@ export function validateSheet(sheet, ctx = {}) {
   const ignoreAge = ctx?.ignoreAge === true;
   const c = computeSheet(sheet, ctx);
   const R = rulesetOf(sheet, ctx);
+  const ageOff = ignoreAge || c.ruleset?.ageRulesOff === true;
   const w = [];
   const occ = c.occupation;
   const lbl = (k) => CHAR_LABEL[k] || k;
@@ -966,10 +970,10 @@ export function validateSheet(sheet, ctx = {}) {
   }
   if (CHARS.every((k) => !c.raw[k])) w.push('还有属性未填写（为 0）');
   // 教育增强：只要「还没结算过」就提示 —— 结算过（哪怕这次没提升）就不再打扰
-  if (!ignoreAge && c.ageAdjust.eduChecks > 0 && c.ageAdjust.apply && !c.ageAdjust.settled) {
+  if (!ageOff && c.ageAdjust.eduChecks > 0 && c.ageAdjust.apply && !c.ageAdjust.settled) {
     w.push(`该年龄有 ${c.ageAdjust.eduChecks} 次教育增强检定未使用`);
   }
-  if (!ignoreAge && c.ageAdjust.waived) w.push('KP 已豁免这张卡的年龄减益（属性不因年龄下降，教育成长照常保留）');
+  if (!ageOff && c.ageAdjust.waived) w.push('KP 已豁免这张卡的年龄减益（属性不因年龄下降，教育成长照常保留）');
   if (c.legendary.enabled) {
     const bonusTotal = CHARS.reduce((a, k) => a + (c.legendaryBonus[k] || 0), 0);
     if (bonusTotal <= 0) w.push('已开启传奇标记，但还没有填写任何额外属性调整值');
@@ -977,11 +981,11 @@ export function validateSheet(sheet, ctx = {}) {
     const any = ALL_CHARS.some((k) => (c.legendaryBonus[k] || 0) > 0);
     if (any) w.push('填写了传奇额外调整值，但传奇标记未开启（该调整值暂不生效）');
   }
-  if (!ignoreAge && (sheet?.age || 0) > 0 && (sheet?.age || 0) < 15) w.push('年龄小于 15 岁，超出常规调查员范围');
-  if (!ignoreAge && (sheet?.age || 0) > 90) w.push('年龄超过 90 岁，超出常规调查员范围，请先与 KP 商议');
+  if (!ageOff && (sheet?.age || 0) > 0 && (sheet?.age || 0) < 15) w.push('年龄小于 15 岁，超出常规调查员范围');
+  if (!ageOff && (sheet?.age || 0) > 90) w.push('年龄超过 90 岁，超出常规调查员范围，请先与 KP 商议');
 
   // 年龄补正：除外貌固定减值外，其余属性是「合计减少 N 点，自行分配」
-  if (!ignoreAge && c.ageAdjust.apply && c.ageAdjust.poolPoints > 0) {
+  if (!ageOff && c.ageAdjust.apply && c.ageAdjust.poolPoints > 0) {
     const need = c.ageAdjust.poolPoints;
     const names = c.ageAdjust.poolKeys.map(lbl).join('/');
     if (!c.ageAdjust.allocComplete) {
@@ -1457,11 +1461,11 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
   }
 
   // 教育增强（年龄成长）：KP 要能一眼看出「还没结算」和「重掷过几次」
-  if (!ignoreAge && c.ageAdjust.apply && c.ageAdjust.eduChecks > 0 && !c.eduGrowth.settled) {
+  if (!ignoreAge && c.ruleset?.ageRulesOff !== true && c.ageAdjust.apply && c.ageAdjust.eduChecks > 0 && !c.eduGrowth.settled) {
     add('eduUnsettled', '教育增强未结算', 'warn',
       `该年龄需要 ${c.ageAdjust.eduChecks} 次教育增强检定，玩家还没有结算`);
   }
-  if (!ignoreAge && c.eduGrowth.attempts.length > 1) {
+  if (!ignoreAge && c.ruleset?.ageRulesOff !== true && c.eduGrowth.attempts.length > 1) {
     const g = c.eduGrowth.lastGrant;
     add('eduReroll', '教育增强重掷过', 'warn',
       `共结算 ${c.eduGrowth.attempts.length} 次（重掷 ${c.eduGrowth.rerolls} 次），当前 +${c.eduGrowth.gain}`

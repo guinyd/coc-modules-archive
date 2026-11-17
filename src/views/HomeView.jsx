@@ -240,6 +240,7 @@ export default function HomeView({
   homeTab, setHomeTab, searchTerm, setSearchTerm,
   filterRegion, setFilterRegion, filterPlayers, setFilterPlayers,
   filterDuration, setFilterDuration, filterPlayed, setFilterPlayed,
+  filterSystem = '', setFilterSystem = () => {},
   selectedCollection, setSelectedCollection, uniqueSeries, uniqueRegions,
   uniquePlayers, uniqueDurations, filteredModules,
   onOpenModule, onEditModule, onDeleteModule, onTogglePlayed, onToggleKeeperMark, onGoAuth, onGoCharacters,
@@ -252,10 +253,10 @@ export default function HomeView({
   const visibleModules = keeperModules || filteredModules;
   const myMarkedIds = new Set((keeperRoster.find((k) => k.id === currentUser?.id)?.moduleIds) || []);
 
-  const hasFilter = Boolean(filterRegion || filterPlayers || filterDuration || filterPlayed || selectedCollection || keeperFilter);
+  const hasFilter = Boolean(filterRegion || filterPlayers || filterDuration || filterPlayed || filterSystem || selectedCollection || keeperFilter);
   const clearAll = () => {
     setFilterRegion(''); setFilterPlayers(''); setFilterDuration('');
-    setFilterPlayed(''); setSelectedCollection(null); setKeeperFilter(null);
+    setFilterPlayed(''); setFilterSystem(''); setSelectedCollection(null); setKeeperFilter(null);
   };
 
   const tabItems = [
@@ -421,6 +422,15 @@ export default function HomeView({
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-1">
+                <label className="block">
+                  <span className="mb-1 block font-mono text-[14px] tracking-[0.16em] text-ink-mute">版本</span>
+                  <Select value={filterSystem} onChange={(e) => setFilterSystem(e.target.value)} className={selClass} aria-label="按版本筛选">
+                    <option value="">全部版本</option>
+                    <option value="classic7e">coc7th</option>
+                    <option value="pulp">通克</option>
+                    <option value="other">其它</option>
+                  </Select>
+                </label>
                 <label className="block">
                   <span className="mb-1 block font-mono text-[14px] tracking-[0.16em] text-ink-mute">地区</span>
                   <Select value={filterRegion} onChange={(e) => setFilterRegion(e.target.value)} className={selClass} aria-label="按地区筛选">

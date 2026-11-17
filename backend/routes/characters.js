@@ -140,8 +140,10 @@ function guardKpOnlyFields(data, actor, current, ctx = {}) {
       data[f] = current && current[f] !== undefined ? current[f] : defaultKpOnly(f);
     }
   }
-  // 年龄范围以最终生效的豁免开关为准：玩家伪造豁免标记会被上面的还原挡掉
-  if (ctx?.ignoreAge !== true && data.age !== undefined && data.agePenaltyWaived !== true && (data.age < 15 || data.age > 120)) {
+  // 年龄范围以最终生效的豁免开关为准：玩家伪造豁免标记会被上面的还原挡掉；
+  // 通俗克苏鲁没有年龄补正与教育增强，年龄不做限制（ctx.ruleset 已由 rulesCtx 按卡片规则注入）
+  const ageFree = ctx?.ruleset?.chargen?.ageAdjust?.enabled === false;
+  if (!ageFree && ctx?.ignoreAge !== true && data.age !== undefined && data.agePenaltyWaived !== true && (data.age < 15 || data.age > 120)) {
     throw badRequest('年龄需在 15-120 之间；要录入超出范围的年龄，请由 KP 勾选「豁免年龄减益」');
   }
   return data;
@@ -175,6 +177,7 @@ router.get('/characters/meta', optionalAuth, (req, res) => {
     customOccupations: database.customOccupations,
     moduleOptions: database.modules.map((m) => ({
       id: m.id, title: m.title, region: m.region, era: m.era, series: m.series || '',
+      gameSystem: m.gameSystem || '',
     })),
     owners,
     keepers: me ? keeperDirectory() : [],
@@ -199,7 +202,7 @@ function rulesCtx(houseRules, auditRules, gameSystem) {
   const list = Array.isArray(houseRules) ? houseRules : [];
   const rs = resolveRuleset(gameSystem);
   return {
-    customOccupations: customOccupations(),
+    customOccupations: customOccupations().filter((o) => (o.gameSystem || 'classic7e') === rs.id),
     houseRules: list,
     auditRules: auditRules && typeof auditRules === 'object' ? auditRules : undefined,
     ignoreAge: houseIgnoresAge(list),
@@ -210,42 +213,49 @@ function rulesCtx(houseRules, auditRules, gameSystem) {
 
 /** 某张卡适用的规则集：提交快照 > 卡上选择 > 审阅者当前规则集 */
 function cardRules(character, actor) {
+  const sys = character?.gameSystem === 'pulp' ? 'pulp' : 'classic7e';
   const snap = character?.ruleSnapshot;
   if (snap && typeof snap === 'object') {
     return {
-      auditRules: { ...auditRulesFor(actor), ...(snap.auditRules || {}) },
+      auditRules: { ...auditRulesFor(actor, sys), ...(snap.auditRules || {}) },
       houseRules: Array.isArray(snap.houseRules) ? snap.houseRules : [],
       set: null,
       snapshot: snap,
     };
   }
-  const set = character?.ruleSetId ? ruleSetById(character.ruleSetId) : null;
+  const raw = character?.ruleSetId ? ruleSetById(character.ruleSetId) : null;
+  // 规则集必须与卡片的游戏规则一致；跨规则的旧数据忽略，回落到该规则的默认
+  const set = raw && (raw.gameSystem === 'pulp' ? 'pulp' : 'classic7e') === sys ? raw : null;
   if (set) {
     return {
-      auditRules: { ...auditRulesFor(actor), ...(set.auditRules || {}) },
+      auditRules: { ...auditRulesFor(actor, sys), ...(set.auditRules || {}) },
       houseRules: Array.isArray(set.houseRules) ? set.houseRules : [],
       set,
       snapshot: null,
     };
   }
-  return { auditRules: auditRulesFor(actor), houseRules: houseRulesFor(actor), set: null, snapshot: null };
+  return { auditRules: auditRulesFor(actor, sys), houseRules: houseRulesFor(actor, sys), set: null, snapshot: null };
 }
 
 /**
  * 玩家/守秘人都可以选任意一套已发布的规则集（这正是「把卡交给哪个 KP 的房规」的语义）；
  * 选择规则集不授予任何管理或审卡权限。
  */
-function resolveChosenSet(actor, value) {
+function resolveChosenSet(actor, value, gameSystem) {
   if (value === null || value === '' || value === undefined) return null;
   if (typeof value !== 'string') throw badRequest('规则集参数不正确');
   const set = ruleSetById(value);
   if (!set) throw badRequest('选择的规则集不存在');
+  const sys = gameSystem === 'pulp' ? 'pulp' : 'classic7e';
+  if ((set.gameSystem === 'pulp' ? 'pulp' : 'classic7e') !== sys) {
+    throw badRequest('规则集与游戏规则不匹配');
+  }
   return set;
 }
 
-/** KP 当前的辅助审卡规则（首席用全局基准，普通 KP 叠加自己的差异项） */
-function auditRules(actor) {
-  return auditRulesFor(actor);
+/** KP 当前的辅助审卡规则（按游戏规则各有一套；不传时按官方七版） */
+function auditRules(actor, gameSystem) {
+  return auditRulesFor(actor, gameSystem);
 }
 
 /** 某账号的角色卡配额与已用数量 */
@@ -573,7 +583,7 @@ router.post('/characters', (req, res) => {
   }
   enforceCharacterQuota(ownerId);
   // 建房时可直接选用一套房规（玩家自己的或全局的）
-  const chosen = resolveChosenSet(req.user, req.body?.ruleSetId);
+  const chosen = resolveChosenSet(req.user, req.body?.ruleSetId, req.body?.gameSystem);
   const rctx = rulesCtx(chosen?.houseRules || [], chosen?.auditRules, req.body?.gameSystem);
   // 首次保存也要过教育增强守卫：防止建卡请求里夹带伪造的结算流水
   const data = stampLegendary(guardEduGrowth(guardKpOnlyFields(
@@ -627,7 +637,7 @@ router.put('/characters/:id', (req, res) => {
   Object.assign(c, data, { updatedAt: Date.now() });
   // 玩家在「房规」页换规则集：清掉旧快照，等重新提交时再冻结
   if (req.body && Object.hasOwn(req.body, 'ruleSetId')) {
-    const chosen = resolveChosenSet(req.user, req.body.ruleSetId);
+    const chosen = resolveChosenSet(req.user, req.body.ruleSetId, c.gameSystem);
     c.ruleSetId = chosen ? chosen.id : null;
     c.ruleSnapshot = null;
   }
@@ -663,7 +673,7 @@ router.patch('/characters/:id', (req, res) => {
   }
   Object.assign(c, data, { updatedAt: Date.now() });
   if (req.body && Object.hasOwn(req.body, 'ruleSetId')) {
-    const chosen = resolveChosenSet(req.user, req.body.ruleSetId);
+    const chosen = resolveChosenSet(req.user, req.body.ruleSetId, c.gameSystem);
     c.ruleSetId = chosen ? chosen.id : null;
     c.ruleSnapshot = null;
   }
@@ -773,14 +783,18 @@ router.post('/characters/:id/submit', (req, res) => {
   c.reviewStatus = 'pending';
   c.submittedAt = Date.now();
   // 冻结房规：以提交这一刻的规则集为准，之后 KP 改规则不影响已提交的卡
-  const chosenSet = (req.body?.ruleSetId !== undefined
-    ? resolveChosenSet(req.user, req.body.ruleSetId)
+  const cardSys = c.gameSystem === 'pulp' ? 'pulp' : 'classic7e';
+  const rawChosen = (req.body?.ruleSetId !== undefined
+    ? resolveChosenSet(req.user, req.body.ruleSetId, cardSys)
     : (c.ruleSetId ? ruleSetById(c.ruleSetId) : null));
+  const chosenSet = rawChosen && (rawChosen.gameSystem === 'pulp' ? 'pulp' : 'classic7e') === cardSys
+    ? rawChosen
+    : null;
   if (chosenSet) {
     c.ruleSetId = chosenSet.id;
     c.ruleSnapshot = snapshotRuleSet(chosenSet);
   } else {
-    c.ruleSnapshot = snapshotRuleSet(activeRuleSet(req.user));
+    c.ruleSnapshot = snapshotRuleSet(activeRuleSet(req.user, cardSys));
   }
   c.reviewKpId = target?.id || null;
   c.reviewKpName = target?.username || '';

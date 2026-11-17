@@ -322,6 +322,10 @@ function migrate(d) {
   for (const u of d.users) {
     if (!Array.isArray(u.ruleSets)) { u.ruleSets = []; changed = true; }
     if (u.activeRuleSetId === undefined) { u.activeRuleSetId = null; changed = true; }
+    // v10.10：审卡规则与职业模板按游戏规则分开——通克单独一套启用集 / 临时规则槽位
+    if (u.activeRuleSetPulpId === undefined) { u.activeRuleSetPulpId = null; changed = true; }
+    if (u.auditRulesPulp === undefined) { u.auditRulesPulp = null; changed = true; }
+    if (u.draftHouseRulesPulp === undefined) { u.draftHouseRulesPulp = []; changed = true; }
     if (u.role === 'admin' && u.auditRules && typeof u.auditRules === 'object' && !u.ruleSets.length) {
       const set = {
         id: `rs_${u.id}_default`, name: '我的规则集', scope: 'personal',
@@ -333,6 +337,13 @@ function migrate(d) {
       u.activeRuleSetId = set.id;
       changed = true;
     }
+  }
+  // v10.10：规则集与职业模板带 gameSystem；旧数据没有字段的一律算官方七版
+  for (const set of d.settings.ruleSets || []) {
+    if (set && set.gameSystem === undefined) { set.gameSystem = 'classic7e'; changed = true; }
+  }
+  for (const occ of d.customOccupations || []) {
+    if (occ && occ.gameSystem === undefined) { occ.gameSystem = 'classic7e'; changed = true; }
   }
   for (const c of d.characters) {
     if (c.ruleSetId === undefined) { c.ruleSetId = null; changed = true; }

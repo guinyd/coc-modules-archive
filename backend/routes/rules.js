@@ -12,7 +12,7 @@ import { save, db } from '../lib/db.js';
 import { requireAuth } from '../lib/auth.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import {
-  isChief, isKeeper, allRuleSets, ruleSetById, ruleSetSummary, activeRuleSet,
+  isChief, isKeeper, allRuleSets, ruleSetById, ruleSetSummary, activeRuleSet, systemOf, baseAuditRules,
 } from '../lib/roles.js';
 import {
   AUDIT_RULE_META, DEFAULT_AUDIT_RULES, HOUSE_RULE_LIMIT, normalizeHouseRules,
@@ -30,21 +30,23 @@ function parseName(value) {
   return name;
 }
 
-/** 只存与官方默认不同的项，方便叠加与比较 */
-function diffRules(full) {
+/** 只存与「该游戏规则的官方基线」不同的项，方便叠加与比较 */
+function diffRules(full, gameSystem) {
+  const base = baseAuditRules(gameSystem);
   const out = {};
   for (const meta of AUDIT_RULE_META) {
-    if (full[meta.key] !== DEFAULT_AUDIT_RULES[meta.key]) out[meta.key] = full[meta.key];
+    if (full[meta.key] !== base[meta.key]) out[meta.key] = full[meta.key];
   }
   return out;
 }
 
 function parseSetBody(body) {
   const b = body && typeof body === 'object' ? body : {};
+  const gameSystem = systemOf(b.gameSystem);
   const auditRules = b.auditRules === undefined ? {} :
-    (b.auditRules && typeof b.auditRules === 'object' ? diffRules(parseAuditRules(b.auditRules)) : {});
+    (b.auditRules && typeof b.auditRules === 'object' ? diffRules(parseAuditRules(b.auditRules), gameSystem) : {});
   const houseRules = normalizeHouseRules(Array.isArray(b.houseRules) ? b.houseRules.slice(0, HOUSE_RULE_LIMIT) : []);
-  return { name: parseName(b.name), auditRules, houseRules };
+  return { name: parseName(b.name), gameSystem, auditRules, houseRules };
 }
 
 function findOwnedSet(req, id) {
@@ -70,7 +72,7 @@ function findDeletableSet(req, id) {
 function summaryFor(req, set) {
   const s = ruleSetSummary(set);
   if (!s) return null;
-  const active = activeRuleSet(req.user);
+  const active = activeRuleSet(req.user, s.gameSystem);
   return {
     ...s,
     isMine: s.ownerId === req.user.id,
@@ -81,19 +83,21 @@ function summaryFor(req, set) {
 /** 全部可用规则集：全局 + 所有守秘人的个人规则集（玩家选卡时要能看到是谁的） */
 router.get('/rule-sets', (req, res) => {
   const keeper = isKeeper(req.user);
-  const active = keeper ? activeRuleSet(req.user) : null;
+  const activeClassic = keeper ? activeRuleSet(req.user, 'classic7e') : null;
+  const activePulp = keeper ? activeRuleSet(req.user, 'pulp') : null;
   res.json({
     items: allRuleSets().map((s) => {
       const item = summaryFor(req, s);
-      // 发布出来的规则集对玩家透明：返回与官方基线合并后的完整审卡阈值，
+      // 发布出来的规则集对玩家透明：返回与「该规则的官方基线」合并后的完整审卡阈值，
       // 玩家在「房规」页可展开查看自己将接受哪些校验。
       if (item) {
-        item.auditRules = { ...DEFAULT_AUDIT_RULES, ...(s.auditRules || {}) };
+        item.auditRules = { ...baseAuditRules(item.gameSystem), ...(s.auditRules || {}) };
         if (!keeper) item.isActive = false;
       }
       return item;
     }),
-    activeId: active ? active.id : null,
+    activeId: activeClassic ? activeClassic.id : null,
+    activeIds: { classic7e: activeClassic ? activeClassic.id : null, pulp: activePulp ? activePulp.id : null },
   });
 });
 
@@ -102,10 +106,10 @@ router.post('/rule-sets', (req, res) => {
   const body = req.body || {};
   const scope = body.scope === 'global' ? 'global' : 'personal';
   if (scope === 'global' && !isChief(req.user)) throw forbidden('只有首席守秘人可以发布全局规则集');
-  const { name, auditRules, houseRules } = parseSetBody(body);
+  const { name, gameSystem, auditRules, houseRules } = parseSetBody(body);
   const now = Date.now();
   const set = {
-    id: newId(), name, scope,
+    id: newId(), name, gameSystem, scope,
     ownerId: scope === 'global' ? null : req.user.id,
     ownerName: req.user.username || '',
     auditRules, houseRules,
@@ -125,25 +129,33 @@ router.post('/rule-sets', (req, res) => {
 router.put('/rule-sets/active', (req, res) => {
   if (!isKeeper(req.user)) throw forbidden('只有守秘人可以启用规则集');
   const id = req.body?.id ?? null;
+  const sys = systemOf(req.body?.gameSystem);
+  const slot = sys === 'pulp' ? 'activeRuleSetPulpId' : 'activeRuleSetId';
   if (id === null || id === '') {
-    req.user.activeRuleSetId = null;
+    req.user[slot] = null;
     req.user.updatedAt = Date.now();
-    audit(req, 'ruleset.activate', { setId: null, name: '未选择' });
+    audit(req, 'ruleset.activate', { setId: null, name: '未选择', gameSystem: sys });
     save();
-    return res.json({ success: true, activeId: null });
+    return res.json({ success: true, activeId: null, gameSystem: sys });
   }
   const set = ruleSetById(id);
   if (!set) throw notFound('规则集不存在');
-  // 允许启用其他守秘人发布的规则集：只是使用，不获得维护权
-  req.user.activeRuleSetId = set.id;
-  audit(req, 'ruleset.activate', { setId: set.id, name: set.name });
+  // 允许启用其他守秘人发布的规则集：只是使用，不获得维护权；但规则集必须与游戏规则匹配
+  const setSys = systemOf(set.gameSystem);
+  if (setSys !== sys) throw badRequest('规则集与游戏规则不匹配');
+  req.user[slot] = set.id;
+  audit(req, 'ruleset.activate', { setId: set.id, name: set.name, gameSystem: setSys });
   save();
-  res.json({ success: true, activeId: set.id });
+  res.json({ success: true, activeId: set.id, gameSystem: setSys });
 });
 
 router.put('/rule-sets/:id', (req, res) => {
   const set = findOwnedSet(req, req.params.id);
-  const { name, auditRules, houseRules } = parseSetBody({ ...req.body, name: req.body?.name ?? set.name });
+  const { name, auditRules, houseRules } = parseSetBody({
+    ...req.body,
+    name: req.body?.name ?? set.name,
+    gameSystem: req.body?.gameSystem ?? set.gameSystem,
+  });
   set.name = name;
   set.auditRules = auditRules;
   set.houseRules = houseRules;
@@ -164,9 +176,8 @@ router.delete('/rule-sets/:id', (req, res) => {
     const owner = db().users.find((u) => u.id === set.ownerId);
     if (owner) {
       owner.ruleSets = (owner.ruleSets || []).filter((s) => s.id !== set.id);
-      if (owner.activeRuleSetId === set.id) {
-        owner.activeRuleSetId = owner.ruleSets[0]?.id || null;
-      }
+      if (owner.activeRuleSetId === set.id) owner.activeRuleSetId = null;
+      if (owner.activeRuleSetPulpId === set.id) owner.activeRuleSetPulpId = null;
     }
   }
   // 引用它的角色卡保留 ruleSnapshot；未提交的卡清掉选择，避免指向空规则集
@@ -183,10 +194,12 @@ router.put('/rule-sets/:id/active', (req, res) => {
   if (!isKeeper(req.user)) throw forbidden('只有守秘人可以启用规则集');
   const set = ruleSetById(req.params.id);
   if (!set) throw notFound('规则集不存在');
-  req.user.activeRuleSetId = set.id;
-  audit(req, 'ruleset.activate', { setId: set.id, name: set.name });
+  const sys = systemOf(set.gameSystem);
+  if (sys === 'pulp') req.user.activeRuleSetPulpId = set.id;
+  else req.user.activeRuleSetId = set.id;
+  audit(req, 'ruleset.activate', { setId: set.id, name: set.name, gameSystem: sys });
   save();
-  res.json({ success: true, activeId: set.id });
+  res.json({ success: true, activeId: set.id, gameSystem: sys });
 });
 
 /** 复制一套到自己的个人规则集（方便从全局默认起步） */
@@ -198,6 +211,7 @@ router.post('/rule-sets/:id/duplicate', (req, res) => {
   const set = {
     id: newId(),
     name: parseName(req.body?.name || `${src.name}（副本）`),
+    gameSystem: systemOf(src.gameSystem),
     scope: 'personal',
     ownerId: req.user.id,
     ownerName: req.user.username || '',

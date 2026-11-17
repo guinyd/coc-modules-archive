@@ -265,10 +265,12 @@ export default function CharacterDetail({
                   <Badge tone={REVIEW_TONE[review.status]} className="!text-[14px]">{REVIEW_LABEL[review.status]}</Badge>
                 ) : null}
                 {c.isPublic ? <Badge tone="cyan" className="!text-[14px]">公开只读</Badge> : null}
-                {isPulp ? <Badge tone="amber" className="!text-[14px]">通俗克苏鲁</Badge> : null}
               </h2>
               <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[16px] leading-[1.7] text-ink-soft">
-                <span className="flex items-center gap-1"><UserIcon className="w-3.5 h-3.5" />{c.ownerName}</span>
+                <span className="flex items-center gap-1.5">
+                  <UserIcon className="w-3.5 h-3.5" />{c.ownerName}
+                  <Badge tone="violet" title={R?.name || ''}>{R?.short || 'coc7th'}</Badge>
+                </span>
                 <span>{d.occupation?.name || '无职业'}</span>
                 {isPulp && d.archetype ? (
                   <span className="flex items-center gap-1">
@@ -767,7 +769,13 @@ export default function CharacterDetail({
                   <Field label="模组" className={cx('sm:col-span-2', FIELD_LABEL)}>
                     <Select value={linkForm.moduleId} onChange={(e) => setLinkForm({ ...linkForm, moduleId: e.target.value })}>
                       <option value="">请选择模组…</option>
-                      {moduleOptions.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
+                      {moduleOptions
+                        .filter((m) => !m.gameSystem || m.gameSystem === (c.gameSystem || 'classic7e'))
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.title}{m.gameSystem === 'pulp' ? ' · 通克' : ''}
+                          </option>
+                        ))}
                     </Select>
                   </Field>
                   <Field label="参与身份" className={FIELD_LABEL}>

@@ -33,7 +33,7 @@ import ProfileView from './views/ProfileView.jsx';
 
 const EMPTY_MODULE = {
   title: '', region: '', era: '1920s', players: '', duration: '', description: '',
-  series: '', charInfo: '', occupations: '', skills: '', notes: '', isPinned: false,
+  series: '', charInfo: '', occupations: '', skills: '', notes: '', isPinned: false, gameSystem: '',
 };
 
 /** 浏览器历史只记录站内视图，刷新后仍从首页开始（站点没有 URL 路由）。 */
@@ -81,6 +81,7 @@ export default function App() {
   const [filterPlayers, setFilterPlayers] = useState('');
   const [filterDuration, setFilterDuration] = useState('');
   const [filterPlayed, setFilterPlayed] = useState('');
+  const [filterSystem, setFilterSystem] = useState('');
   const [selectedCollection, setSelectedCollection] = useState(null);
 
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -522,8 +523,10 @@ export default function App() {
     if (filterDuration) list = list.filter((m) => m.duration === filterDuration);
     if (filterPlayed === 'played') list = list.filter((m) => playedModules.includes(m.id));
     if (filterPlayed === 'unplayed') list = list.filter((m) => !playedModules.includes(m.id));
+    if (filterSystem === 'other') list = list.filter((m) => !m.gameSystem);
+    else if (filterSystem) list = list.filter((m) => m.gameSystem === filterSystem);
     return list;
-  }, [modules, selectedCollection, searchTerm, filterRegion, filterPlayers, filterDuration, filterPlayed, playedModules]);
+  }, [modules, selectedCollection, searchTerm, filterRegion, filterPlayers, filterDuration, filterPlayed, filterSystem, playedModules]);
 
   const handlePreview = (mode, data = null) => {
     setPreviewMode(mode);
@@ -918,6 +921,8 @@ export default function App() {
               setFilterDuration={setFilterDuration}
               filterPlayed={filterPlayed}
               setFilterPlayed={setFilterPlayed}
+              filterSystem={filterSystem}
+              setFilterSystem={setFilterSystem}
               selectedCollection={selectedCollection}
               setSelectedCollection={setSelectedCollection}
               uniqueSeries={uniqueSeries}

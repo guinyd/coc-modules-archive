@@ -22,7 +22,7 @@ import { checkPasswordStrength, hashPassword } from '../lib/security.js';
 import { requireAdmin } from '../lib/auth.js';
 import {
   isChief, requireChief, auditRulesFor, kpDisplayTitle, officialAuditRules, globalAuditRules,
-  activeRuleSet, globalAuditSet, ruleSetSummary,
+  activeRuleSet, globalAuditSet, ruleSetSummary, systemOf,
 } from '../lib/roles.js';
 import {
   parseNewUser, parseTitle, parseKpTitle, parseKpRank, parseOccupationTemplate,
@@ -302,8 +302,8 @@ router.get('/occupations', (req, res) => {
 router.post('/occupations', (req, res) => {
   const data = parseOccupationTemplate(req.body);
   const database = db();
-  if (database.customOccupations.some((o) => o.name === data.name)) {
-    throw badRequest('已存在同名职业模板');
+  if (database.customOccupations.some((o) => o.name === data.name && (o.gameSystem || 'classic7e') === data.gameSystem)) {
+    throw badRequest('该游戏规则下已存在同名职业模板');
   }
   if (database.customOccupations.length >= 100) throw badRequest('自定义职业模板最多 100 个');
   const now = Date.now();
@@ -331,8 +331,8 @@ router.put('/occupations/:id', (req, res) => {
   }
   const data = parseOccupationTemplate(req.body);
   const database = db();
-  if (database.customOccupations.some((o) => o.name === data.name && o.id !== occ.id)) {
-    throw badRequest('已存在同名职业模板');
+  if (database.customOccupations.some((o) => o.name === data.name && o.id !== occ.id && (o.gameSystem || 'classic7e') === data.gameSystem)) {
+    throw badRequest('该游戏规则下已存在同名职业模板');
   }
   Object.assign(occ, data, { updatedAt: Date.now() });
   save();
@@ -365,25 +365,37 @@ router.delete('/occupations/:id', (req, res) => {
  *
  * 「重置为默认」= 清空个人覆盖，回落到全局默认（未设即官方基线）。
  */
-/** 规则集清单（自己的 + 全局），供规则页的切换器使用 */
-function ruleSetList(user) {
-  const globals = (db().settings.ruleSets || []).filter((s) => s && s.scope === 'global');
-  const mine = (user.ruleSets || []).filter((s) => s && s.scope !== 'global');
+/** 规则集清单（自己的 + 全局，按游戏规则过滤），供规则页的切换器使用 */
+function ruleSetList(user, gameSystem) {
+  const sys = systemOf(gameSystem);
+  const globals = (db().settings.ruleSets || []).filter((s) => s && s.scope === 'global' && systemOf(s.gameSystem) === sys);
+  const mine = (user.ruleSets || []).filter((s) => s && s.scope !== 'global' && systemOf(s.gameSystem) === sys);
   return [...globals, ...mine].map((s) => {
     const out = ruleSetSummary(s);
     return out ? { ...out, isMine: out.ownerId === user.id } : null;
   }).filter(Boolean);
 }
 
+/** 临时规则槽位：官方七版用 auditRules / draftHouseRules，通克用 auditRulesPulp / draftHouseRulesPulp */
+function draftSlots(user, gameSystem) {
+  const sys = systemOf(gameSystem);
+  return sys === 'pulp'
+    ? { rules: 'auditRulesPulp', houses: 'draftHouseRulesPulp', active: 'activeRuleSetPulpId' }
+    : { rules: 'auditRules', houses: 'draftHouseRules', active: 'activeRuleSetId' };
+}
+
 router.get('/audit-rules', (req, res) => {
-  const official = officialAuditRules();
-  const global = globalAuditRules();
-  const effective = auditRulesFor(req.user);
-  const active = activeRuleSet(req.user);
-  const gset = globalAuditSet();
-  const draft = req.user.auditRules && typeof req.user.auditRules === 'object' ? req.user.auditRules : {};
-  const draftHouseRules = normalizeHouseRules(req.user.draftHouseRules || []);
+  const gameSystem = systemOf(req.query?.gameSystem);
+  const slot = draftSlots(req.user, gameSystem);
+  const official = officialAuditRules(gameSystem);
+  const global = globalAuditRules(gameSystem);
+  const effective = auditRulesFor(req.user, gameSystem);
+  const active = activeRuleSet(req.user, gameSystem);
+  const gset = globalAuditSet(gameSystem);
+  const draft = req.user[slot.rules] && typeof req.user[slot.rules] === 'object' ? req.user[slot.rules] : {};
+  const draftHouseRules = normalizeHouseRules(req.user[slot.houses] || []);
   res.json({
+    gameSystem,
     rules: effective,               // 兼容旧前端字段
     meta: AUDIT_RULE_META,          // 兼容旧前端：规则元数据
     official,                       // 官方规则书基线
@@ -395,10 +407,10 @@ router.get('/audit-rules', (req, res) => {
       ? Boolean(active.ownerId === req.user.id && Object.keys(active.auditRules || {}).length)
       : Object.keys(draft).length > 0,
     hasGlobal: Boolean((gset && Object.keys(gset.auditRules || {}).length)
-      || Object.keys(db().settings?.auditRules || {}).length),
+      || (gameSystem === 'classic7e' && Object.keys(db().settings?.auditRules || {}).length)),
     activeSet: ruleSetSummary(active),
     activeSetId: active ? active.id : null,
-    sets: ruleSetList(req.user),
+    sets: ruleSetList(req.user, gameSystem),
     draftRules: { ...global, ...draft },      // 「未选择」模式下编辑用的完整规则
     draftHouseRules,                          // 临时规则里的自定义规则（只含审卡校验）
     draftPersonalized: Object.keys(draft).length > 0 || draftHouseRules.length > 0,
@@ -411,61 +423,68 @@ router.get('/audit-rules', (req, res) => {
  */
 router.put('/audit-rules', (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const gameSystem = systemOf(body.gameSystem);
+  const slot = draftSlots(req.user, gameSystem);
   const rules = parseAuditRules(body.auditRules && typeof body.auditRules === 'object' ? body.auditRules : body);
-  const base = globalAuditRules();
+  const base = globalAuditRules(gameSystem);
   const diff = {};
   for (const key of Object.keys(rules)) {
     if (rules[key] !== base[key]) diff[key] = rules[key];
   }
   const draftHouseRules = normalizeHouseRules(Array.isArray(body.houseRules) ? body.houseRules : [])
     .filter((r) => r.type !== 'deriveBase');
-  req.user.auditRules = Object.keys(diff).length ? diff : null;
-  req.user.draftHouseRules = draftHouseRules;
-  req.user.activeRuleSetId = null;
+  req.user[slot.rules] = Object.keys(diff).length ? diff : null;
+  req.user[slot.houses] = draftHouseRules;
+  req.user[slot.active] = null;
   req.user.updatedAt = Date.now();
   save();
   audit(req, 'admin.audit_rules_draft', {
-    enabled: rules.enabled, keys: Object.keys(diff).length, houseRules: draftHouseRules.length,
+    enabled: rules.enabled, keys: Object.keys(diff).length, houseRules: draftHouseRules.length, gameSystem,
   });
   res.json({
-    success: true, draft: true, scope: 'personal',
-    rules: auditRulesFor(req.user), own: req.user.auditRules,
+    success: true, draft: true, scope: 'personal', gameSystem,
+    rules: auditRulesFor(req.user, gameSystem), own: req.user[slot.rules],
     personalized: Object.keys(diff).length > 0,
-    activeSetId: null, activeSet: null, sets: ruleSetList(req.user),
-    draftRules: { ...base, ...(req.user.auditRules || {}) },
+    activeSetId: null, activeSet: null, sets: ruleSetList(req.user, gameSystem),
+    draftRules: { ...base, ...(req.user[slot.rules] || {}) },
     draftHouseRules, draftPersonalized: Object.keys(diff).length > 0 || draftHouseRules.length > 0,
   });
 });
 
 router.delete('/audit-rules', (req, res) => {
-  req.user.auditRules = null;
-  req.user.draftHouseRules = [];
+  const gameSystem = systemOf(req.query?.gameSystem);
+  const slot = draftSlots(req.user, gameSystem);
+  req.user[slot.rules] = null;
+  req.user[slot.houses] = [];
   req.user.updatedAt = Date.now();
   save();
-  audit(req, 'admin.audit_rules_reset', { scope: 'draft' });
+  audit(req, 'admin.audit_rules_reset', { scope: 'draft', gameSystem });
   res.json({
-    success: true, draft: true, scope: 'personal',
-    rules: auditRulesFor(req.user), own: null, personalized: false,
-    activeSetId: null, activeSet: null, sets: ruleSetList(req.user),
-    draftRules: globalAuditRules(), draftHouseRules: [], draftPersonalized: false,
+    success: true, draft: true, scope: 'personal', gameSystem,
+    rules: auditRulesFor(req.user, gameSystem), own: null, personalized: false,
+    activeSetId: null, activeSet: null, sets: ruleSetList(req.user, gameSystem),
+    draftRules: globalAuditRules(gameSystem), draftHouseRules: [], draftPersonalized: false,
   });
 });
 
 /** 首席：把当前规则写进「全局规则集」（没有就建一套） */
 router.put('/audit-rules/global', requireChief, (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const gameSystem = systemOf(body.gameSystem);
+  const slot = draftSlots(req.user, gameSystem);
   const rules = parseAuditRules(body.auditRules && typeof body.auditRules === 'object' ? body.auditRules : body);
-  const base = officialAuditRules();
+  const base = officialAuditRules(gameSystem);
   const diff = {};
   for (const key of Object.keys(rules)) {
     if (rules[key] !== base[key]) diff[key] = rules[key];
   }
   const now = Date.now();
-  let set = globalAuditSet();
+  let set = globalAuditSet(gameSystem);
   if (!set) {
     set = {
       id: `rs_global_${now.toString(36)}`,
-      name: '全局默认规则',
+      name: gameSystem === 'pulp' ? '通克全局默认规则' : '全局默认规则',
+      gameSystem,
       scope: 'global',
       ownerId: null,
       ownerName: req.user.username || '',
@@ -481,30 +500,32 @@ router.put('/audit-rules/global', requireChief, (req, res) => {
     set.houseRules = normalizeHouseRules(body.houseRules);
   }
   set.updatedAt = now;
-  req.user.auditRules = null;
+  req.user[slot.rules] = null;
   req.user.updatedAt = now;
   save();
-  audit(req, 'admin.audit_rules_global', { enabled: rules.enabled, keys: Object.keys(diff).length });
+  audit(req, 'admin.audit_rules_global', { enabled: rules.enabled, keys: Object.keys(diff).length, gameSystem });
   res.json({
-    success: true, rules: globalAuditRules(), global: diff, own: null,
+    success: true, gameSystem, rules: globalAuditRules(gameSystem), global: diff, own: null,
     hasGlobal: Object.keys(diff).length > 0, activeSetId: set.id,
-    activeSet: ruleSetSummary(set), sets: ruleSetList(req.user), scope: 'chief',
+    activeSet: ruleSetSummary(set), sets: ruleSetList(req.user, gameSystem), scope: 'chief',
   });
 });
 
 router.delete('/audit-rules/global', requireChief, (req, res) => {
+  const gameSystem = systemOf(req.query?.gameSystem);
+  const slot = draftSlots(req.user, gameSystem);
   const now = Date.now();
   for (const s of db().settings.ruleSets || []) {
-    if (s && s.scope === 'global') { s.auditRules = {}; s.updatedAt = now; }
+    if (s && s.scope === 'global' && systemOf(s.gameSystem) === gameSystem) { s.auditRules = {}; s.updatedAt = now; }
   }
-  if (db().settings) db().settings.auditRules = null;
-  req.user.auditRules = null;
+  if (db().settings && gameSystem === 'classic7e') db().settings.auditRules = null;
+  req.user[slot.rules] = null;
   req.user.updatedAt = now;
   save();
-  audit(req, 'admin.audit_rules_global_reset', {});
+  audit(req, 'admin.audit_rules_global_reset', { gameSystem });
   res.json({
-    success: true, rules: globalAuditRules(), global: null, own: null,
-    hasGlobal: false, sets: ruleSetList(req.user), scope: 'chief',
+    success: true, gameSystem, rules: globalAuditRules(gameSystem), global: null, own: null,
+    hasGlobal: false, sets: ruleSetList(req.user, gameSystem), scope: 'chief',
   });
 });
 

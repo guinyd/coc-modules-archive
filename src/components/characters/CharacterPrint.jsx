@@ -159,7 +159,7 @@ export default function CharacterPrint({ character }) {
         <div className="border border-ink/45 p-2.5 shadow-[inset_0_0_0_1px_#dccdb1]">
           <div className="text-center border-b border-ink/45 pb-0.5 mb-1">
             <div className="text-[11.5px] tracking-[0.5em] text-ochre">❖ {character.era || '1920s'}{isPulp ? ' 英雄' : ' 调查员'} · 秘密调查档案馆 ❖</div>
-            <div className="text-[21px] font-semibold font-serif tracking-[0.26em]">{isPulp ? '通俗克苏鲁 角色卡' : 'COC 七版 角色卡'}</div>
+            <div className="text-[21px] font-semibold font-serif tracking-[0.26em]">{isPulp ? '通俗克苏鲁 角色卡' : 'COC7th 角色卡'}</div>
           </div>
 
           {/* 基本信息 */}
@@ -412,7 +412,7 @@ export default function CharacterPrint({ character }) {
           </div>
 
           <div className="text-[10.5px] text-ink-mute mt-1.5 text-center">
-            ❖ 角色卡由「秘密调查档案馆」生成 · {isPulp ? '通俗克苏鲁（Pulp Cthulhu）规则' : 'COC 第 7 版规则'} ❖
+            ❖ 角色卡由「秘密调查档案馆」生成 · {isPulp ? '通俗克苏鲁（Pulp Cthulhu）规则' : '克苏鲁的呼唤 第七版（COC7th）规则'} ❖
           </div>
         </div>
       </section>

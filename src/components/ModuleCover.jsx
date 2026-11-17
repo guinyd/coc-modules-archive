@@ -16,6 +16,7 @@
 import React from 'react';
 
 import { CoverMotif, SealWatermark } from './Emblem.jsx';
+import { moduleSystemFull, moduleSystemId, moduleSystemLabel } from '../lib/moduleSystem.js';
 import { hashString, jitter } from '../lib/random.js';
 
 /** 八种深海印版：from/to 是印版的两端，glow/glow2 是两团冷光。 */
@@ -180,10 +181,17 @@ export default function CoverPlate({ module, variant = 'card', className = '' })
               <span>{module.players} 人 · {module.duration}h</span>
             </span>
           )}
-          <span aria-hidden="true" className="flex shrink-0 items-end gap-[2px]">
-            {[3, 7, 4, 9, 5, 8, 3, 6, 9, 4, 7].map((b, i) => (
-              <span key={i} className="w-[2px] bg-[#f6ebcd]/35" style={{ height: `${b + 3}px` }} />
-            ))}
+          <span
+            className={`shrink-0 border bg-[#0b0d0a]/50 font-mono tracking-[0.14em] backdrop-blur-[1px] ${hero ? 'px-2 py-1 text-[13px]' : 'px-1.5 py-0.5 text-[11.5px]'} ${
+              moduleSystemId(module) === 'pulp'
+                ? 'border-[#e6bc68]/55 text-[#f0c48a]'
+                : moduleSystemId(module) === 'classic7e'
+                  ? 'border-[#f6ebcd]/38 text-[#f6ebcd]/90'
+                  : 'border-[#f6ebcd]/24 text-[#f6ebcd]/68'
+            }`}
+            title={`版本：${moduleSystemFull(module)}`}
+          >
+            {moduleSystemLabel(module)}
           </span>
         </div>
       </div>

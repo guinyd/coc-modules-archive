@@ -11,7 +11,7 @@
  */
 
 import {
-  blankSheet, blankSkills, computeSheet, validateSheet, auditSheet, CLASSIC_ID,
+  blankSheet, blankSkills, computeSheet, validateSheet, auditSheet, CLASSIC_ID, CHARS,
 } from '../shared/coc7e.js';
 import { resolveRuleset, GAME_SYSTEMS, PULP_ID } from '../shared/rulesets/index.js';
 import {
@@ -201,6 +201,32 @@ ok('classic 不检查原型 / 关键连接', (() => {
 })());
 ok('游戏规则 id 不会被写错（pulp / classic7e）', P.id === PULP_ID && C.id === CLASSIC_ID);
 ok('pulp 审卡默认启用 6 栏背景下限', PULP_AUDIT_RULES.backgroundMinFields === 6);
+
+section('v10.10 年龄规则关闭与通克基线');
+ok('通克规则集声明 ageAdjust 关闭', P.chargen?.ageAdjust?.enabled === false);
+ok('派生值摘要标记 ageRulesOff', computeSheet(pulp({ age: 90 }), { ruleset: P }).ruleset.ageRulesOff === true);
+ok('通克完全不套年龄补正（age 90 与 age 25 属性相同）', (() => {
+  const a = computeSheet(pulp({ age: 25 }), { ruleset: P });
+  const b = computeSheet(pulp({ age: 90 }), { ruleset: P });
+  return CHARS.every((k) => a.eff[k] === b.eff[k]);
+})());
+ok('官方 7e 仍然套年龄补正（age 80 的 STR 低于 age 25）', (() => {
+  const base = { ...blankSheet(), occupationId: 2, gameSystem: CLASSIC_ID, chars: { ...pulp().chars } };
+  const a = computeSheet({ ...base, age: 25, applyAgeAdjust: true });
+  const b = computeSheet({ ...base, age: 80, applyAgeAdjust: true });
+  return b.eff.STR < a.eff.STR;
+})());
+ok('通克车卡只保留掷骰一种方式（不提供速建入口）',
+  Array.isArray(P.chargen?.methods) && P.chargen.methods.length === 1 && P.chargen.methods[0].id === 'roll');
+ok('通克审卡基线自带原型 / 天赋 / 奖励点 / 关键连接', (() => {
+  const r = P.auditRules || {};
+  return r.requireArchetype === true && r.talentsCount === 2 && r.bonusPoints === 100
+    && r.bonusWhitelist === true && r.requireKeyConnection === true;
+})());
+ok('官方 7e 没有通克专属规则项', (() => {
+  const r = C.auditRules || {};
+  return !r.requireArchetype && !r.bonusWhitelist && !r.requireKeyConnection;
+})());
 
 console.log(`\n================ 通克自检：${pass} 通过 / ${fails.length} 失败 ================`);
 if (fails.length) { console.log('失败项：\n - ' + fails.join('\n - ')); process.exit(1); }

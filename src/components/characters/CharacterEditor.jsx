@@ -16,7 +16,7 @@
 
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
-  AlertCircle, ArrowLeft, BookOpen, Check, CloudUpload, Crown, Dices, Download, FileText, Info, Library, Plus, Save,
+  AlertCircle, ArrowLeft, BookOpen, Check, ChevronDown, CloudUpload, Crown, Dices, Download, FileText, Info, Library, Plus, Save,
   ScrollText, Search, Sword, Trash2, User as UserIcon, Wand2, X,
 } from 'lucide-react';
 import {
@@ -301,10 +301,11 @@ function HeroPanel({
           {tables.map((tb) => {
             const picked = tb.rows.filter((t) => talents.includes(t.id));
             return (
-              <details key={tb.key} open={picked.length > 0} className="rounded-[2px] border border-line-strong bg-paper-raised">
+              <details key={tb.key} open={picked.length > 0} className="group rounded-[2px] border border-line-strong bg-paper-raised">
                 <summary className="flex cursor-pointer flex-wrap items-center gap-2 px-3 py-2 text-[14px] font-semibold text-ink-soft">
                   {tb.zh}<span className="font-mono text-[12.5px] text-ink-mute">表 {tb.table}</span>
                   {picked.length ? <Badge tone="amber">已选 {picked.length}</Badge> : null}
+                  <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-ink-mute transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
                 </summary>
                 <div className="grid gap-1.5 border-t border-line p-2.5 sm:grid-cols-2">
                   {tb.rows.map((t) => {
@@ -400,7 +401,7 @@ function PulpReference() {
   );
 }
 
-/** 英雄奖励点分配：只列当前原型白名单里的技能 */
+/** 英雄奖励点分配：只列当前原型白名单里的技能（可折叠，标题行常驻显示已用/上限） */
 function BonusPanel({ derived, onSetBonus }) {
   const total = derived.budget.bonus;
   if (!total) {
@@ -412,23 +413,28 @@ function BonusPanel({ derived, onSetBonus }) {
   }
   const rows = derived.skills.filter((s) => s.isBonusAllowed);
   return (
-    <div className="space-y-3 rounded-[2px] border border-amber-600/40 bg-amber-500/[0.05] p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-[14px] font-semibold tracking-[0.04em] text-ink">{derived.archetype?.zh || '原型'} · 英雄奖励点</p>
-        <span className="font-mono text-[13px] text-ink-mute">白名单内可投 {rows.length} 项</span>
+    <details className="group rounded-[2px] border border-amber-600/40 bg-amber-500/[0.05]">
+      <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 px-4 py-3">
+        <span className="text-[14px] font-semibold tracking-[0.04em] text-ink">{derived.archetype?.zh || '原型'} · 英雄奖励点</span>
+        <span className="flex items-center gap-2 font-mono text-[13px] text-ink-mute">
+          已用 {derived.spent.bonus} / {total} · 白名单 {rows.length} 项
+          <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
+        </span>
+      </summary>
+      <div className="space-y-3 border-t border-amber-600/30 p-4">
+        <ProgressBar used={derived.spent.bonus} total={total} label="英雄奖励点" hint="（每原型 100 点，可与本职点叠加）" />
+        <div className="grid gap-1.5 sm:grid-cols-2">
+          {rows.map((s) => (
+            <label key={s.id} className="flex items-center justify-between gap-2 rounded-[2px] border border-line-strong bg-paper-raised px-2.5 py-1.5">
+              <span className="min-w-0 truncate text-[14px] text-ink-soft">{s.name}</span>
+              <span className="shrink-0 font-mono text-[12.5px] text-ink-mute">{s.base}+{s.occ}+{s.interest}+{s.bonus}</span>
+              <NumberInput blankZero value={s.bonus} onChange={(v) => onSetBonus(s.id, v)} className="!w-16 !py-1 text-center" />
+            </label>
+          ))}
+        </div>
+        {rows.length === 0 ? <p className="text-[13.5px] text-ink-mute">该原型列出的技能都不在当前技能表里，请检查生成数据。</p> : null}
       </div>
-      <ProgressBar used={derived.spent.bonus} total={total} label="英雄奖励点" hint="（每原型 100 点，可与本职点叠加）" />
-      <div className="grid gap-1.5 sm:grid-cols-2">
-        {rows.map((s) => (
-          <label key={s.id} className="flex items-center justify-between gap-2 rounded-[2px] border border-line-strong bg-paper-raised px-2.5 py-1.5">
-            <span className="min-w-0 truncate text-[14px] text-ink-soft">{s.name}</span>
-            <span className="shrink-0 font-mono text-[12.5px] text-ink-mute">{s.base}+{s.occ}+{s.interest}+{s.bonus}</span>
-            <NumberInput blankZero value={s.bonus} onChange={(v) => onSetBonus(s.id, v)} className="!w-16 !py-1 text-center" />
-          </label>
-        ))}
-      </div>
-      {rows.length === 0 ? <p className="text-[13.5px] text-ink-mute">该原型列出的技能都不在当前技能表里，请检查生成数据。</p> : null}
-    </div>
+    </details>
   );
 }
 
@@ -520,8 +526,8 @@ function SpecialtyPicker({ group, onToggle, R }) {
               className={cx('rounded-[2px] border px-2.5 py-1.5 text-[14px] font-semibold transition',
                 on ? 'border-forest bg-forest text-paper-raised' : 'border-line-strong bg-paper-raised text-ink-soft hover:border-forest/50')}
             >
-              {SKILL_BY_KEY[k]?.name || k}
-              {SKILL_BY_KEY[k]?.spec ? (
+              {defs[k]?.name || k}
+              {defs[k]?.spec ? (
                 <span className="ml-1 text-[11.5px] font-normal opacity-80">含全部分支</span>
               ) : null}
             </button>
@@ -533,7 +539,7 @@ function SpecialtyPicker({ group, onToggle, R }) {
       </div>
       {group.picked.length > 0 ? (
         <p className="mt-2 text-[14px] text-ink-mute">
-          已选：{group.picked.map((k) => SKILL_BY_KEY[k]?.name || k).join('、')}
+          已选：{group.picked.map((k) => defs[k]?.name || k).join('、')}
         </p>
       ) : null}
     </div>
@@ -641,9 +647,14 @@ export default function CharacterEditor({
     () => (R.id === CLASSIC_ID ? [...OCCUPATIONS, ...(customOccupations || [])] : R.occupations),
     [R, customOccupations],
   );
+  // 房规按游戏规则隔离：通克卡只列通克规则集，coc7th 卡只列官方规则集
+  const systemRuleSets = useMemo(
+    () => (ruleSets || []).filter((s) => (s.gameSystem || CLASSIC_ID) === R.id),
+    [ruleSets, R],
+  );
   const chosenRuleSet = useMemo(
-    () => (ruleSets || []).find((s) => s.id === sheet.ruleSetId) || null,
-    [ruleSets, sheet.ruleSetId],
+    () => systemRuleSets.find((s) => s.id === sheet.ruleSetId) || null,
+    [systemRuleSets, sheet.ruleSetId],
   );
   const houseRules = useMemo(() => chosenRuleSet?.houseRules || [], [chosenRuleSet]);
   const RULE_PAGE = 6;
@@ -658,19 +669,19 @@ export default function CharacterEditor({
   const [tomeQuery, setTomeQuery] = useState('');
   const ruleHints = useMemo(() => {
     const out = new Set();
-    (ruleSets || []).forEach((s) => { if (s.name) out.add(s.name); if (s.ownerName) out.add(s.ownerName); });
+    systemRuleSets.forEach((s) => { if (s.name) out.add(s.name); if (s.ownerName) out.add(s.ownerName); });
     return [...out].slice(0, 20);
-  }, [ruleSets]);
+  }, [systemRuleSets]);
   const filteredRuleSets = useMemo(() => {
     const q = ruleQuery.trim().toLowerCase();
-    if (!q) return ruleSets || [];
-    return (ruleSets || []).filter((s) => [s.name, s.ownerName, s.scope === 'global' ? '全局默认' : '个人规则']
+    if (!q) return systemRuleSets;
+    return systemRuleSets.filter((s) => [s.name, s.ownerName, s.scope === 'global' ? '全局默认' : '个人规则']
       .some((v) => String(v || '').toLowerCase().includes(q)));
-  }, [ruleSets, ruleQuery]);
+  }, [systemRuleSets, ruleQuery]);
   const rulePages = Math.max(1, Math.ceil(filteredRuleSets.length / RULE_PAGE));
   const rulePageNow = Math.min(rulePage, rulePages);
   const pagedRuleSets = filteredRuleSets.slice((rulePageNow - 1) * RULE_PAGE, rulePageNow * RULE_PAGE);
-  useEffect(() => { setRulePage(1); }, [ruleQuery]);
+  useEffect(() => { setRulePage(1); }, [ruleQuery, R.id]);
   const ignoreAge = useMemo(() => houseRules.some((r) => r?.type === 'ignoreAge'), [houseRules]);
   const ctx = useMemo(() => ({
     customOccupations, houseRules, ignoreAge,
@@ -899,7 +910,7 @@ export default function CharacterEditor({
   }, [tomeQuery]);
 
   // ---------------------------------------------------------- 属性生成
-  const luckTwice = derived.ageAdjust.luckRolls > 1;   // 15-19 岁：幸运掷两次取高
+  const luckTwice = !isPulp && derived.ageAdjust.luckRolls > 1;   // 15-19 岁：幸运掷两次取高（通克不套年龄规则）
 
   /** 通克核心属性：(1D6+13)×5 → 70–95 */
   const rollPulpCore = () => (Math.floor(Math.random() * 6 + 1) + 13) * 5;
@@ -1506,10 +1517,16 @@ export default function CharacterEditor({
                 <Field className={FIELD} label="角色名" required>
                   <Input value={sheet.name} maxLength={40} onChange={(e) => patch({ name: e.target.value })} placeholder="例：约翰·H·沃特雷" />
                 </Field>
-                <Field className={FIELD} label="玩家名"><Input value={sheet.playerName} maxLength={40} onChange={(e) => patch({ playerName: e.target.value })} /></Field>
+                <Field className={FIELD} label="玩家名">
+                  <div className="flex items-center gap-2">
+                    <Input value={sheet.playerName} maxLength={40} onChange={(e) => patch({ playerName: e.target.value })} />
+                    <Badge tone="violet" className="shrink-0" title={`本卡适用规则：${R.name}`}>{R.short}</Badge>
+                  </div>
+                </Field>
                 <Field className={FIELD} label="年龄"
-                  hint={(ignoreAge || sheet.agePenaltyWaived) ? (ignoreAge ? '当前房规忽略年龄规则：可填任意非负整数' : 'KP 已豁免年龄减益：可填任意非负整数') : '15-120 之间；影响属性补正与教育增强'}>
-                  <NumberInput min={(ignoreAge || sheet.agePenaltyWaived) ? 0 : 15} max={(ignoreAge || sheet.agePenaltyWaived) ? 999 : 120} value={sheet.age} onChange={setAge} />
+                  hint={isPulp ? '通俗克苏鲁不限制年龄，也不做年龄补正/教育增强，仅作记录与叙事参考'
+                    : (ignoreAge || sheet.agePenaltyWaived) ? (ignoreAge ? '当前房规忽略年龄规则：可填任意非负整数' : 'KP 已豁免年龄减益：可填任意非负整数') : '15-120 之间；影响属性补正与教育增强'}>
+                  <NumberInput min={(isPulp || ignoreAge || sheet.agePenaltyWaived) ? 0 : 15} max={(isPulp || ignoreAge || sheet.agePenaltyWaived) ? 999 : 120} value={sheet.age} onChange={setAge} />
                 </Field>
                 <Field className={FIELD} label="性别"><Input value={sheet.gender} maxLength={20} onChange={(e) => patch({ gender: e.target.value })} /></Field>
                 <Field className={FIELD} label="住地"><Input value={sheet.residence} maxLength={40} onChange={(e) => patch({ residence: e.target.value })} /></Field>
@@ -1685,7 +1702,7 @@ export default function CharacterEditor({
 
           <Panel className="p-5 sm:p-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-              <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink"><Info className="h-4 w-4 text-ochre" />属性明细与年龄补正</h3>
+              <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink"><Info className="h-4 w-4 text-ochre" />{isPulp ? '属性明细' : '属性明细与年龄补正'}</h3>
               <div className="flex flex-wrap items-center gap-3">
                 <span className="inline-flex items-baseline gap-2 rounded-[2px] border border-ochre/45 bg-ochre/[0.07] px-3 py-1.5 tabular text-ink">
                   <span className="text-[12.5px] tracking-[0.08em] text-ink-mute">属性总和</span>
@@ -1694,12 +1711,12 @@ export default function CharacterEditor({
                   <b className="font-mono text-[17px] font-bold text-ochre">{attrWithLuck}</b>
                   <span className="text-[12px] text-ink-mute">不含运 / 含运</span>
                 </span>
-                <span className="text-[14px] text-ink-mute">{derived.ageAdjust.label}</span>
+                {isPulp ? null : <span className="text-[14px] text-ink-mute">{derived.ageAdjust.label}</span>}
               </div>
             </div>
             {isPulp ? (
               <p className="mb-4 border-l-2 border-amber-600/50 bg-amber-500/[0.06] px-3.5 py-2.5 text-[14px] leading-[1.75] text-ink-soft">
-                通俗克苏鲁不套用年龄补正与教育增强：属性直接使用掷骰结果，年龄只作记录（本页下方的补正控件在该规则下不参与计算）。
+                通俗克苏鲁不套用年龄补正与教育增强：属性直接使用掷骰结果，年龄只作记录；本页不提供年龄豁免、成长等入口。
               </p>
             ) : null}
             {currentUser?.role === 'admin' ? (
@@ -1724,12 +1741,14 @@ export default function CharacterEditor({
                     label="传奇标记：允许突破属性 99 上限"
                     hint="开启后每个属性多出一栏「传奇 +」，额外调整值单独累加，不与掷骰属性混用"
                   />
-                  <Toggle
-                    checked={Boolean(sheet.agePenaltyWaived)}
-                    onChange={(v) => patch({ agePenaltyWaived: v })}
-                    label="豁免年龄减益（只享受教育成长）"
-                    hint="属性不再因年龄下降、移动力不减；教育增强检定与成长照常保留"
-                  />
+                  {isPulp ? null : (
+                    <Toggle
+                      checked={Boolean(sheet.agePenaltyWaived)}
+                      onChange={(v) => patch({ agePenaltyWaived: v })}
+                      label="豁免年龄减益（只享受教育成长）"
+                      hint="属性不再因年龄下降、移动力不减；教育增强检定与成长照常保留"
+                    />
+                  )}
                 </div>
                 {sheet.legendary?.enabled ? (
                   <Field className={FIELD} label="传奇备注（选填）" hint="例如：完成《××》战役，KP 奖励突破上限">
@@ -1763,16 +1782,18 @@ export default function CharacterEditor({
                       <div className="mb-1 font-mono text-[14px] font-semibold tracking-[0.06em] text-ink-mute">掷骰值</div>
                       <NumberInput value={sheet.chars[k]} onChange={(v) => setChar(k, v)} className="!py-2" />
                     </div>
-                    <div className="w-16">
-                      <div className="mb-1 font-mono text-[14px] font-semibold tracking-[0.06em] text-moon">成长 +</div>
-                      <NumberInput
-                        min={0}
-                        max={99}
-                        value={sheet.charGrowth?.[k] || 0}
-                        onChange={(v) => setCharGrowth(k, v)}
-                        className="!py-2 !border-moon/50"
-                      />
-                    </div>
+                    {isPulp ? null : (
+                      <div className="w-16">
+                        <div className="mb-1 font-mono text-[14px] font-semibold tracking-[0.06em] text-moon">成长 +</div>
+                        <NumberInput
+                          min={0}
+                          max={99}
+                          value={sheet.charGrowth?.[k] || 0}
+                          onChange={(v) => setCharGrowth(k, v)}
+                          className="!py-2 !border-moon/50"
+                        />
+                      </div>
+                    )}
                     {derived.legendary.enabled ? (
                       <div className="w-20">
                         <div className="mb-1 font-mono text-[14px] font-semibold tracking-[0.06em] text-ochre">传奇 +</div>
@@ -1809,20 +1830,26 @@ export default function CharacterEditor({
                   起始 = min(意志 + 成长, 99 − 神话知识)，最低 0；上限随克苏鲁神话增长而下降（当前神话 {derived.mythos}）。成长可正可负——剧本削减 SAN 时填负数。
                 </p>
               </div>
-              <label className="flex items-center gap-2">
-                <span className="text-[14px] font-semibold text-moon">成长 ±</span>
-                <NumberInput
-                  min={-99}
-                  max={99}
-                  value={sheet.sanGrowth || 0}
-                  onChange={(v) => { patch({ sanGrowth: v === '' ? 0 : Math.max(-99, Math.min(99, Math.trunc(Number(v)) || 0)) }); }}
-                  className="!w-20 !py-2 !border-moon/50"
-                />
-              </label>
+              {isPulp ? null : (
+                <label className="flex items-center gap-2">
+                  <span className="text-[14px] font-semibold text-moon">成长 ±</span>
+                  <NumberInput
+                    min={-99}
+                    max={99}
+                    value={sheet.sanGrowth || 0}
+                    onChange={(v) => { patch({ sanGrowth: v === '' ? 0 : Math.max(-99, Math.min(99, Math.trunc(Number(v)) || 0)) }); }}
+                    className="!w-20 !py-2 !border-moon/50"
+                  />
+                </label>
+              )}
             </div>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              {ignoreAge ? (
+              {isPulp ? (
+                <div className="rounded-[2px] border border-amber-600/40 bg-amber-500/[0.06] px-4 py-3 text-[14px] leading-[1.7] text-ink-soft">
+                  通俗克苏鲁不使用年龄补正与教育增强：有效属性等于掷骰值与成长以外的直接结果。
+                </div>
+              ) : ignoreAge ? (
                 <div className="rounded-[2px] border border-amber-600/40 bg-amber-500/[0.06] px-4 py-3 text-[14px] leading-[1.7] text-ink-soft">
                   当前房规启用了「忽略年龄规则」：不套用年龄补正，也不进行教育增强。
                 </div>
@@ -1840,7 +1867,7 @@ export default function CharacterEditor({
             </div>
 
             {/* 年龄补正分配：除外貌外都是「合计 −N，自行分配」*/}
-            {!ignoreAge && sheet.applyAgeAdjust && derived.ageAdjust.poolPoints > 0 && (
+            {!isPulp && !ignoreAge && sheet.applyAgeAdjust && derived.ageAdjust.poolPoints > 0 && (
               <div className={cx('mt-4 p-4 rounded-[3px] border',
                 derived.ageAdjust.allocComplete ? 'border-line-strong bg-paper-deep' : 'border-amber-600/45 bg-amber-500/[0.06]')}>
                 <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
@@ -1887,7 +1914,7 @@ export default function CharacterEditor({
               </div>
             )}
 
-            {derived.ageAdjust.luckRolls > 1 && (
+            {!isPulp && derived.ageAdjust.luckRolls > 1 && (
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[2px] border border-amber-600/40 bg-amber-500/[0.06] p-4">
                 <div className="text-[14px] leading-[1.8] text-ink-soft">
                   15-19 岁：幸运可以掷两次取较高值（当前幸运 <b className="font-mono text-ink">{sheet.chars.Luck || 0}</b>）。
@@ -1896,7 +1923,7 @@ export default function CharacterEditor({
               </div>
             )}
 
-            {!ignoreAge && sheet.applyAgeAdjust && (
+            {!isPulp && !ignoreAge && sheet.applyAgeAdjust && (
               <div className="mt-4 space-y-3 rounded-[2px] border border-moon/35 bg-moon/[0.05] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="text-[14px] leading-[1.8] text-ink-soft">
@@ -2325,20 +2352,20 @@ export default function CharacterEditor({
               <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink">
                 <ScrollText className="h-4 w-4 text-ochre" />房规
               </h3>
-              <span className="font-mono text-[13px] tracking-[0.14em] text-ink-mute tabular">{ruleSets.length} 套规则集</span>
+              <span className="font-mono text-[13px] tracking-[0.14em] text-ink-mute tabular">{systemRuleSets.length} 套规则集</span>
             </div>
             <p className="text-[15px] leading-relaxed text-ink-soft">
-              守秘人可以发布多套规则集，每一套同时包含房规与审卡规则。选定后本卡按这套房规计算；提交审核时会冻结当时的规则，
-              之后守秘人再改也不影响这张卡。
+              守秘人可以发布多套规则集，每一套同时包含房规与审卡规则。这里只列出<b>{R.name}</b>的规则集，
+              两套规则互不混用；选定后本卡按这套房规计算，提交审核时会冻结当时的规则，之后守秘人再改也不影响这张卡。
             </p>
 
             {guest ? (
               <p className="border-l-2 border-ochre bg-paper-deep/40 px-3 py-2 text-[14px] leading-relaxed text-ink-soft">
                 访客草稿不联网，只能按规则书基础值计算；登录后可选用守秘人发布的房规。
               </p>
-            ) : ruleSets.length === 0 ? (
+            ) : systemRuleSets.length === 0 ? (
               <p className="border-l-2 border-line-strong bg-paper-deep/40 px-3 py-2 text-[14px] leading-relaxed text-ink-soft">
-                还没有守秘人发布规则集，按官方规则书计算即可。
+                还没有守秘人为「{R.name}」发布规则集，按该规则书基础值计算即可。
               </p>
             ) : (
               <>
@@ -2355,7 +2382,7 @@ export default function CharacterEditor({
                   !sheet.ruleSetId ? 'border-ochre bg-ochre/[0.06]' : 'border-line-strong bg-paper-raised hover:border-ink-mute')}>
                   <input type="radio" name="ruleSet" className="mt-1 accent-[var(--ink)]" checked={!sheet.ruleSetId} onChange={() => patch({ ruleSetId: '' })} />
                   <span className="min-w-0">
-                    <span className="block font-serif text-[16px] font-bold text-ink">官方规则书</span>
+                    <span className="block font-serif text-[16px] font-bold text-ink">官方规则书 · {R.name}</span>
                     <span className="mt-0.5 block text-[14px] leading-relaxed text-ink-soft">不使用任何房规，按规则书基础值计算。</span>
                   </span>
                 </label>
