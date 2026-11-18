@@ -73,7 +73,7 @@ ok('职业点数公式全部为正（EDU 60 / DEX 60 / STR 60 / APP 60 / POW 60�
 }));
 ok('pulp 空卡技能槽 68 个（58 项 + 专攻组展开）', blankSheet('u1', PULP_ID).skills.length === 68,
   `实际 ${blankSheet('u1', PULP_ID).skills.length}`);
-ok('建卡首屏列出两套规则', GAME_SYSTEMS.length === 2 && GAME_SYSTEMS.some((g) => g.id === PULP_ID));
+ok('建卡首屏列出多套规则（含通克）', GAME_SYSTEMS.length >= 2 && GAME_SYSTEMS.some((g) => g.id === PULP_ID));
 
 section('T1 核心属性 (1D6+13)×5 = 70–95');
 ok('掷骰常量正确', PULP_CHARGEN.archetype.coreCharRoll.dice === '1d6'

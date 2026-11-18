@@ -59,6 +59,14 @@ class Cdp {
     const cdp = new Cdp(ws);
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
+      if (msg.method === 'Runtime.consoleAPICalled' && msg.params?.type === 'error') {
+        const txt = (msg.params.args || []).map((a) => a.value ?? a.description ?? '').join(' ');
+        console.log('  [browser-console]', String(txt).slice(0, 300));
+      }
+      if (msg.method === 'Runtime.exceptionThrown') {
+        const d = msg.params?.exceptionDetails;
+        console.log('  [browser-error]', String(d?.exception?.description || d?.text || '').split(String.fromCharCode(10))[0]);
+      }
       if (msg.id && cdp.pending.has(msg.id)) {
         const { resolve, reject } = cdp.pending.get(msg.id);
         cdp.pending.delete(msg.id);
@@ -292,12 +300,14 @@ try {
     const hasExportBtn = await page.eval(`[...document.querySelectorAll('button')].some(b => b.textContent.trim() === '导出')`);
     ok('列表卡片上有「导出」（角色卡 Markdown / 骰娘指令）', hasExportBtn === true);
     const waiveToggled = await page.eval(`(async () => {
-      const before = document.body.innerText.includes('免年龄减益');
       const b = [...document.querySelectorAll('button')].find(x => /豁免年龄|恢复年龄/.test(x.textContent));
       if (!b) return null;
+      const before = /豁免年龄/.test(b.textContent) ? 'waived' : 'normal';
       b.click();
       await new Promise((r) => setTimeout(r, 1400));
-      return { before, after: document.body.innerText.includes('免年龄减益') };
+      const fresh = [...document.querySelectorAll('button')].find(x => /豁免年龄|恢复年龄/.test(x.textContent));
+      const after = fresh && /豁免年龄/.test(fresh.textContent) ? 'waived' : 'normal';
+      return { before, after };
     })()`);
     ok('豁免年龄是一键开关（点击后徽标状态改变）',
       waiveToggled && waiveToggled.before !== waiveToggled.after, JSON.stringify(waiveToggled));
@@ -334,10 +344,11 @@ try {
       legendModal.includes('允许这张卡突破属性 99 上限') && legendModal.includes('额外调整值（单独一栏）'));
     // 打开开关并给第一个属性 +40，保存
     await page.eval(`(() => {
-      const label = [...document.querySelectorAll('label')].find(l => l.textContent.includes('允许这张卡突破属性 99 上限'));
-      const t = label ? label.querySelector('input[type=checkbox],button') : null;
-      if (t) t.click();
-      return Boolean(t);
+      // Toggle 渲染成 <button role="switch">，不是 <label>；按文案找到它再点
+      const sw = [...document.querySelectorAll('[role="switch"]')]
+        .find(el => el.textContent.includes('允许这张卡突破属性 99 上限'));
+      if (sw) sw.click();
+      return Boolean(sw);
     })()`);
     await sleep(400);
     await page.eval(`(() => {
@@ -396,12 +407,76 @@ try {
     ok('基础信息格子全部单行', printCheck.lineBlocks === 0, `折行 ${printCheck.lineBlocks} 个`);
     ok('第一页仍在 A4 以内', printCheck.contentH <= printCheck.a4,
       `内容 ${printCheck.contentH}px / A4 ${printCheck.a4}px`);
+    {
+      const shot = await page.send('Page.captureScreenshot', { format: 'png' });
+      fs.writeFileSync(path.join(SHOTS, 'print.png'), Buffer.from(shot.data, 'base64'));
+      console.log(`  截图：${path.join(SHOTS, 'print.png')}`);
+    }
     await page.eval(`(() => {
       const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('返回'));
       if (b) b.click();
       return Boolean(b);
     })()`);
     await sleep(900);
+
+    // ---------------------------------------------------------------- 补齐样本
+    // 演示库没有「有教育增强记录」的在审角色卡，这里用接口现造一张再删掉，
+    // 让「审卡队列显示教育增强状态」这条断言有真实数据可看。
+    let seededReviewId = null;
+    if (seedUser?.token) {
+      const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${seedUser.token}` };
+      const call = async (method, url, body) => {
+        const r = await fetch(`${API}${url}`, {
+          method, headers: auth, body: body === undefined ? undefined : JSON.stringify(body),
+        });
+        if (!r.ok) {
+          const body = await r.text().catch(() => '');
+          throw new Error(`${method} ${url} → ${r.status} ${body.slice(0, 200)}`);
+        }
+        return r.json();
+      };
+      try {
+        const list = await call('GET', '/api/characters?scope=all');
+        // 优先挑七版、且职业是内置数字 id 的卡（避免克隆伴侣/通克职业导致 400）
+        const classicLike = (list.items || []).filter((x) => (x.gameSystem || 'classic7e') === 'classic7e');
+        const pick = classicLike.find((x) => /^\d+$/.test(String(x.occupationId || ''))) || classicLike[0];
+        const base = pick?.id ? await call('GET', `/api/characters/${pick.id}`) : null;
+        if (base) {
+          const created = await call('POST', '/api/characters', {
+            name: 'UI 样本 · 教育增强',
+            playerName: base.playerName || '',
+            occupationId: base.occupationId,
+            gameSystem: base.gameSystem || 'classic7e',
+            kpcp: { enabled: false },
+            age: base.age,
+            gender: base.gender,
+            residence: base.residence,
+            birthplace: base.birthplace,
+            era: base.era,
+            chars: base.chars,
+            skills: [],
+            background: base.background,
+            status: 'active',
+          });
+          seededReviewId = created.id;
+          const at = Date.now();
+          await call('PATCH', `/api/characters/${seededReviewId}`, {
+            eduGrowth: {
+              settled: true, manual: true, count: 3, gain: 4,
+              rolls: [{ roll: 6, gain: 4 }], at, by: seedUser.user.username,
+              attempts: [{
+                at, by: seedUser.user.username, manual: true, count: 3, gain: 4,
+                rolls: [{ roll: 6, gain: 4 }], totalAfter: 0, via: 'manual',
+              }],
+              granted: 0, rerolls: 0, locked: true,
+            },
+          });
+          await call('POST', `/api/characters/${seededReviewId}/submit`, {});
+        }
+      } catch (err) {
+        console.log(`  · 样本补建失败（不影响其它断言）：${err.message}`);
+      }
+    }
 
     console.log('\n== 审卡中心不再黑屏（回归：图标漏 import） ==');
     await page.send('Page.navigate', { url: BASE });
@@ -417,6 +492,13 @@ try {
     ok('审卡中心能正常渲染（页面非空）', Number(rootKids) > 0 && reviewText.includes('待审核队列'),
       `root=${rootKids} len=${reviewText.length}`);
     ok('审卡队列显示教育增强状态', /教育 \+\d+（|教育未结算/.test(reviewText), reviewText.slice(0, 120));
+
+    if (seededReviewId && seedUser?.token) {
+      await fetch(`${API}/api/characters/${seededReviewId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${seedUser.token}` },
+      }).catch(() => null);
+    }
 
     if (seedUser.user.role === 'admin') {
       console.log('\n== 审卡规则：规则集与房规同页（v10.4） ==');
@@ -447,7 +529,54 @@ try {
       const pulpRulesText = await page.eval('document.body.innerText');
       ok('切到通克后显示通克专属审卡项',
         pulpRulesText.includes('必须选择原型') && pulpRulesText.includes('英雄奖励点总量'), pulpRulesText.slice(0, 160));
-      ok('通克规则页隐藏「忽略年龄」房规', !pulpRulesText.includes('忽略年龄'));
+      ok('「忽略年龄」已从类型下拉拆成独立开关（通克页同样可见）', pulpRulesText.includes('忽略年龄'));
+
+      // v10.13：kpcp 改为叠加层——房规卡片在任何规则页（含通克页）都出现
+      ok('规则页出现「守密人伴侣房规」卡片（叠加层）',
+        pulpRulesText.includes('守密人伴侣房规')
+        && (pulpRulesText.includes('展开设置') || pulpRulesText.includes('启用并设置')), pulpRulesText.slice(0, 220));
+      await page.eval(`(() => {
+        const b = [...document.querySelectorAll('button')]
+          .find(x => x.textContent.includes('展开设置') || x.textContent.includes('启用并设置'));
+        if (b) b.click();
+        return Boolean(b);
+      })()`);
+      await sleep(900);
+      const kpDrawerText = await page.eval('document.body.innerText');
+      const kpcpToggleLabels = [
+        '由属性推导技能基础值', '兴趣点 = 教育 + 智力', '专精下限',
+        '职业包可搬点', '第二门母语', '移动力按伴侣版',
+      ];
+      const kpcpHits = kpcpToggleLabels.filter((t) => kpDrawerText.includes(t)).length;
+      ok('伴侣房规抽屉只有 6 项开关', kpcpHits === 6, `${kpcpHits}/6`);
+      ok('伴侣房规抽屉支持团内自定义规则',
+        kpDrawerText.includes('团内自定义规则') && kpDrawerText.includes('已启用'), kpDrawerText.slice(0, 200));
+      ok('伴侣房规抽屉提供「启用伴侣房规（本规则集）」独立开关',
+        kpDrawerText.includes('启用伴侣房规（本规则集）'), kpDrawerText.slice(0, 200));
+      await page.eval(`(() => {
+        const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === '取消');
+        if (b) b.click();
+        return Boolean(b);
+      })()`);
+      await sleep(600);
+
+      // v10.13：规则集「详情」抽屉预览（审卡规则 / 自定义规则 / 伴侣房规）
+      const detailBtn = await page.eval(`(() => {
+        const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === '详情');
+        return b ? { found: true, disabled: Boolean(b.disabled) } : { found: false, disabled: true };
+      })()`);
+      ok('规则集栏提供「详情」预览入口', detailBtn.found === true);
+      if (detailBtn.found && !detailBtn.disabled) {
+        await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='详情'); if(b) b.click(); return true; })()`);
+        await sleep(900);
+        const detailText = await page.eval('document.body.innerText');
+        ok('KP 详情抽屉只预览审卡规则与自定义规则（伴侣房规移到玩家侧）',
+          detailText.includes('审卡规则') && detailText.includes('自定义规则')
+          && !detailText.includes('守密人伴侣房规'),
+          detailText.slice(0, 200));
+        await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='关闭'); if(b) b.click(); return true; })()`);
+        await sleep(500);
+      }
 
       await page.eval(`(() => {
         const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('职业模板'));
@@ -1049,6 +1178,272 @@ try {
     const shot = await page.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(path.join(SHOTS, 'editor.png'), Buffer.from(shot.data, 'base64'));
     console.log(`  截图：${path.join(SHOTS, 'editor.png')}`);
+
+    // 种两套七版规则集：一套开启伴侣房规、一套未开启，用于验证玩家房规页的过滤与详情
+    let kpcpSetName = '';
+    let kpcpSetNameOff = '';
+    if (seedUser?.token) {
+      const authHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${seedUser.token}` };
+      const post = async (body) => {
+        const r = await fetch(`${API}/api/rule-sets`, { method: 'POST', headers: authHeaders, body: JSON.stringify(body) });
+        const j = await r.json().catch(() => ({}));
+        return j?.item || null;
+      };
+      try {
+        kpcpSetName = 'UI 样本 · 伴侣房规集';
+        kpcpSetNameOff = 'UI 样本 · 普通房规集';
+        await post({
+          name: kpcpSetName, gameSystem: 'classic7e', scope: 'personal', auditRules: {}, houseRules: [],
+          kpcpEnabled: true,
+          kpcp: { toggles: { derivedBases: true }, customRules: [{ id: 'uikr', name: 'UI 团规', note: '样本说明', enabled: true }] },
+        });
+        await post({
+          name: kpcpSetNameOff, gameSystem: 'classic7e', scope: 'personal', auditRules: {}, houseRules: [],
+          kpcpEnabled: false,
+          kpcp: { toggles: { derivedBases: true } },
+        });
+      } catch { /* 种数据失败不阻塞其它断言 */ }
+    }
+
+    console.log('\n== 守秘人伴侣叠加层（v10.13） ==');
+    await page.send('Page.navigate', { url: BASE });
+    await sleep(2200);
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('我的角色卡')); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(1500);
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('新建角色卡')); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(1500);
+    const picker3 = await page.eval('document.body.innerText');
+    ok('规则选择页仍只有两套基础规则', picker3.includes('克苏鲁的呼唤 第七版') && picker3.includes('通俗克苏鲁'));
+
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('克苏鲁的呼唤 第七版')); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(1800);
+    const layerText = await page.eval('document.body.innerText');
+    ok('七版车卡页提供「守秘人伴侣（可选）」开关',
+      layerText.includes('守秘人伴侣（可选）') && layerText.includes('启用伴侣规则'), layerText.slice(0, 200));
+
+    // 未开启伴侣层时：房规页不应出现「伴侣房规」规则集
+    if (kpcpSetName) {
+      await page.eval(`(() => {
+        const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === '房规');
+        if (b) b.click();
+        return Boolean(b);
+      })()`);
+      await sleep(1100);
+      const offRoomText = await page.eval('document.body.innerText');
+      ok('未开启伴侣层时房规页不列伴侣房规规则集',
+        !offRoomText.includes(kpcpSetName) && (!kpcpSetNameOff || offRoomText.includes(kpcpSetNameOff)),
+        JSON.stringify({ kpcp: offRoomText.includes(kpcpSetName), plain: offRoomText.includes(kpcpSetNameOff) }));
+      await page.eval(`(() => {
+        const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === '属性与职业');
+        if (b) b.click();
+        return Boolean(b);
+      })()`);
+      await sleep(700);
+    }
+
+    await page.eval(`(() => {
+      const el = [...document.querySelectorAll('button,[role="switch"]')].find((x) => x.textContent.includes('启用伴侣规则'));
+      if (el) el.click();
+      return Boolean(el);
+    })()`);
+    await sleep(1200);
+    const layerOn = await page.eval('document.body.innerText');
+    ok('开启伴侣层后显示「叠加层」与房规提示',
+      layerOn.includes('叠加层') && (layerOn.includes('尚未选择') || layerOn.includes('暂无带伴侣房规的规则集')), layerOn.slice(0, 220));
+
+    // 房规页：只列出「已开启伴侣房规」的规则集，详情里能看到伴侣房规
+    await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === '房规');
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(1200);
+    const roomText = await page.eval('document.body.innerText');
+    if (kpcpSetName) {
+      ok('开启伴侣层后房规页只列「已开启伴侣房规」的规则集',
+        roomText.includes(kpcpSetName) && (!kpcpSetNameOff || !roomText.includes(kpcpSetNameOff)),
+        JSON.stringify({ on: roomText.includes(kpcpSetName), off: roomText.includes(kpcpSetNameOff) }));
+      const openedDetail = await page.eval(`(() => {
+        const labels = [...document.querySelectorAll('label')];
+        const card = labels.find((l) => l.textContent.includes('${kpcpSetName}'));
+        if (!card) return false;
+        const b = [...card.querySelectorAll('button')].find((x) => x.textContent.trim() === '详情');
+        if (!b) return false;
+        b.click();
+        return true;
+      })()`);
+      await sleep(900);
+      const playerDetail = await page.eval('document.body.innerText');
+      ok('玩家房规详情含「守密人伴侣房规」段（开关与团规）',
+        openedDetail === true && playerDetail.includes('守密人伴侣房规')
+        && playerDetail.includes('UI 团规') && playerDetail.includes('由属性推导技能基础值'),
+        playerDetail.slice(0, 240));
+      await page.eval(`(() => { const b=document.querySelector('button[aria-label="关闭"]'); if(b) b.click(); return Boolean(b); })()`);
+      await sleep(500);
+    }
+    await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === '属性与职业');
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(700);
+
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('选择职业')); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(1000);
+    const occPicker = await page.eval('document.body.innerText');
+    ok('伴侣层职业选择器可按「职业包」筛选', occPicker.includes('职业包'), occPicker.slice(0, 160));
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('职业包')); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(800);
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('古物学家')); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(1200);
+    const afterOcc = await page.eval('document.body.innerText');
+    ok('选中伴侣职业包后投放固定终值（合计 300）',
+      afterOcc.includes('古物学家') && afterOcc.includes('300'),
+      JSON.stringify({
+        hasOcc: afterOcc.includes('古物学家'),
+        has300: afterOcc.includes('300'),
+        open: afterOcc.includes('选择职业'),
+        len: afterOcc.length,
+        around: (afterOcc.match(/.{0,40}古物学家.{0,80}/) || [''])[0],
+      }));
+
+    await page.eval(`(() => {
+      const input = [...document.querySelectorAll('input')].find((i) => (i.placeholder || '').includes('约翰'));
+      if (!input) return false;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '伴侣自检英雄');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    })()`);
+    await sleep(400);
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('一键掷骰生成属性')); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(900);
+
+    // 第二母语：技能页添加一门，断言生成技能行
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('技能')); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(900);
+    const hasLangBlock = await page.eval(`(() => {
+      const input = [...document.querySelectorAll('input')].find((i) => (i.placeholder || '').includes('西班牙语'));
+      if (!input) return false;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '西班牙语');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    })()`);
+    await sleep(400);
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('添加母语')); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(900);
+    const langText = await page.eval('document.body.innerText');
+    ok('伴侣层可添加第二母语（每门 10 点）',
+      hasLangBlock === true && langText.includes('母语（西班牙语）'), langText.slice(0, 200));
+
+    const kpSaved = await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.includes('保存角色卡'));
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(2400);
+    const kpList = await page.eval('document.body.innerText');
+    ok('伴侣层卡保存后列表徽标带 +kpcp 标记', kpSaved === true && kpList.includes('+kpcp'), kpList.slice(0, 200));
+
+    // 伴侣版打印版面（v10.13.4）：状态栏精简、健康/理智独立行、战斗速查贴武器表
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='查看'); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(2200);
+    await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('打印')); if(b) b.click(); return Boolean(b); })()`);
+    await sleep(2600);
+    const kpPrint = await page.eval(`(() => {
+      const pages = [...document.querySelectorAll('.print-page')];
+      if (!pages.length) return null;
+      const txt = pages.map((p) => p.innerText).join(String.fromCharCode(10));
+      const a4 = (() => {
+        const probe = document.createElement('div');
+        probe.style.cssText = 'width:210mm;height:297mm;position:absolute;visibility:hidden';
+        document.body.appendChild(probe);
+        const h = probe.getBoundingClientRect().height;
+        probe.remove();
+        return h;
+      })();
+      const first = pages[0];
+      const cs = getComputedStyle(first);
+      const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      const contentH = Math.round((first.firstElementChild?.getBoundingClientRect().height || 0) + pad);
+      return {
+        pages: pages.length,
+        a4: Math.round(a4),
+        contentH,
+
+        hasStats: txt.includes('生命 HP') && txt.includes('魔法 MP') && txt.includes('幸运 LUCK') && txt.includes('理智 SAN'),
+        health: txt.includes('健康 HEALTH') && txt.includes('重伤值') && txt.includes('昏迷') && txt.includes('濒死'),
+        sanity: txt.includes('震骇') && txt.includes('异变') && !txt.includes('异变线'),
+        hpHasWound: (() => {
+          const box = [...first.querySelectorAll('div')].find(
+            (el) => el.className.includes('border-ink/35') && el.textContent.trim().startsWith('生命 HP'),
+          );
+          return Boolean(box) && box.textContent.includes('重伤值');
+        })(),
+        healthOneLine: (() => {
+          const box = [...first.querySelectorAll('div')].find(
+            (el) => el.className.includes('border-ink/35') && el.textContent.trim().startsWith('健康 HEALTH'),
+          );
+          if (!box) return false;
+          const chips = [...box.querySelectorAll('span')].filter((s) => /^(重伤|昏迷|濒死)$/.test(s.textContent.trim()));
+          if (chips.length < 3) return false;
+          const tops = chips.map((c) => Math.round(c.getBoundingClientRect().top));
+          return Math.max(...tops) - Math.min(...tops) <= 2;
+        })(),
+        sameRow: (() => {
+          const boxes = [...first.querySelectorAll('div')].filter(
+            (el) => el.className.includes('border-ink/35') && /^(理智 SAN|健康 HEALTH)/.test(el.textContent.trim()),
+          );
+          if (boxes.length < 2) return false;
+          return Math.abs(boxes[0].getBoundingClientRect().top - boxes[1].getBoundingClientRect().top) <= 2;
+        })(),
+        // 战斗信息改成一行四格（属性式、无底色），删掉标题与移动点；移动/闪避/伤害加值/体格必须同排
+        combat: (() => {
+          const cells = [...first.querySelectorAll('div[class*="rounded-[3px]"]')].filter(
+            (el) => /^(移动 MOV|闪避|伤害加值 DB|体格)/.test(el.textContent.trim()),
+          );
+          if (cells.length !== 4) return false;
+          const tops = cells.map((el) => el.getBoundingClientRect().top);
+          const oneLine = Math.max(...tops) - Math.min(...tops) <= 2;
+          const dodge = cells.find((el) => el.textContent.trim().startsWith('闪避'))?.textContent || '';
+          return oneLine && dodge.includes('%') && dodge.includes('/');
+        })(),
+        combatChrome: txt.includes('战斗速查') || txt.includes('移动点'),
+        noGrid: !txt.includes('霉运连连') && !txt.includes('疯了'),
+        rect: (() => {
+          const r = first.getBoundingClientRect();
+          return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) };
+        })(),
+      };
+    })()`);
+    ok('伴侣版打印：HP/MP/幸运/理智为「最大/初始 + 当前」四行', kpPrint?.hasStats === true, JSON.stringify(kpPrint));
+    ok('伴侣版打印：健康行含重伤值与重伤/昏迷/濒死',
+      kpPrint?.health === true, JSON.stringify(kpPrint));
+    ok('伴侣版打印：理智行含最大与震骇/异变、不再重复「异变线」说明',
+      kpPrint?.sanity === true, JSON.stringify(kpPrint));
+    ok('伴侣版打印：理智与健康在同一行（理智在左）',
+      kpPrint?.sameRow === true, JSON.stringify(kpPrint));
+    ok('伴侣版打印：重伤值记在生命 HP 一行', kpPrint?.hpHasWound === true, JSON.stringify(kpPrint));
+    ok('伴侣版打印：健康的三个复选框在同一行', kpPrint?.healthOneLine === true, JSON.stringify(kpPrint));
+    ok('伴侣版打印：移动/闪避/伤害加值/体格四格同排，闪避带困难·极难',
+      kpPrint?.combat === true, JSON.stringify(kpPrint));
+    ok('伴侣版打印：战斗速查标题与移动点已移除',
+      kpPrint?.combatChrome === false, JSON.stringify(kpPrint));
+    ok('伴侣版打印：不再使用 01–99 数字格', kpPrint?.noGrid === true, JSON.stringify(kpPrint));
+    ok('伴侣版打印：第一页仍在 A4 以内',
+      kpPrint?.contentH > 0 && kpPrint.contentH <= kpPrint.a4,
+      `内容 ${kpPrint?.contentH}px / A4 ${kpPrint?.a4}px`);
+    const kpPrintShot = await page.send('Page.captureScreenshot', {
+      format: 'png',
+      captureBeyondViewport: true,
+      clip: { ...kpPrint.rect, scale: 1 },
+    });
+    fs.writeFileSync(path.join(SHOTS, 'kpcp-print.png'), Buffer.from(kpPrintShot.data, 'base64'));
+    console.log(`  截图：${path.join(SHOTS, 'kpcp-print.png')}`);
+
+    const kpShot = await page.send('Page.captureScreenshot', { format: 'png' });
+    fs.writeFileSync(path.join(SHOTS, 'kpcp.png'), Buffer.from(kpShot.data, 'base64'));
   } else {
     console.log('  （未提供可用账号，跳过登录后的界面检查；可用 UI_USER/UI_PASS 环境变量指定）');
   }

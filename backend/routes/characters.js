@@ -32,9 +32,10 @@ import { requireAuth, requireAdmin, optionalAuth } from '../lib/auth.js';
 import {
   isChief, isCustodian, custodianIds, canManageCard, canReviewCard, auditRulesFor, keeperDirectory,
   ruleSetById, ruleSetSummary, snapshotRuleSet, houseRulesFor, activeRuleSet, isKeeper,
+  systemOf, kpcpRulesFor,
 } from '../lib/roles.js';
 import { parseCharacter, parseReview, parseBatchReview, vArray, vEnum, vId, vStr } from '../lib/validate.js';
-import { resolveRuleset } from '../../shared/rulesets/index.js';
+import { resolveRuleset, applyKpcpLayer } from '../../shared/rulesets/index.js';
 import { audit } from '../lib/audit.js';
 import {
   ALL_CHARS, CHARS, STATUSES, REVIEW_STATUSES, computeSheet, validateSheet, blankSkills, auditSheet,
@@ -197,58 +198,88 @@ function knownModuleIds() {
   return new Set(db().modules.map((m) => m.id));
 }
 
+/** 卡片是否叠加了「守秘人伴侣」规则层（v10.13 起不再是一套独立的 gameSystem） */
+function kpcpEnabledOf(character) {
+  return character?.kpcp?.enabled === true || character?.gameSystem === 'kpcp';
+}
+
 /** 规则引擎上下文：把 KP 自定义职业模板、房规与游戏规则集喂进去，前后端算法才会一致 */
-function rulesCtx(houseRules, auditRules, gameSystem) {
+function rulesCtx(houseRules, auditRules, gameSystem, kpcpRules, kpcpEnabled = false) {
   const list = Array.isArray(houseRules) ? houseRules : [];
-  const rs = resolveRuleset(gameSystem);
+  const base = resolveRuleset(gameSystem);
+  const sys = systemOf(base.id);
+  const rs = kpcpEnabled ? applyKpcpLayer(base) : base;
   return {
-    customOccupations: customOccupations().filter((o) => (o.gameSystem || 'classic7e') === rs.id),
+    // 自定义职业模板：伴侣层卡可用 kpcp 模板（技能池为伴侣修订表），其余卡只用自己的规则
+    customOccupations: customOccupations().filter((o) => {
+      const raw = o.gameSystem === 'kpcp' ? 'kpcp' : systemOf(o.gameSystem);
+      return raw === 'kpcp' ? kpcpEnabled === true : raw === sys;
+    }),
     houseRules: list,
     auditRules: auditRules && typeof auditRules === 'object' ? auditRules : undefined,
     ignoreAge: houseIgnoresAge(list),
-    gameSystem: rs.id,
+    gameSystem: sys,
+    kpcpEnabled: Boolean(kpcpEnabled),
     ruleset: rs,
+    // 守秘人伴侣：规则集里的「伴侣房规」开关（未开启规则层时为 null）
+    kpcpRules: kpcpEnabled ? (kpcpRules || kpcpRulesFor(null, sys)) : null,
   };
 }
 
 /** 某张卡适用的规则集：提交快照 > 卡上选择 > 审阅者当前规则集 */
 function cardRules(character, actor) {
-  const sys = character?.gameSystem === 'pulp' ? 'pulp' : 'classic7e';
+  const sys = systemOf(character?.gameSystem);
+  const kpcpEnabled = kpcpEnabledOf(character);
   const snap = character?.ruleSnapshot;
   if (snap && typeof snap === 'object') {
     return {
       auditRules: { ...auditRulesFor(actor, sys), ...(snap.auditRules || {}) },
       houseRules: Array.isArray(snap.houseRules) ? snap.houseRules : [],
+      kpcp: kpcpEnabled ? (snap.kpcpEnabled === true && snap.kpcp ? snap.kpcp : kpcpRulesFor(actor, sys)) : null,
+      kpcpEnabled,
       set: null,
       snapshot: snap,
     };
   }
   const raw = character?.ruleSetId ? ruleSetById(character.ruleSetId) : null;
   // 规则集必须与卡片的游戏规则一致；跨规则的旧数据忽略，回落到该规则的默认
-  const set = raw && (raw.gameSystem === 'pulp' ? 'pulp' : 'classic7e') === sys ? raw : null;
+  const set = raw && systemOf(raw.gameSystem) === sys ? raw : null;
   if (set) {
     return {
       auditRules: { ...auditRulesFor(actor, sys), ...(set.auditRules || {}) },
       houseRules: Array.isArray(set.houseRules) ? set.houseRules : [],
+      kpcp: kpcpEnabled ? (set.kpcpEnabled === true && set.kpcp ? set.kpcp : kpcpRulesFor(actor, sys)) : null,
+      kpcpEnabled,
       set,
       snapshot: null,
     };
   }
-  return { auditRules: auditRulesFor(actor, sys), houseRules: houseRulesFor(actor, sys), set: null, snapshot: null };
+  return {
+    auditRules: auditRulesFor(actor, sys),
+    houseRules: houseRulesFor(actor, sys),
+    kpcp: kpcpEnabled ? kpcpRulesFor(actor, sys) : null,
+    kpcpEnabled,
+    set: null,
+    snapshot: null,
+  };
 }
 
 /**
  * 玩家/守秘人都可以选任意一套已发布的规则集（这正是「把卡交给哪个 KP 的房规」的语义）；
  * 选择规则集不授予任何管理或审卡权限。
  */
-function resolveChosenSet(actor, value, gameSystem) {
+function resolveChosenSet(actor, value, gameSystem, kpcpEnabled = false) {
   if (value === null || value === '' || value === undefined) return null;
   if (typeof value !== 'string') throw badRequest('规则集参数不正确');
   const set = ruleSetById(value);
   if (!set) throw badRequest('选择的规则集不存在');
-  const sys = gameSystem === 'pulp' ? 'pulp' : 'classic7e';
-  if ((set.gameSystem === 'pulp' ? 'pulp' : 'classic7e') !== sys) {
+  const sys = systemOf(gameSystem);
+  if (systemOf(set.gameSystem) !== sys) {
     throw badRequest('规则集与游戏规则不匹配');
+  }
+  // 开启伴侣层后必须选到一套带伴侣房规的规则集（需求：kpcp 开启必须选择一项房规）
+  if (kpcpEnabled && set.kpcpEnabled !== true) {
+    throw badRequest('该规则集未开启伴侣房规，请让守秘人在审卡规则里开启后再选');
   }
   return set;
 }
@@ -289,7 +320,7 @@ function present(character, { actor, full = true }) {
     return { ...l, moduleTitle: m ? m.title : '（模组已删除）', moduleRegion: m?.region || '', moduleEra: m?.era || '' };
   });
   const rr = cardRules(character, actor);
-  const ctx = rulesCtx(rr.houseRules, rr.auditRules, character.gameSystem);
+  const ctx = rulesCtx(rr.houseRules, rr.auditRules, character.gameSystem, rr.kpcp, rr.kpcpEnabled);
   const derived = computeSheet(character, ctx);
   const warnings = validateSheet(character, ctx);
   const chief = isChief(actor);
@@ -353,6 +384,8 @@ function present(character, { actor, full = true }) {
     ruleSetId: character.ruleSetId || null,
     // 游戏规则集（经典 7e / 通俗克苏鲁）：列表、详情、编辑器都按它分流
     gameSystem: character.gameSystem || 'classic7e',
+    // 是否叠加「守秘人伴侣」规则层：列表与详情的紫色规则标签靠它区分
+    kpcp: { enabled: kpcpEnabledOf(character) },
     // 房规 / 规则集：编辑器与审卡页都要显示「这张卡按哪套规则」
     ruleSet: visibleRules(rr.set ? ruleSetSummary(rr.set) : (rr.snapshot ? {
       id: rr.snapshot.setId || null,
@@ -447,6 +480,13 @@ function present(character, { actor, full = true }) {
     coreChar: character.coreChar || '',
     talents: Array.isArray(character.talents) ? character.talents : [],
     keyConnection: character.keyConnection || '',
+    extraLanguages: Array.isArray(character.extraLanguages) ? character.extraLanguages : [],
+    // 守秘人伴侣专属输入（其它规则为空；编辑器、打印与 Markdown 会按规则忽略）
+    kpcp: {
+      enabled: kpcpEnabledOf(character),
+      toggles: (character.kpcp && character.kpcp.toggles) || {},
+      customRules: Array.isArray(character?.kpcp?.customRules) ? character.kpcp.customRules : [],
+    },
     experience: character.experience || '',
     moduleLinks: links,
     derived,
@@ -583,8 +623,11 @@ router.post('/characters', (req, res) => {
   }
   enforceCharacterQuota(ownerId);
   // 建房时可直接选用一套房规（玩家自己的或全局的）
-  const chosen = resolveChosenSet(req.user, req.body?.ruleSetId, req.body?.gameSystem);
-  const rctx = rulesCtx(chosen?.houseRules || [], chosen?.auditRules, req.body?.gameSystem);
+  const newKpcpEnabled = req.body?.kpcp?.enabled === true;
+  const chosen = resolveChosenSet(req.user, req.body?.ruleSetId, req.body?.gameSystem, newKpcpEnabled);
+  const rctx = rulesCtx(
+    chosen?.houseRules || [], chosen?.auditRules, req.body?.gameSystem, chosen?.kpcp, newKpcpEnabled,
+  );
   // 首次保存也要过教育增强守卫：防止建卡请求里夹带伪造的结算流水
   const data = stampLegendary(guardEduGrowth(guardKpOnlyFields(
     parseCharacter(req.body, { knownModuleIds: knownModuleIds(), ctx: rctx }),
@@ -626,7 +669,10 @@ router.put('/characters/:id', (req, res) => {
   // 归属不可被改写：即使管理员代改，也不会把卡转移到别人名下
   // current 传入存档：请求体没带的字段（如「模组经历」）沿用存档值，而不是被当成清空
   const putRR = cardRules(c, req.user);
-  const putCtx = rulesCtx(putRR.houseRules, putRR.auditRules, req.body?.gameSystem || c.gameSystem);
+  const putKpcpEnabled = req.body?.kpcp?.enabled === true || putRR.kpcpEnabled === true;
+  const putCtx = rulesCtx(
+    putRR.houseRules, putRR.auditRules, req.body?.gameSystem || c.gameSystem, putRR.kpcp, putKpcpEnabled,
+  );
   const data = stampLegendary(guardEduGrowth(guardKpOnlyFields(
     parseCharacter(req.body, { knownModuleIds: knownModuleIds(), current: c, ctx: putCtx }),
     req.user,
@@ -637,7 +683,9 @@ router.put('/characters/:id', (req, res) => {
   Object.assign(c, data, { updatedAt: Date.now() });
   // 玩家在「房规」页换规则集：清掉旧快照，等重新提交时再冻结
   if (req.body && Object.hasOwn(req.body, 'ruleSetId')) {
-    const chosen = resolveChosenSet(req.user, req.body.ruleSetId, c.gameSystem);
+    const chosen = resolveChosenSet(
+      req.user, req.body.ruleSetId, c.gameSystem, req.body?.kpcp?.enabled === true || kpcpEnabledOf(c),
+    );
     c.ruleSetId = chosen ? chosen.id : null;
     c.ruleSnapshot = null;
   }
@@ -656,7 +704,10 @@ router.patch('/characters/:id', (req, res) => {
     throw forbidden('只有首席守秘人才能更改角色卡归属');
   }
   const patchRR = cardRules(c, req.user);
-  const patchCtx = rulesCtx(patchRR.houseRules, patchRR.auditRules, req.body?.gameSystem || c.gameSystem);
+  const patchKpcpEnabled = req.body?.kpcp?.enabled === true || patchRR.kpcpEnabled === true;
+  const patchCtx = rulesCtx(
+    patchRR.houseRules, patchRR.auditRules, req.body?.gameSystem || c.gameSystem, patchRR.kpcp, patchKpcpEnabled,
+  );
   const data = stampLegendary(guardEduGrowth(guardKpOnlyFields(
     parseCharacter(req.body, {
       partial: true, knownModuleIds: knownModuleIds(), current: c, ctx: patchCtx,
@@ -673,7 +724,9 @@ router.patch('/characters/:id', (req, res) => {
   }
   Object.assign(c, data, { updatedAt: Date.now() });
   if (req.body && Object.hasOwn(req.body, 'ruleSetId')) {
-    const chosen = resolveChosenSet(req.user, req.body.ruleSetId, c.gameSystem);
+    const chosen = resolveChosenSet(
+      req.user, req.body.ruleSetId, c.gameSystem, req.body?.kpcp?.enabled === true || kpcpEnabledOf(c),
+    );
     c.ruleSetId = chosen ? chosen.id : null;
     c.ruleSnapshot = null;
   }
@@ -784,10 +837,13 @@ router.post('/characters/:id/submit', (req, res) => {
   c.submittedAt = Date.now();
   // 冻结房规：以提交这一刻的规则集为准，之后 KP 改规则不影响已提交的卡
   const cardSys = c.gameSystem === 'pulp' ? 'pulp' : 'classic7e';
+  const cardKpcp = kpcpEnabledOf(c);
   const rawChosen = (req.body?.ruleSetId !== undefined
-    ? resolveChosenSet(req.user, req.body.ruleSetId, cardSys)
+    ? resolveChosenSet(req.user, req.body.ruleSetId, cardSys, cardKpcp)
     : (c.ruleSetId ? ruleSetById(c.ruleSetId) : null));
-  const chosenSet = rawChosen && (rawChosen.gameSystem === 'pulp' ? 'pulp' : 'classic7e') === cardSys
+  const chosenSet = rawChosen
+    && (rawChosen.gameSystem === 'pulp' ? 'pulp' : 'classic7e') === cardSys
+    && (!cardKpcp || (rawChosen.kpcp && typeof rawChosen.kpcp === 'object'))
     ? rawChosen
     : null;
   if (chosenSet) {
@@ -885,7 +941,7 @@ router.post('/characters/:id/review', requireAdmin, (req, res) => {
   const { verdict, comment } = parseReview(req.body);
   // 审核以这张卡提交时冻结的规则集为准（房规 + 审卡规则同源）
   const rr = cardRules(c, req.user);
-  const ctx = rulesCtx(rr.houseRules, rr.auditRules, c.gameSystem);
+  const ctx = rulesCtx(rr.houseRules, rr.auditRules, c.gameSystem, rr.kpcp, rr.kpcpEnabled);
   const result = auditSheet(c, rr.auditRules, ctx);
   const now = Date.now();
 
@@ -959,7 +1015,7 @@ router.post('/admin/audit/batch', requireAdmin, (req, res) => {
       ownerName: ownerNameOf(c.ownerId),
       reviewStatus: c.reviewStatus || 'none',
       updatedAt: c.updatedAt,
-      ...auditSheet(c, rr.auditRules, rulesCtx(rr.houseRules, rr.auditRules, c.gameSystem)),
+      ...auditSheet(c, rr.auditRules, rulesCtx(rr.houseRules, rr.auditRules, c.gameSystem, rr.kpcp, rr.kpcpEnabled)),
     };
   });
   audit(req, 'admin.audit_batch', {
@@ -1004,7 +1060,7 @@ router.post('/admin/reviews/batch', requireAdmin, (req, res) => {
       comment: verdict === 'rejected' ? comment : '',
       stats: (() => {
         const rr = cardRules(c, req.user);
-        return auditSheet(c, rr.auditRules, rulesCtx(rr.houseRules, rr.auditRules, c.gameSystem)).stats;
+        return auditSheet(c, rr.auditRules, rulesCtx(rr.houseRules, rr.auditRules, c.gameSystem, rr.kpcp, rr.kpcpEnabled)).stats;
       })(),
       findings: [],
       batch: true,
@@ -1033,7 +1089,7 @@ router.post('/admin/audit/:id', requireAdmin, (req, res) => {
     name: c.name,
     ownerName: ownerNameOf(c.ownerId),
     rules: rr.auditRules,
-    ...auditSheet(c, rr.auditRules, rulesCtx(rr.houseRules, rr.auditRules, c.gameSystem)),
+    ...auditSheet(c, rr.auditRules, rulesCtx(rr.houseRules, rr.auditRules, c.gameSystem, rr.kpcp, rr.kpcpEnabled)),
   });
 });
 

@@ -12,6 +12,7 @@
  */
 
 import crypto from 'node:crypto';
+import { KPCP_DEFAULT_RULES, normalizeKpcpRules } from '../../shared/rulesets/kpcp.js';
 import { Router } from 'express';
 import {
   db, save, publicUser, findUserById, newId, findCustomOccupationById,
@@ -22,7 +23,7 @@ import { checkPasswordStrength, hashPassword } from '../lib/security.js';
 import { requireAdmin } from '../lib/auth.js';
 import {
   isChief, requireChief, auditRulesFor, kpDisplayTitle, officialAuditRules, globalAuditRules,
-  activeRuleSet, globalAuditSet, ruleSetSummary, systemOf,
+  activeRuleSet, globalAuditSet, ruleSetSummary, systemOf, slotsOf, kpcpRulesFor,
 } from '../lib/roles.js';
 import {
   parseNewUser, parseTitle, parseKpTitle, parseKpRank, parseOccupationTemplate,
@@ -379,9 +380,7 @@ function ruleSetList(user, gameSystem) {
 /** 临时规则槽位：官方七版用 auditRules / draftHouseRules，通克用 auditRulesPulp / draftHouseRulesPulp */
 function draftSlots(user, gameSystem) {
   const sys = systemOf(gameSystem);
-  return sys === 'pulp'
-    ? { rules: 'auditRulesPulp', houses: 'draftHouseRulesPulp', active: 'activeRuleSetPulpId' }
-    : { rules: 'auditRules', houses: 'draftHouseRules', active: 'activeRuleSetId' };
+  return slotsOf(sys);
 }
 
 router.get('/audit-rules', (req, res) => {
@@ -414,6 +413,11 @@ router.get('/audit-rules', (req, res) => {
     draftRules: { ...global, ...draft },      // 「未选择」模式下编辑用的完整规则
     draftHouseRules,                          // 临时规则里的自定义规则（只含审卡校验）
     draftPersonalized: Object.keys(draft).length > 0 || draftHouseRules.length > 0,
+    // 守秘人伴侣：房规是规则集的一部分，临时模式下先写在自己的草稿上
+    kpcpRules: gameSystem === 'kpcp' ? kpcpRulesFor(req.user, gameSystem) : null,
+    draftKpcpRules: gameSystem === 'kpcp'
+      ? normalizeKpcpRules(req.user.draftKpcpRules || kpcpRulesFor(req.user, gameSystem))
+      : null,
   });
 });
 
@@ -436,6 +440,10 @@ router.put('/audit-rules', (req, res) => {
   req.user[slot.rules] = Object.keys(diff).length ? diff : null;
   req.user[slot.houses] = draftHouseRules;
   req.user[slot.active] = null;
+  // v10.13：伴侣房规可挂在任意基础规则上，不再限定 kpcp 系统
+  if (body.kpcp !== undefined) {
+    req.user.draftKpcpRules = normalizeKpcpRules(body.kpcp);
+  }
   req.user.updatedAt = Date.now();
   save();
   audit(req, 'admin.audit_rules_draft', {
@@ -448,6 +456,8 @@ router.put('/audit-rules', (req, res) => {
     activeSetId: null, activeSet: null, sets: ruleSetList(req.user, gameSystem),
     draftRules: { ...base, ...(req.user[slot.rules] || {}) },
     draftHouseRules, draftPersonalized: Object.keys(diff).length > 0 || draftHouseRules.length > 0,
+    kpcpRules: kpcpRulesFor(req.user, gameSystem),
+    draftKpcpRules: normalizeKpcpRules(req.user.draftKpcpRules),
   });
 });
 
@@ -456,6 +466,7 @@ router.delete('/audit-rules', (req, res) => {
   const slot = draftSlots(req.user, gameSystem);
   req.user[slot.rules] = null;
   req.user[slot.houses] = [];
+  if (gameSystem === 'kpcp') req.user.draftKpcpRules = null;
   req.user.updatedAt = Date.now();
   save();
   audit(req, 'admin.audit_rules_reset', { scope: 'draft', gameSystem });
@@ -499,6 +510,9 @@ router.put('/audit-rules/global', requireChief, (req, res) => {
   if (Array.isArray(body.houseRules)) {
     set.houseRules = normalizeHouseRules(body.houseRules);
   }
+  if (body.kpcp !== undefined) {
+    set.kpcp = normalizeKpcpRules(body.kpcp);
+  }
   set.updatedAt = now;
   req.user[slot.rules] = null;
   req.user.updatedAt = now;
@@ -516,7 +530,11 @@ router.delete('/audit-rules/global', requireChief, (req, res) => {
   const slot = draftSlots(req.user, gameSystem);
   const now = Date.now();
   for (const s of db().settings.ruleSets || []) {
-    if (s && s.scope === 'global' && systemOf(s.gameSystem) === gameSystem) { s.auditRules = {}; s.updatedAt = now; }
+    if (s && s.scope === 'global' && systemOf(s.gameSystem) === gameSystem) {
+      s.auditRules = {};
+      if (gameSystem === 'kpcp') s.kpcp = normalizeKpcpRules(KPCP_DEFAULT_RULES);
+      s.updatedAt = now;
+    }
   }
   if (db().settings && gameSystem === 'classic7e') db().settings.auditRules = null;
   req.user[slot.rules] = null;

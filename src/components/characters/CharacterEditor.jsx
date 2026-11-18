@@ -17,19 +17,20 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
   AlertCircle, ArrowLeft, BookOpen, Check, ChevronDown, CloudUpload, Crown, Dices, Download, FileText, Info, Library, Plus, Save,
-  ScrollText, Search, Sword, Trash2, User as UserIcon, Wand2, X,
+  Languages, ScrollText, Search, Sword, Trash2, User as UserIcon, Wand2, X,
 } from 'lucide-react';
 import {
   ALL_CHARS, BACKGROUND_FIELDS, BUILTIN_WEAPON, CHAR_LABEL, CHARS, CUSTOM_SKILL_MAX, ERAS,
   NAMED_SKILL_HINT, OCCUPATIONS, SKILL_BY_KEY, SOCIAL_SKILLS, STATUSES, STATUS_LABEL,
   WEAPONS, ageAdjust, agePoolKeys, agePoolPoints, defaultAgeAlloc, resolveAgeAlloc,
-  occupationBranchHints, blankCustomSkill, blankSheet, blankSkills, computeSheet,
+  occupationBranchHints, blankCustomSkill, blankSheet, blankSkills, computeSheet, skillBase,
   currenciesFor, DEFAULT_CURRENCY, specOptions, validateSheet,
   blankEduGrowth, blankLegendary, blankLegendaryBonus, grantEduReroll, resetEduGrowth, houseRuleSummary,
   AUDIT_RULE_META, DEFAULT_AUDIT_RULES,
 } from '../../../shared/coc7e.js';
-import { CLASSIC_ID, GAME_SYSTEMS, resolveRuleset } from '../../../shared/rulesets/index.js';
-import { PULP_CRIT, PULP_HEALING, PULP_LUCK_SPENDS, PULP_TONES, pulpTalentTables } from '../../../shared/rulesets/pulp.js';
+import { CLASSIC_ID, GAME_SYSTEMS, isKpcpLayer, resolveCardRuleset, resolveRuleset } from '../../../shared/rulesets/index.js';
+import { KPCP_TOGGLES, normalizeKpcpRules } from '../../../shared/rulesets/kpcp.js';
+import { PULP_CRIT, PULP_HEALING, PULP_ID, PULP_LUCK_SPENDS, PULP_TONES, pulpTalentTables } from '../../../shared/rulesets/pulp.js';
 import { rollCharacteristics, rollLuck, educationCheck } from '../../lib/dice.js';
 import {
   SPELL_CATALOG, SPELL_CATEGORIES, TOME_CATALOG, SPELL_LIMIT, TOME_LIMIT,
@@ -60,7 +61,10 @@ const occultId = (prefix) => `${prefix}_${Date.now().toString(36)}${Math.random(
 /** 把后端返回的角色卡对象（或访客草稿）转成可编辑的表单数据 */
 export function toEditableSheet(character) {
   if (!character) return { ...blankSheet(), ruleSetId: '' };
-  const gameSystem = character.gameSystem || (typeof character.ruleSet === 'string' ? character.ruleSet : '') || CLASSIC_ID;
+  const legacyKpcp = character.gameSystem === 'kpcp';
+  const gameSystem = legacyKpcp
+    ? CLASSIC_ID
+    : (character.gameSystem || (typeof character.ruleSet === 'string' ? character.ruleSet : '') || CLASSIC_ID);
   const R = resolveRuleset(gameSystem);
   return {
     ruleSetId: character.ruleSetId || '',
@@ -109,6 +113,20 @@ export function toEditableSheet(character) {
     coreChar: character.coreChar || '',
     talents: Array.isArray(character.talents) ? character.talents.filter((t) => typeof t === 'string') : [],
     keyConnection: character.keyConnection || '',
+    extraLanguages: Array.isArray(character.extraLanguages) ? character.extraLanguages.slice(0, 3) : [],
+    // 守秘人伴侣：叠加层开关（旧卡 gameSystem==='kpcp' 自动迁移）
+    kpcp: {
+      enabled: legacyKpcp || character.kpcp?.enabled === true,
+      toggles: { ...(character.kpcp?.toggles || {}) },
+      customRules: Array.isArray(character.kpcp?.customRules)
+        ? character.kpcp.customRules.slice(0, 30).map((r) => ({
+          id: String(r?.id || '').slice(0, 40),
+          name: String(r?.name || '').slice(0, 40),
+          note: String(r?.note || '').slice(0, 400),
+          enabled: r?.enabled !== false,
+        })).filter((r) => r.name)
+        : [],
+    },
     // 「模组经历」在详情页维护，但存档是全量 PUT，这里必须原样带上，
     // 否则编辑保存会把关联模组清空（服务端也会做缺省保护）。
     moduleLinks: (character.moduleLinks || []).map((l) => ({
@@ -150,9 +168,9 @@ function ProgressBar({ used, total, label, hint }) {
   );
 }
 
-function DerivedGrid({ derived }) {
+function DerivedGrid({ derived, sanityLabel = '理智' }) {
   const items = [
-    ['生命值 HP', derived.hp], ['魔法点 MP', derived.mp], ['理智 SAN', `${derived.san} / ${derived.sanMax}`],
+    ['生命值 HP', derived.hp], ['魔法点 MP', derived.mp], [`${sanityLabel} SAN`, `${derived.san} / ${derived.sanMax}`],
     ['移动力 MOV', derived.mov], ['伤害加值 DB', derived.db], ['体格 Build', derived.build],
     ['闪避', derived.dodgeBase], ['母语', derived.ownLanguageBase],
   ];
@@ -402,6 +420,153 @@ function PulpReference() {
 }
 
 /** 英雄奖励点分配：只列当前原型白名单里的技能（可折叠，标题行常驻显示已用/上限） */
+/**
+ * 把守秘人伴侣的「职业包」写成技能本职点：
+ * 每个条目给出该技能的最终成功率，换算成 occ = final − 基础值；专攻条目顺带写入方向标签。
+ */
+function applyPackageSkills(skills, pkg, R, eff) {
+  const out = skills.map((s) => ({ ...s, occ: 0 }));
+  const used = new Set();
+  for (const entry of pkg.entries || []) {
+    const def = R.skillByKey?.[entry.key];
+    if (!def) continue;
+    const label = entry.label || (entry.choose ? entry.choose[0] : '');
+    if (def.spec) {
+      const slots = out.filter((s) => s.key === entry.key);
+      const target = slots.find((s) => label && s.custom === label)
+        || slots.find((s) => !used.has(s.id));
+      if (!target) continue;
+      used.add(target.id);
+      if (label) target.custom = label;
+      const base = skillBase(entry.key, target.custom, eff, R, null);
+      target.occ = Math.max(0, (Number(entry.final) || 0) - base);
+    } else {
+      const target = out.find((s) => s.key === entry.key && !used.has(s.id));
+      if (!target) continue;
+      used.add(target.id);
+      target.occ = Math.max(0, (Number(entry.final) || 0) - skillBase(entry.key, target.custom, eff, R, null));
+    }
+  }
+  return out;
+}
+
+/**
+ * 切换规则层（开/关守秘人伴侣）时重建技能槽位，并按 key（+专攻方向）搬运已填点数。
+ */
+function reshapeSkills(skills, R) {
+  const old = Array.isArray(skills) ? skills : [];
+  const byKey = new Map();
+  for (const s of old) {
+    const k = `${s.key}||${s.custom || ''}`;
+    if (!byKey.has(k)) byKey.set(k, s);
+  }
+  return blankSkills(R).map((slot) => {
+    const prev = byKey.get(`${slot.key}||${slot.custom || ''}`);
+    if (!prev) return slot;
+    return {
+      ...slot,
+      custom: prev.custom || '',
+      occ: Number(prev.occ) || 0,
+      interest: Number(prev.interest) || 0,
+      bonus: Number(prev.bonus) || 0,
+      growth: Number(prev.growth) || 0,
+      marked: Boolean(prev.marked),
+    };
+  });
+}
+
+/** 守秘人伴侣：第二母语（每门消耗 10 点兴趣点，起始值 = 教育） */
+/** 守秘人伴侣：第二母语（每门消耗 10 点兴趣点，起始值 = 教育） */
+function ExtraLanguagePanel({ derived, enabled, value, onChange }) {
+  const [draft, setDraft] = useState('');
+  const list = Array.isArray(value) ? value : [];
+  const remain = derived?.remaining?.interest ?? 0;
+  const add = () => {
+    const name = draft.trim().slice(0, 24);
+    if (!name) return;
+    if (list.length >= 3) return;
+    if (list.includes(name)) return;
+    onChange([...list, name]);
+    setDraft('');
+  };
+  return (
+    <div className="space-y-2 rounded-[2px] border border-amber-600/40 bg-amber-500/[0.05] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Languages className="h-4 w-4 text-amber-500" strokeWidth={1.7} />
+          <h4 className="font-serif text-[16px] font-bold text-slate-100">第二母语</h4>
+          <Badge className="ml-1" tone="amber">每门 10 点兴趣</Badge>
+        </div>
+        <span className="text-[13px] text-ink-mute">剩余兴趣点 <b className={cx('font-mono', remain < 0 ? 'text-vermilion' : 'text-ink')}>{remain}</b></span>
+      </div>
+      <p className="text-[13.5px] leading-relaxed text-slate-500">
+        花 10 点可再添一门母语，起始值等于教育（{derived?.eff?.EDU ?? '—'}%）；更多语言请用「外语」购买。
+      </p>
+      {enabled ? (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="例：西班牙语"
+              className="w-48"
+              disabled={list.length >= 3}
+            />
+            <Button variant="secondary" onClick={add} disabled={!draft.trim() || list.length >= 3}>
+              <Plus className="w-4 h-4" />添加母语
+            </Button>
+          </div>
+          {list.length ? (
+            <ul className="flex flex-wrap gap-2">
+              {list.map((name, i) => (
+                <li key={`${name}-${i}`} className="flex items-center gap-2 rounded-[2px] border border-line-strong bg-paper-deep/40 px-2 py-1 text-[13px] text-slate-300">
+                  母语（{name}） <b className="font-mono text-ink">{derived?.eff?.EDU ?? 0}%</b>
+                  <button type="button" className="text-ink-mute hover:text-vermilion" onClick={() => onChange(list.filter((_, j) => j !== i))} title="移除">✕</button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[13px] text-ink-mute">尚未添加第二母语。</p>
+          )}
+        </>
+      ) : (
+        <p className="text-[13px] text-ink-mute">当前规则集关闭了「第二母语」选项，添加后不会计入技能与点数。</p>
+      )}
+    </div>
+  );
+}
+
+/** 守秘人伴侣：叠加在七版 / 通克之上的可选规则层（开关 + 房规集提示） */
+function KpcpLayerPanel({ enabled, chosenRuleSet, availableCount, R, onToggle }) {
+  return (
+    <Panel className="space-y-3 p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink">
+            <ScrollText className="h-4 w-4 text-violet" />守秘人伴侣（可选）
+          </h3>
+          <p className="mt-1.5 max-w-[52rem] text-[13.5px] leading-relaxed text-ink-mute">
+            开启后，本卡在「{R?.name || '克苏鲁的呼唤 第七版'}」之上叠加伴侣版规则：技能表改用修订版
+            （社交合并为「说服」、学识并入神秘学）、背景改为 8 栏、理智术语改为震骇 / 异变 / 永失，
+            并可在职业列表里选用职业包。开启后必须选用一套带伴侣房规的规则集。
+          </p>
+        </div>
+        <Toggle checked={enabled} onChange={onToggle} label="启用伴侣规则" />
+      </div>
+      {enabled ? (
+        <div className="flex flex-wrap items-center gap-2 text-[13.5px]">
+          <Badge tone="violet">叠加层</Badge>
+          <span className="text-ink-mute">伴侣房规：</span>
+          <b className="text-ink">{chosenRuleSet?.kpcp ? chosenRuleSet.name : '尚未选择 — 请到「房规」页选择'}</b>
+          {availableCount === 0 ? (
+            <span className="text-vermilion">暂无带伴侣房规的规则集，请联系守秘人发布。</span>
+          ) : null}
+        </div>
+      ) : null}
+    </Panel>
+  );
+}
+
 function BonusPanel({ derived, onSetBonus }) {
   const total = derived.budget.bonus;
   if (!total) {
@@ -600,6 +765,48 @@ function RuleSetDetail({ set }) {
         </ul>
       </section>
 
+      {set.kpcpEnabled === true ? (() => {
+        const kpcp = normalizeKpcpRules(set.kpcp);
+        const custom = (kpcp.customRules || []).filter((r) => r.enabled !== false);
+        return (
+          <section>
+            <h4 className="mb-2 flex items-center gap-2 font-serif text-[16px] font-bold text-ink">
+              守密人伴侣房规
+              <Badge tone="violetAlt">已开启</Badge>
+            </h4>
+            <p className="mb-2 text-[13px] text-ink-mute">
+              选中这套规则集并开启「守秘人伴侣」后，车卡会按下列设置计算。
+            </p>
+            <ul className="space-y-1">
+              {KPCP_TOGGLES.map((t) => {
+                const v = kpcp.toggles?.[t.id];
+                const on = v === undefined ? t.def !== false : v !== false;
+                return (
+                  <li key={t.id} className="flex items-baseline justify-between gap-3 border-b border-line/70 pb-1">
+                    <span className="min-w-0">{t.label}</span>
+                    <b className={on ? 'shrink-0 font-mono text-[13px] text-emerald-600' : 'shrink-0 font-mono text-[13px] text-ink-mute'}>
+                      {on ? '开' : '关'}
+                    </b>
+                  </li>
+                );
+              })}
+            </ul>
+            {custom.length ? (
+              <>
+                <p className="mt-3 mb-1 text-[13px] font-semibold text-ink">团内自定义规则</p>
+                <ul className="space-y-1.5">
+                  {custom.map((r) => (
+                    <li key={r.id} className="border-l-2 border-violet-alt/50 pl-2.5">
+                      <b className="text-ink">{r.name}</b>{r.note ? `：${r.note}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </section>
+        );
+      })() : null}
+
       <section>
         <h4 className="mb-2 font-serif text-[16px] font-bold text-ink">自定义审卡要求</h4>
         {checks.length ? (
@@ -641,16 +848,23 @@ export default function CharacterEditor({
   // 守秘人发布的规则集（房规 + 审卡规则）：玩家在「房规」页选用
   const [ruleSets, setRuleSets] = useState([]);
 
-  const R = useMemo(() => resolveRuleset(sheet.gameSystem || CLASSIC_ID), [sheet.gameSystem]);
-  const isPulp = R.id !== CLASSIC_ID;
+  const kpcpEnabled = sheet.kpcp?.enabled === true;
+  const R = resolveCardRuleset(sheet); // 层级结果带缓存，同一基础规则返回同一对象
+  const isPulp = R.id === PULP_ID;
+  const isKpcp = isKpcpLayer(R);
+  const kpcpTog = sheet.kpcp?.toggles || {};
+  const bgFields = R?.backgroundFields || BACKGROUND_FIELDS;
   const occupations = useMemo(
-    () => (R.id === CLASSIC_ID ? [...OCCUPATIONS, ...(customOccupations || [])] : R.occupations),
+    () => (R.id === CLASSIC_ID && !R.layer?.kpcp
+      ? [...OCCUPATIONS, ...(customOccupations || [])]
+      : R.occupations),
     [R, customOccupations],
   );
   // 房规按游戏规则隔离：通克卡只列通克规则集，coc7th 卡只列官方规则集
   const systemRuleSets = useMemo(
-    () => (ruleSets || []).filter((s) => (s.gameSystem || CLASSIC_ID) === R.id),
-    [ruleSets, R],
+    () => (ruleSets || []).filter((s) => (s.gameSystem || CLASSIC_ID) === R.id
+      && (s.kpcpEnabled === true) === kpcpEnabled),
+    [ruleSets, R, kpcpEnabled],
   );
   const chosenRuleSet = useMemo(
     () => systemRuleSets.find((s) => s.id === sheet.ruleSetId) || null,
@@ -686,6 +900,7 @@ export default function CharacterEditor({
   const ctx = useMemo(() => ({
     customOccupations, houseRules, ignoreAge,
     auditRules: chosenRuleSet?.auditRules,
+    kpcpRules: chosenRuleSet?.kpcp || null,
     ruleset: R,
   }), [customOccupations, houseRules, ignoreAge, chosenRuleSet, R]);
 
@@ -742,6 +957,9 @@ export default function CharacterEditor({
   }, [guest]);
 
   const derived = useMemo(() => computeSheet(sheet, ctx), [sheet, ctx]);
+  // 伴侣规则开启时，职业包的本职点默认锁定；守秘人开「职业包可搬点」后放开
+  const packageLocked = isKpcp && kpcpTog.packageMove !== true
+    && derived.occupation?.kind === 'package';
   const attrSum = CHARS.reduce((n, k) => n + (Number(derived.eff?.[k]) || 0), 0);
   const attrWithLuck = attrSum + (Number(derived.eff?.Luck) || 0);
   const warnings = useMemo(() => validateSheet(sheet, ctx), [sheet, ctx]);
@@ -922,13 +1140,16 @@ export default function CharacterEditor({
   };
 
   const doRollAll = () => {
-    const { chars } = rollCharacteristics();
+    // 守秘人伴侣：八项全部 (2D6+5)×5，可自由分配（35–85）
+    const chars = isKpcp
+      ? Object.fromEntries(CHARS.map((k) => [k, (Math.floor(Math.random() * 6) + 1 + Math.floor(Math.random() * 6) + 1 + 5) * 5]))
+      : rollCharacteristics().chars;
     const core = isPulp ? (sheet.coreChar || derived.archetype?.coreChar?.[0] || '') : '';
     if (core) chars[core] = rollPulpCore();
     const luck = isPulp ? rollPulpLuck() : rollLuck(luckTwice);
     setSheet((prev) => ({ ...prev, chars: { ...chars, Luck: luck.value } }));
     setDirty(true);
-    showToast(`已生成属性（幸运 ${luck.value}${core ? ` · 核心 ${CHAR_LABEL[core]} ${chars[core]}` : ''}）`);
+    showToast(`已生成属性（幸运 ${luck.value}${core ? ` · 核心 ${CHAR_LABEL[core]} ${chars[core]}` : ''}${isKpcp ? ' · 八项各 (2D6+5)×5' : ''}）`);
   };
 
   const doRollLuck = () => {
@@ -1118,6 +1339,10 @@ export default function CharacterEditor({
       // 每个技能组只填一个空槽位，玩家已经选过方向的就不动。
       const singles = occupationBranchHints(next, R).filter((h) => h.options.length === 1);
       let skills = prev.skills;
+      if (next?.kind === 'package') {
+        // 守秘人伴侣：职业是「能力包」，选中即把各项最终值折算成本职点写进对应槽位
+        skills = applyPackageSkills(prev.skills, next, R, derived.eff);
+      }
       if (singles.length) {
         const hasCustom = new Set(prev.skills.filter((s) => s.custom).map((s) => s.key));
         const filled = new Set();
@@ -1233,7 +1458,7 @@ export default function CharacterEditor({
 
   const specGroups = occ
     ? [
-      ...(occ.social ? [{ type: 'social', label: `任选 ${occ.social} 项社交技能`, pool: SOCIAL_SKILLS, picked: sheet.occPicks?.social || [], limit: occ.social }] : []),
+      ...(occ.social ? [{ type: 'social', label: `任选 ${occ.social} 项社交技能`, pool: R?.socialSkills || SOCIAL_SKILLS, picked: sheet.occPicks?.social || [], limit: occ.social }] : []),
       ...(occ.free ? [{ type: 'free', label: `任选 ${occ.free} 项其他特长`, pool: null, picked: sheet.occPicks?.free || [], limit: occ.free }] : []),
     ]
     : [];
@@ -1352,7 +1577,7 @@ export default function CharacterEditor({
                       <td className="px-1 py-1.5">
                         {isMythos
                           ? <div className="text-center text-ink-mute">—</div>
-                          : <NumberInput blankZero value={s.occ} onChange={(v) => setSkill(s.id, 'occ', v)} className={cx('!px-1 !py-1.5 text-center text-[14.5px]', s.occ ? '!border-ochre/55 !bg-ochre/10 !text-ochre' : '!border-x-transparent !border-t-transparent !border-b-line-strong/50 !bg-transparent !text-ink-mute/45 !shadow-none')} />}
+                          : <NumberInput blankZero value={s.occ} disabled={packageLocked && s.isOccupation} title={packageLocked && s.isOccupation ? '职业包点已锁定：由守秘人在伴侣房规里开启「职业包可搬点」后才能自由分配' : undefined} onChange={(v) => setSkill(s.id, 'occ', v)} className={cx('!px-1 !py-1.5 text-center text-[14.5px]', s.occ ? '!border-ochre/55 !bg-ochre/10 !text-ochre' : '!border-x-transparent !border-t-transparent !border-b-line-strong/50 !bg-transparent !text-ink-mute/45 !shadow-none')} />}
                       </td>
                       <td className="px-1 py-1.5">
                         {isMythos
@@ -1479,10 +1704,10 @@ export default function CharacterEditor({
 
       {/* 派生值总览 */}
       <Panel className="space-y-4 p-5 sm:p-6">
-        <DerivedGrid derived={derived} />
+        <DerivedGrid derived={derived} sanityLabel={R?.terms?.sanity || '理智'} />
         <div className="grid gap-4 sm:grid-cols-2">
           <ProgressBar used={derived.spent.occupation} total={derived.budget.occupation} label="职业技能点" />
-          <ProgressBar used={derived.spent.interest} total={derived.budget.interest} label="兴趣技能点" hint="（智力×2）" />
+          <ProgressBar used={derived.spent.interest} total={derived.budget.interest} label="兴趣技能点" hint={isKpcp ? '（教育+智力）' : '（智力×2）'} />
         </div>
         {isPulp ? (
           <ProgressBar used={derived.spent.bonus} total={derived.budget.bonus} label="英雄奖励点" hint="（每原型 100 点，仅限原型技能）" />
@@ -1511,6 +1736,24 @@ export default function CharacterEditor({
             />
           ) : null}
           {isPulp ? <PulpReference /> : null}
+          <KpcpLayerPanel
+            enabled={kpcpEnabled}
+            chosenRuleSet={chosenRuleSet}
+            availableCount={(ruleSets || []).filter((x) => (x.gameSystem || CLASSIC_ID) === R.id && x.kpcpEnabled === true).length}
+            R={R}
+            onToggle={(v) => {
+              const nextSheet = { ...sheet, kpcp: { ...sheet.kpcp, enabled: v } };
+              const nextR = resolveCardRuleset(nextSheet);
+              const keepOcc = nextR.occupationById?.[sheet.occupationId] ? sheet.occupationId : '';
+              patch({
+                kpcp: { ...sheet.kpcp, enabled: v },
+                skills: reshapeSkills(sheet.skills, nextR),
+                occupationId: keepOcc,
+                occPicks: { free: [], social: [], choices: [] },
+                ...((v && !chosenRuleSet?.kpcpEnabled) || (!v && chosenRuleSet?.kpcpEnabled) ? { ruleSetId: '' } : {}),
+              });
+            }}
+          />
           <div className="grid lg:grid-cols-3 gap-5">
             <Panel className="space-y-5 p-5 sm:p-6 lg:col-span-2">
               <div className="grid gap-4 sm:grid-cols-2 sm:gap-5">
@@ -1520,12 +1763,11 @@ export default function CharacterEditor({
                 <Field className={FIELD} label="玩家名">
                   <div className="flex items-center gap-2">
                     <Input value={sheet.playerName} maxLength={40} onChange={(e) => patch({ playerName: e.target.value })} />
-                    <Badge tone="violet" className="shrink-0" title={`本卡适用规则：${R.name}`}>{R.short}</Badge>
+                    <Badge tone={isKpcp ? 'violetAlt' : 'violet'} className="shrink-0" title={`本卡适用规则：${R.name}`}>{R.short}</Badge>
                   </div>
                 </Field>
                 <Field className={FIELD} label="年龄"
-                  hint={isPulp ? '通俗克苏鲁不限制年龄，也不做年龄补正/教育增强，仅作记录与叙事参考'
-                    : (ignoreAge || sheet.agePenaltyWaived) ? (ignoreAge ? '当前房规忽略年龄规则：可填任意非负整数' : 'KP 已豁免年龄减益：可填任意非负整数') : '15-120 之间；影响属性补正与教育增强'}>
+                  hint={(ignoreAge || sheet.agePenaltyWaived) ? (ignoreAge ? '当前房规忽略年龄规则：可填任意非负整数' : 'KP 已豁免年龄减益：可填任意非负整数') : (isPulp ? '' : '15-120 之间；影响属性补正与教育增强')}>
                   <NumberInput min={(isPulp || ignoreAge || sheet.agePenaltyWaived) ? 0 : 15} max={(isPulp || ignoreAge || sheet.agePenaltyWaived) ? 999 : 120} value={sheet.age} onChange={setAge} />
                 </Field>
                 <Field className={FIELD} label="性别"><Input value={sheet.gender} maxLength={20} onChange={(e) => patch({ gender: e.target.value })} /></Field>
@@ -2068,11 +2310,20 @@ export default function CharacterEditor({
 
           <div className="grid sm:grid-cols-2 gap-4">
             <ProgressBar used={derived.spent.occupation} total={derived.budget.occupation} label="职业技能点" />
-            <ProgressBar used={derived.spent.interest} total={derived.budget.interest} label="兴趣技能点" hint="（智力×2）" />
+            <ProgressBar used={derived.spent.interest} total={derived.budget.interest} label="兴趣技能点" hint={isKpcp ? '（教育+智力）' : '（智力×2）'} />
           </div>
 
           {isPulp ? (
             <BonusPanel derived={derived} onSetBonus={(id, v) => setSkill(id, 'bonus', v)} />
+          ) : null}
+
+          {isKpcp ? (
+            <ExtraLanguagePanel
+              derived={derived}
+              enabled={kpcpTog.secondOwnLanguage !== false}
+              value={sheet.extraLanguages || []}
+              onChange={(next) => patch({ extraLanguages: next })}
+            />
           ) : null}
 
           {occ && (
@@ -2234,7 +2485,7 @@ export default function CharacterEditor({
                   const name = e.target.value;
                   setWeaponPick('');
                   if (!name) return;
-                  const preset = WEAPONS.find((w) => w.name === name);
+                  const preset = (R?.weapons?.length ? R.weapons : WEAPONS).find((w) => w.name === name);
                   if (!preset) return;
                   patch({
                     weapons: [...sheet.weapons, {
@@ -2246,9 +2497,9 @@ export default function CharacterEditor({
                 className="max-w-full cursor-pointer rounded-[2px] border border-line-strong bg-paper-raised px-3 py-2 text-[14px] text-ink"
               >
                 <option value="">从武器表选择…</option>
-                {WEAPONS.filter((w) => w.name !== BUILTIN_WEAPON
-                  && w.eras.includes(sheet.era === '现代' ? '现代' : '1920s'))
-                  .map((w) => <option key={w.name} value={w.name}>{w.name}（{w.damage}）</option>)}
+                {(R?.weapons?.length ? R.weapons : WEAPONS).filter((w) => w.name !== BUILTIN_WEAPON
+                  && (!w.eras || w.eras.includes(sheet.era === '现代' ? '现代' : '1920s')))
+                  .map((w) => <option key={w.name} value={w.name}>{w.name}（{w.damage}{w.impale ? ` · 贯穿 ${w.impale}` : ''}）</option>)}
               </select>
               <Button
                 variant="ghost"
@@ -2318,7 +2569,7 @@ export default function CharacterEditor({
         <Panel className="space-y-4 p-5 sm:p-6">
           <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink"><BookOpen className="h-4 w-4 text-ochre" />背景故事</h3>
           <div className="grid gap-4 md:grid-cols-2 md:gap-5">
-            {BACKGROUND_FIELDS.map(([key, label]) => (
+            {bgFields.map(([key, label]) => (
               <Field className={FIELD} key={key} label={label}>
                 <Textarea
                   rows={3}
@@ -2400,6 +2651,7 @@ export default function CharacterEditor({
                           <span className="font-serif text-[16px] font-bold text-ink">{set.name}</span>
                           <Badge tone={set.scope === 'global' ? 'amber' : 'slate'}>{set.scope === 'global' ? '全局默认' : '个人规则'}</Badge>
                           {set.isActive ? <Badge tone="emerald">守秘人当前在用</Badge> : null}
+                          {set.kpcpEnabled === true ? <Badge tone="violetAlt">含伴侣房规</Badge> : null}
                         </span>
                         <span className="mt-0.5 block text-[13.5px] text-ink-mute">
                           发布：{set.ownerName || '未登记'}
@@ -2823,25 +3075,52 @@ export default function CharacterEditor({
 function OccupationPicker({ open, onClose, onPick, current, derived, occupations, R }) {
   const defs = R?.skillByKey || SKILL_BY_KEY;
   const [q, setQ] = useState('');
+  const [kind, setKind] = useState('all');
+  const scope = useMemo(() => {
+    if (kind === 'package') return occupations.filter((o) => o.kind === 'package');
+    if (kind === 'build') return occupations.filter((o) => o.kind !== 'package');
+    return occupations;
+  }, [kind, occupations]);
+  const packageCount = useMemo(() => occupations.filter((o) => o.kind === 'package').length, [occupations]);
   const list = useMemo(() => {
     const kw = q.trim().toLowerCase();
-    if (!kw) return occupations;
-    return occupations.filter((o) => o.name.toLowerCase().includes(kw)
+    if (!kw) return scope;
+    return scope.filter((o) => o.name.toLowerCase().includes(kw)
       || (o.desc || '').toLowerCase().includes(kw)
       || o.keys.some((k) => (defs[k]?.name || '').includes(kw)));
-  }, [q, occupations, defs]);
+  }, [q, scope, defs]);
 
   return (
     <Modal open={open} onClose={onClose} title="选择职业" wide>
       <div className="space-y-4">
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索职业名、简介或本职技能…" autoFocus />
-        <div className="text-[14px] text-ink-mute">共 {list.length} 个职业{R?.id === CLASSIC_ID ? '（含 KP 自定义模板）' : '（通俗克苏鲁职业表）'}</div>
+        {packageCount ? (
+          <div className="flex flex-wrap gap-2">
+            {[['all', '全部'], ['build', '职业构筑'], ['package', '职业包']].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setKind(id)}
+                className={cx('rounded-[2px] border px-2.5 py-1 text-[13px] transition-colors',
+                  kind === id ? 'border-foreground bg-foreground text-paper-raised' : 'border-line-strong text-ink-soft hover:border-ink-mute')}
+              >
+                {label}{id === 'package' ? ` · ${packageCount}` : ''}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className="text-[14px] text-ink-mute">共 {list.length} 个职业{R?.layer?.kpcp
+          ? '（伴侣规则：职业包 + 现有职业构筑）'
+          : R?.id === CLASSIC_ID ? '（含 KP 自定义模板）' : '（通俗克苏鲁职业表）'}</div>
         <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
           {list.map((o) => {
-            const budget = o.pts
-              ? (o.pts.terms || []).reduce((a, t) => a + (derived.eff[t.stat] || 0) * t.mult, 0)
-                + Math.max(0, ...(o.pts.max || []).map((t) => (derived.eff[t.stat] || 0) * t.mult))
-              : 0;
+            const isPkg = o.kind === 'package';
+            const budget = isPkg
+              ? Number(o.total) || 0
+              : (o.pts
+                ? (o.pts.terms || []).reduce((a, t) => a + (derived.eff[t.stat] || 0) * t.mult, 0)
+                  + Math.max(0, ...(o.pts.max || []).map((t) => (derived.eff[t.stat] || 0) * t.mult))
+                : 0);
             return (
               <button
                 key={o.id}
@@ -2856,7 +3135,7 @@ function OccupationPicker({ open, onClose, onPick, current, derived, occupations
                     {o.isCustom ? <Badge tone="cyan">KP 模板</Badge> : null}
                   </span>
                   <span className="text-[14px] text-ink-soft">
-                    信用评级 {o.cr[0]}-{o.cr[1]} · 技能点 {o.attr} = <b className="text-forest">{budget}</b>
+                    信用评级 {o.cr[0] === o.cr[1] ? o.cr[0] : `${o.cr[0]}-${o.cr[1]}`} · {isPkg ? '职业包' : '技能点'} {isPkg ? o.entries.length : o.attr} 项 = <b className="text-forest">{budget}</b>
                   </span>
                 </div>
                 {o.desc ? <p className="mt-1.5 text-[16px] leading-[1.75] text-ink-soft">{o.desc}</p> : null}
@@ -2885,7 +3164,11 @@ function OccupationPicker({ open, onClose, onPick, current, derived, occupations
           {list.length === 0 && <p className="py-8 text-center text-[16px] text-ink-mute">没有匹配的职业</p>}
         </div>
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[16px] leading-[1.7] text-ink-soft">{R?.id === CLASSIC_ID ? '必须从列表中选一个职业；规则书没有的职业请让 KP 在「审卡中心 → 职业模板」里添加。' : '通俗克苏鲁使用固定的 68 个职业模板，职业点数与信用评级区间按原书公式。'}</p>
+          <p className="text-[16px] leading-[1.7] text-ink-soft">{R?.id === CLASSIC_ID
+            ? '必须从列表中选一个职业；规则书没有的职业请让 KP 在「审卡中心 → 职业模板」里添加。'
+            : R?.chargen?.occupationsArePackages
+              ? '守秘人伴侣使用固定的 25 个职业包：选中后按包内最终值自动写入本职技能，「任选」项到技能页再分配；信用评级为原书定值。'
+              : '通俗克苏鲁使用固定的 68 个职业模板，职业点数与信用评级区间按原书公式。'}</p>
           <Button variant="ghost" onClick={onClose}>关闭</Button>
         </div>
       </div>

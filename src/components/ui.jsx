@@ -292,6 +292,8 @@ export function Badge({ tone = 'slate', children, className }) {
     red: 'bg-vermilion/10 text-vermilion border-vermilion/50',
     cyan: 'bg-moon/10 text-moon border-moon/45',
     violet: 'bg-violet/12 text-violet border-violet/45',
+    /** 开启「守秘人伴侣」叠加层时用的另一种紫，便于与基础规则一眼区分 */
+    violetAlt: 'bg-violet-alt/14 text-violet-alt border-violet-alt/50',
   };
   return (
     <span className={cx(

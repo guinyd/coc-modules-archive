@@ -326,6 +326,9 @@ function migrate(d) {
     if (u.activeRuleSetPulpId === undefined) { u.activeRuleSetPulpId = null; changed = true; }
     if (u.auditRulesPulp === undefined) { u.auditRulesPulp = null; changed = true; }
     if (u.draftHouseRulesPulp === undefined) { u.draftHouseRulesPulp = []; changed = true; }
+    if (u.activeRuleSetKpcpId === undefined) { u.activeRuleSetKpcpId = null; changed = true; }
+    if (u.auditRulesKpcp === undefined) { u.auditRulesKpcp = null; changed = true; }
+    if (u.draftHouseRulesKpcp === undefined) { u.draftHouseRulesKpcp = []; changed = true; }
     if (u.role === 'admin' && u.auditRules && typeof u.auditRules === 'object' && !u.ruleSets.length) {
       const set = {
         id: `rs_${u.id}_default`, name: '我的规则集', scope: 'personal',
@@ -348,6 +351,42 @@ function migrate(d) {
   for (const c of d.characters) {
     if (c.ruleSetId === undefined) { c.ruleSetId = null; changed = true; }
     if (c.ruleSnapshot === undefined) { c.ruleSnapshot = null; changed = true; }
+  }
+
+  // v10.13：守秘人伴侣从「第三套游戏规则」改为可叠加在七版/通克之上的规则层
+  //  - characters[].gameSystem === 'kpcp'  -> 'classic7e' + kpcp.enabled = true
+  //  - 规则集 / 职业模板里的 'kpcp' 同样归到 classic7e（伴侣房规挂在任意规则集上）
+  //  - 移除随卡保存的声望（声望系统已取消）
+  for (const c of d.characters) {
+    if (!c || typeof c !== 'object') continue;
+    if (c.gameSystem === 'kpcp') {
+      c.gameSystem = 'classic7e';
+      c.kpcp = { ...(c.kpcp && typeof c.kpcp === 'object' ? c.kpcp : {}), enabled: true };
+      changed = true;
+    }
+    if (c.kpcp && typeof c.kpcp === 'object') {
+      if (c.kpcp.enabled === undefined) {
+        // 旧数据：开过关卡但没留 enabled 标记 —— 有开关或团规就视为开启，避免玩家设置「消失」
+        const had = Boolean(c.kpcp.toggles && Object.keys(c.kpcp.toggles).length)
+          || Boolean(Array.isArray(c.kpcp.customRules) && c.kpcp.customRules.length);
+        c.kpcp.enabled = had;
+        changed = true;
+      }
+      if (c.kpcp.reputation !== undefined) { delete c.kpcp.reputation; changed = true; }
+    }
+  }
+  for (const set of d.settings.ruleSets || []) {
+    if (set && set.gameSystem === 'kpcp') { set.gameSystem = 'classic7e'; changed = true; }
+  }
+  for (const occ of d.customOccupations || []) {
+    if (occ && occ.gameSystem === 'kpcp') { occ.gameSystem = 'classic7e'; changed = true; }
+  }
+  for (const u of d.users) {
+    for (const s of u.ruleSets || []) {
+      if (s && s.gameSystem === 'kpcp') { s.gameSystem = 'classic7e'; changed = true; }
+    }
+    // 旧的 kpcp 独立规则槽位已废弃：清空，避免规则集被悄悄「启用」却无人读取
+    if (u.activeRuleSetKpcpId) { u.activeRuleSetKpcpId = null; changed = true; }
   }
 
   if (!d.schemaVersion || d.schemaVersion < SCHEMA_VERSION) {

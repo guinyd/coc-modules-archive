@@ -16,7 +16,7 @@
 
 import React, { useMemo } from 'react';
 import { BACKGROUND_FIELDS, ALL_CHARS, CHAR_LABEL, STATUS_LABEL } from '../../../shared/coc7e.js';
-import { CLASSIC_ID, resolveRuleset } from '../../../shared/rulesets/index.js';
+import { CLASSIC_ID, resolveCardRuleset } from '../../../shared/rulesets/index.js';
 
 function Line({ value, className = '' }) {
   return (
@@ -27,6 +27,17 @@ function Line({ value, className = '' }) {
     >
       {value || '\u00a0'}
     </span>
+  );
+}
+
+/** 伴侣版打印用：比属性格更小的一行小方格，不加底色，标签与数值左右排。 */
+function MiniBox({ label, value, sub }) {
+  return (
+    <div className="flex items-baseline justify-center gap-1 whitespace-nowrap border border-ink/25 rounded-[3px] px-1.5 py-[2px] leading-tight">
+      <span className="text-[8.5px] text-ink-mute">{label}</span>
+      <b className="text-[12px] font-bold font-mono text-ink">{value ?? '—'}</b>
+      {sub ? <span className="text-[8.5px] text-ink-mute">{sub}</span> : null}
+    </div>
   );
 }
 
@@ -49,6 +60,47 @@ function Pill({ label, value }) {
     <span className="inline-flex items-baseline gap-1 whitespace-nowrap rounded-full border border-ink/45 px-1.5 py-[1px] leading-none">
       <span className="text-[8.5px] text-ink-mute">{label}</span>
       <b className="font-mono text-[10px] text-ink">{value}</b>
+    </span>
+  );
+}
+
+/** 伴侣版打印用：标签 + 单格数字框；不传 value 就是空框，留给玩家手写。 */
+function BlankField({ label, value, size = 'md' }) {
+  const big = size === 'lg';
+  return (
+    <span className="inline-flex items-baseline gap-1 whitespace-nowrap">
+      <span className={big ? 'text-[11px] text-ink-mute' : 'text-[9px] text-ink-mute'}>{label}</span>
+      <span
+        className={
+          big
+            ? 'inline-block h-[18px] min-w-[34px] border border-ink/50 bg-paper px-1 text-center font-mono text-[13px] leading-[16px] text-ink'
+            : 'inline-block h-[14px] min-w-[30px] border border-ink/50 bg-paper px-1 text-center font-mono text-[10.5px] leading-[13px] text-ink'
+        }
+      >
+        {value ?? ' '}
+      </span>
+    </span>
+  );
+}
+
+function CheckChip({ label, size = 'md' }) {
+  const big = size === 'lg';
+  return (
+    <span
+      className={
+        big
+          ? 'inline-flex items-center gap-1 whitespace-nowrap text-[12px] text-ink-soft'
+          : 'inline-flex items-center gap-1 whitespace-nowrap text-[10px] text-ink-soft'
+      }
+    >
+      <i
+        className={
+          big
+            ? 'inline-block h-[10px] w-[10px] border border-ink/60'
+            : 'inline-block h-[8px] w-[8px] border border-ink/60'
+        }
+      />
+      {label}
     </span>
   );
 }
@@ -103,6 +155,7 @@ function SkillColumn({ skills }) {
           // 名字长的（「操作重型机械」「外语（拉丁语）」等）自动缩一档，尽量不被裁切
           const label = `${s.name}（${s.base}%）`;
           const tight = label.length >= 11;
+          const tiny = label.length >= 13;
           return (
             <tr
               key={s.id}
@@ -111,9 +164,15 @@ function SkillColumn({ skills }) {
             >
               <td className="py-[1px] align-middle text-center text-[12px] leading-[16px]">{s.marked ? '☑' : '☐'}</td>
               <td className="py-[1px] text-[11px] leading-[16px] text-ink-mute">{s.isOccupation ? '★' : (s.kind === 'custom' ? '✎' : '')}</td>
-              <td className={`py-[1px] pr-1 leading-[16px] whitespace-nowrap overflow-hidden text-ellipsis ${tight ? 'text-[11px]' : ''}`}>
-                <span title={label}>{s.name}</span>
-                <span className="text-ink-mute font-normal">（{s.base}%）</span>
+              <td className={`py-[1px] pr-1 leading-[16px] whitespace-nowrap overflow-hidden text-ellipsis ${tiny ? 'text-[9.5px] tracking-[-0.03em]' : tight ? 'text-[11px]' : ''}`}>
+                <span className="block overflow-hidden text-ellipsis">
+                  <span title={label}>{s.name}</span>
+                  {tiny ? (
+                    <span className="ml-0.5 text-[8px] font-normal text-ink-mute">{s.base}%</span>
+                  ) : (
+                    <span className="text-ink-mute font-normal">（{s.base}%）</span>
+                  )}
+                </span>
               </td>
               <td className="py-[1px] text-right font-mono leading-[16px] whitespace-nowrap text-ink-mute font-normal">
                 {s.half}/{s.fifth}
@@ -131,8 +190,12 @@ export default function CharacterPrint({ character }) {
   const printedAt = useMemo(() => new Date().toLocaleDateString(), []);
   if (!character?.derived) return null;
   const d = character.derived;
-  const R = resolveRuleset(character.gameSystem || d.ruleset?.id || CLASSIC_ID);
-  const isPulp = R.id !== CLASSIC_ID;
+  const R = resolveCardRuleset({ gameSystem: character.gameSystem || d.ruleset?.id || CLASSIC_ID, kpcp: character.kpcp });
+  const isPulp = R.id === 'pulp';
+  const isKpcp = R.layer?.kpcp === true;
+  const terms = R.terms || null;
+  const bgFields = R.backgroundFields || BACKGROUND_FIELDS;
+  const ruleName = isKpcp ? '守秘人伴侣（Keeper Companion）规则' : isPulp ? '通俗克苏鲁（Pulp Cthulhu）规则' : '克苏鲁的呼唤 第七版（COC7th）规则';
   const talentNames = (Array.isArray(character.talents) ? character.talents : [])
     .map((id) => R.talentById?.[id]?.zh || id);
 
@@ -146,6 +209,12 @@ export default function CharacterPrint({ character }) {
   const cols = [ordered.slice(0, per), ordered.slice(per, per * 2), ordered.slice(per * 2)];
 
   const w = d.wealth || { level: '—', cashText: '—', assetsText: '—' };
+  // 伴侣版：异变线 = POW÷5；闪避取技能表里的当前值（在武器表上方再列一次，方便战斗中直查）
+  const powFifth = Math.floor((d.eff.POW || 0) / 5);
+  const dodgeRow = d.skills.find((s) => s.key === 'dodge');
+  const dodgeTotal = dodgeRow?.total ?? Math.floor((d.eff.DEX || 0) / 2);
+  const dodgeHalf = dodgeRow?.half ?? Math.floor(dodgeTotal / 2);
+  const dodgeFifth = dodgeRow?.fifth ?? Math.floor(dodgeTotal / 5);
 
   const numCells = (from, to, stretch = false) => Array.from({ length: to - from + 1 }, (_, i) => {
     const n = from + i;
@@ -159,7 +228,7 @@ export default function CharacterPrint({ character }) {
         <div className="border border-ink/45 p-2.5 shadow-[inset_0_0_0_1px_#dccdb1]">
           <div className="text-center border-b border-ink/45 pb-0.5 mb-1">
             <div className="text-[11.5px] tracking-[0.5em] text-ochre">❖ {character.era || '1920s'}{isPulp ? ' 英雄' : ' 调查员'} · 秘密调查档案馆 ❖</div>
-            <div className="text-[21px] font-semibold font-serif tracking-[0.26em]">{isPulp ? '通俗克苏鲁 角色卡' : 'COC7th 角色卡'}</div>
+            <div className="text-[21px] font-semibold font-serif tracking-[0.26em]">{isPulp ? '通俗克苏鲁 角色卡' : isKpcp ? '守秘人伴侣 角色卡' : 'COC7th 角色卡'}</div>
           </div>
 
           {/* 基本信息 */}
@@ -193,12 +262,66 @@ export default function CharacterPrint({ character }) {
             ))}
           </div>
 
-          {/* 生命 / 魔法 / 移动与伤害加值：同一横行，HP 标题行装下全部标记与派生 */}
-          <div className="grid grid-cols-[1fr_1fr_max-content] gap-1 mb-1 items-stretch">
+          {/* 伴侣版：HP / MP / 幸运 / 理智只保留「最大/初始 + 当前」，当前值全部留空由玩家手写 */}
+          {isKpcp ? (
+            <>
+              <div className="border border-ink/35 rounded-[3px] px-2 py-1 mb-1 grid grid-cols-2 gap-x-4 gap-y-[2px]">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-[14px]">生命 HP</span>
+                  <span className="flex items-baseline gap-2">
+                    <BlankField size="lg" label="最大" value={d.hp} />
+                    <BlankField size="lg" label="当前" />
+                    <BlankField size="lg" label="重伤值" value={Math.floor(d.hp / 2)} />
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-[14px]">魔法 MP</span>
+                  <span className="flex items-baseline gap-2.5">
+                    <BlankField size="lg" label="最大" value={d.mp} />
+                    <BlankField size="lg" label="当前" />
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-[14px]">幸运 LUCK</span>
+                  <span className="flex items-baseline gap-2.5">
+                    <BlankField size="lg" label="初始" value={d.eff.Luck} />
+                    <BlankField size="lg" label="当前" />
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-[14px]">理智 SAN</span>
+                  <span className="flex items-baseline gap-2.5">
+                    <BlankField size="lg" label="初始" value={d.san} />
+                    <BlankField size="lg" label="当前" />
+                    <BlankField size="lg" label="异变" value={powFifth} />
+                  </span>
+                </div>
+              </div>
+
+              {/* 理智（左）与健康（右）同一行：理智记最大值与两种疯狂，健康记重伤阈值与三种状态 */}
+              <div className="grid grid-cols-2 gap-1.5 mb-1 items-stretch">
+                <div className="border border-ink/35 rounded-[3px] px-2 py-1.5 flex flex-nowrap items-center gap-x-3.5 overflow-hidden">
+                  <span className="font-bold text-[14px] tracking-[0.08em] whitespace-nowrap">理智 SAN</span>
+                  <BlankField size="lg" label="最大" value={d.sanMax} />
+                  <CheckChip size="lg" label={terms?.temporary || '震骇'} />
+                  <CheckChip size="lg" label={terms?.indefinite || '异变'} />
+                </div>
+                <div className="border border-ink/35 rounded-[3px] px-2 py-1.5 flex flex-nowrap items-center gap-x-3 overflow-hidden">
+                  <span className="font-bold text-[14px] tracking-[0.06em] whitespace-nowrap">健康 HEALTH</span>
+                  <CheckChip size="lg" label="重伤" />
+                  <CheckChip size="lg" label="昏迷" />
+                  <CheckChip size="lg" label="濒死" />
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+          {/* 生命 / 魔法 / 移动与伤害加值：同一横行；仅通克卡 HP 扩到 40、MP 收窄，其余规则保持原版面 */}
+          <div className={`grid gap-1 mb-1 items-stretch ${isPulp ? 'grid-cols-[1.45fr_1fr_max-content]' : 'grid-cols-[1fr_1fr_max-content]'}`}>
             {/* 生命 HP */}
             <div className="border border-ink/35 rounded-[3px] px-1.5 py-1 flex flex-col">
-              <div className="grid grid-cols-5 items-center gap-x-[1px]">
-                <div className="col-span-4 flex items-baseline gap-x-1.5 whitespace-nowrap">
+              <div className={`grid items-center gap-x-[1px] ${isPulp ? 'grid-cols-10' : 'grid-cols-5'}`}>
+                <div className={`${isPulp ? 'col-span-9' : 'col-span-4'} flex items-baseline gap-x-1.5 whitespace-nowrap`}>
                   <span className="font-bold text-[12.5px]">生命 HP</span>
                   <Pill label="Max" value={d.hp} />
                   <span className="text-[9px] text-ink-mute">重伤值 <b className="font-mono text-[10px] text-ink">{Math.floor(d.hp / 2)}</b></span>
@@ -210,19 +333,37 @@ export default function CharacterPrint({ character }) {
                 </div>
                 <span className="text-center font-mono text-[10.5px] text-ink">00</span>
               </div>
-              <div className="mt-1 flex-1 grid grid-cols-5 grid-rows-4 gap-[1px]">
-                {numCells(1, 20, true)}
-              </div>
+              {isPulp ? (
+                <div className="mt-1 flex-1 grid grid-cols-10 grid-rows-4 gap-x-[1px] gap-y-[1px]">
+                  {numCells(1, 40, true)}
+                </div>
+              ) : (
+                <div className="mt-1 flex-1 grid grid-cols-5 grid-rows-4 gap-[1px]">
+                  {numCells(1, 20, true)}
+                </div>
+              )}
             </div>
 
-            {/* 魔法 MP：标题、Max 与数列同一网格，铺满整框 */}
-            <div className="border border-ink/35 rounded-[3px] px-1.5 py-1 flex">
-              <div className="flex-1 grid grid-rows-2 gap-[1px]" style={{ gridTemplateColumns: 'repeat(16, minmax(0, 1fr))' }}>
-                <span className="flex items-center font-bold text-[12px] whitespace-nowrap" style={{ gridColumn: 'span 3' }}>魔法 MP</span>
-                <span className="flex items-center whitespace-nowrap" style={{ gridColumn: 'span 3' }}><Pill label="Max" value={d.mp} /></span>
-                {numCells(0, 24, true)}
+            {/* 魔法 MP：通克为「标题单行 + 13 列 × 2 行铺满」，其余保持原「标题与数列同一网格」 */}
+            {isPulp ? (
+              <div className="border border-ink/35 rounded-[3px] px-1.5 py-1 flex flex-col">
+                <div className="flex items-center gap-x-1.5 whitespace-nowrap">
+                  <span className="font-bold text-[12px]">魔法 MP</span>
+                  <Pill label="Max" value={d.mp} />
+                </div>
+                <div className="mt-1 flex-1 grid grid-rows-2 gap-x-[1px]" style={{ gridTemplateColumns: 'repeat(13, minmax(0, 1fr))' }}>
+                  {numCells(0, 24, true)}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="border border-ink/35 rounded-[3px] px-1.5 py-1 flex">
+                <div className="flex-1 grid grid-rows-2 gap-[1px]" style={{ gridTemplateColumns: 'repeat(16, minmax(0, 1fr))' }}>
+                  <span className="flex items-center font-bold text-[12px] whitespace-nowrap" style={{ gridColumn: 'span 3' }}>魔法 MP</span>
+                  <span className="flex items-center whitespace-nowrap" style={{ gridColumn: 'span 3' }}><Pill label="Max" value={d.mp} /></span>
+                  {numCells(0, 24, true)}
+                </div>
+              </div>
+            )}
 
             {/* 移动力 / 伤害加值：宽度贴近内容 */}
             <div className="grid grid-rows-2 gap-1">
@@ -241,8 +382,8 @@ export default function CharacterPrint({ character }) {
           <div className="border border-ink/35 rounded-[3px] px-2 py-1 mb-1">
             <div className="grid items-center gap-x-[1px] gap-y-[1px]" style={{ gridTemplateColumns: 'repeat(30, minmax(0, 1fr))' }}>
               <span className="font-bold text-[13px]" style={{ gridColumn: 'span 4' }}>理智 SAN</span>
-              <span className="inline-flex items-center gap-1 text-[10px] text-ink-soft" style={{ gridColumn: 'span 3' }}><i className="inline-block h-[8px] w-[8px] border border-ink/60" />临时疯狂</span>
-              <span className="inline-flex items-center gap-1 text-[10px] text-ink-soft" style={{ gridColumn: 'span 4' }}><i className="inline-block h-[8px] w-[8px] border border-ink/60" />不定时疯狂</span>
+              <span className="inline-flex items-center gap-1 text-[10px] text-ink-soft" style={{ gridColumn: 'span 3' }}><i className="inline-block h-[8px] w-[8px] border border-ink/60" />{terms?.temporary || '临时疯狂'}</span>
+              <span className="inline-flex items-center gap-1 text-[10px] text-ink-soft" style={{ gridColumn: 'span 4' }}><i className="inline-block h-[8px] w-[8px] border border-ink/60" />{terms?.indefinite || '不定时疯狂'}</span>
               <span className="flex items-center whitespace-nowrap" style={{ gridColumn: 'span 4' }}><Pill label="Start" value={d.san} /></span>
               <span className="flex items-center whitespace-nowrap" style={{ gridColumn: 'span 4' }}><Pill label="Max" value={d.sanMax} /></span>
               <span className="font-serif text-[10px] leading-[1.05] text-ink" style={{ gridColumn: 'span 2' }}>疯了</span>
@@ -260,6 +401,9 @@ export default function CharacterPrint({ character }) {
             </div>
           </div>
 
+            </>
+          )}
+
           {/* 技能 */}
           <div className="border border-ink/25 rounded-[3px] overflow-hidden">
             <div className="bg-paper-deep px-2 py-1 text-[11px] font-bold text-ink-soft flex justify-between flex-wrap gap-1 shadow-[inset_0_-1px_0_0_var(--color-line)]">
@@ -273,6 +417,16 @@ export default function CharacterPrint({ character }) {
               {cols.map((col, i) => <SkillColumn key={i} skills={col} />)}
             </div>
           </div>
+
+          {/* 伴侣版：移动/闪避/伤害加值/体格做成一行小方格（属性式、无底色），紧贴武器表方便战斗中直查 */}
+          {isKpcp ? (
+            <div className="inline-grid grid-cols-4 gap-1 mt-2">
+              <MiniBox label="移动 MOV" value={d.mov} />
+              <MiniBox label="闪避" value={`${dodgeTotal}%`} sub={`${dodgeHalf}/${dodgeFifth}`} />
+              <MiniBox label="伤害加值 DB" value={d.db} />
+              <MiniBox label="体格" value={d.build} />
+            </div>
+          ) : null}
 
           {/* 武器 */}
           <div className="border border-ink/25 rounded-[3px] overflow-hidden mt-3">
@@ -327,7 +481,7 @@ export default function CharacterPrint({ character }) {
           </div>
 
           <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-            {BACKGROUND_FIELDS.map(([key, label]) => (
+            {bgFields.map(([key, label]) => (
               <div key={key} className="print-avoid-break">
                 <div className="text-[12.5px] font-bold text-ink border-b border-ink/25 mb-[2px]">
                   {label}
@@ -412,7 +566,7 @@ export default function CharacterPrint({ character }) {
           </div>
 
           <div className="text-[10.5px] text-ink-mute mt-1.5 text-center">
-            ❖ 角色卡由「秘密调查档案馆」生成 · {isPulp ? '通俗克苏鲁（Pulp Cthulhu）规则' : '克苏鲁的呼唤 第七版（COC7th）规则'} ❖
+            ❖ 角色卡由「秘密调查档案馆」生成 · {ruleName} ❖
           </div>
         </div>
       </section>

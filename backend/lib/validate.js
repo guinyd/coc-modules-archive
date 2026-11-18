@@ -14,17 +14,21 @@ import {
   ALL_CHARS, CHARS, ERAS, STATUSES, MODULE_ROLES, REVIEW_STATUSES, CHAR_MIN, CHAR_MAX,
   SKILL_CAP, CUSTOM_SKILL_MAX, SKILL_BY_KEY, SKILLS, SPEC_SLOTS, SOCIAL_SKILLS,
   OCCUPATION_BY_ID, blankSkills, blankWeapons, DEFAULT_AUDIT_RULES, AUDIT_RULE_META,
+  backgroundFieldsOf,
   currenciesFor, DEFAULT_CURRENCY, BUILTIN_WEAPON, WEAPON_BY_NAME,
   blankEduGrowth, normalizeEduGrowth, blankLegendary, normalizeLegendary,
   blankLegendaryBonus, PLAYER_TITLES, KP_TITLES, BACKGROUND_FIELDS,
 } from '../../shared/coc7e.js';
 import { normalizeSpells, normalizeTomes } from '../../shared/occult.js';
-import { CLASSIC_ID, RULESETS, resolveRuleset } from '../../shared/rulesets/index.js';
+import { CLASSIC_ID, RULESETS, resolveRuleset, applyKpcpLayer, isKpcpLayer } from '../../shared/rulesets/index.js';
 import { PULP_TONE_IDS } from '../../shared/rulesets/pulp.js';
+import { KPCP_BACKGROUND_FIELDS } from '../../shared/rulesets/kpcp.js';
 
 const ID_RE = /^[A-Za-z0-9_-]{1,48}$/;
-/** 背景栏键名集合（关键连接只能指向其中之一） */
-const BACKGROUND_KEYS = Object.fromEntries(BACKGROUND_FIELDS.map(([k]) => [k, true]));
+/** 背景栏键名集合（关键连接只能指向其中之一；包含伴侣版 8 栏） */
+const BACKGROUND_KEYS = Object.fromEntries(
+  [...BACKGROUND_FIELDS, ...KPCP_BACKGROUND_FIELDS].map(([k]) => [k, true]),
+);
 
 export function vId(value, field, { required = true } = {}) {
   const s = typeof value === 'string' ? value.trim() : '';
@@ -234,8 +238,9 @@ function parseChars(value) {
 /** 职业 id：内置职业为数字字符串，KP 自定义职业为 c_ 开头的字符串；通俗规则集只认自己的职业表 */
 export function parseOccupationId(value, ctx = {}) {
   if (value === undefined || value === null || value === '' || value === 0 || value === '0') return '';
-  const raw = String(value).trim().slice(0, 40);
-  if (!/^[A-Za-z0-9_]{1,40}$/.test(raw)) throw badRequest('职业标识不合法');
+  const raw = String(value).trim().slice(0, 64);
+  // 允许 `kpcp:xxx` 这种带命名空间的职业包 id
+  if (!/^[A-Za-z0-9_:-]{1,64}$/.test(raw)) throw badRequest('职业标识不合法');
   // 原型链上的键（__proto__ / constructor / prototype）不是职业，必须在查表前挡掉，
   // 否则 `OCCUPATION_BY_ID['__proto__']` 会返回对象、真值判定被绕过（SEC-19）
   if (raw === '__proto__' || raw === 'constructor' || raw === 'prototype') throw badRequest('职业不存在');
@@ -243,11 +248,9 @@ export function parseOccupationId(value, ctx = {}) {
   // 自定义职业模板对两套规则都开放；调用方已按 gameSystem 过滤
   const custom = (ctx.customOccupations || []).some((o) => String(o.id) === raw);
   if (custom) return raw;
-  if (R && R.id !== CLASSIC_ID) {
-    if (R.occupationById && Object.hasOwn(R.occupationById, raw) && R.occupationById[raw]) return raw;
-    throw badRequest('职业不存在');
-  }
-  if (Object.hasOwn(OCCUPATION_BY_ID, raw) && OCCUPATION_BY_ID[raw]) return raw;
+  // 规则集职业表优先：七版 = 内置表；伴侣层 = 基础职业 + 25 个职业包（kpcp:xxx）
+  const table = (R && R.occupationById) || OCCUPATION_BY_ID;
+  if (Object.hasOwn(table, raw) && table[raw]) return raw;
   throw badRequest('职业不存在');
 }
 
@@ -337,6 +340,7 @@ function parseKeyConnection(value) {
   const raw = typeof value === 'string' ? value.trim().slice(0, 32) : '';
   if (!raw) return '';
   if (!Object.hasOwn(BACKGROUND_KEYS, raw)) throw badRequest('关键连接不合法');
+  // 说明：守秘人伴侣不要求关键连接（其审卡项 requireKeyConnection=false），这里只做格式白名单
   return raw;
 }
 
@@ -529,12 +533,18 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
   const out = {};
 
   // 规则集先定下来：后面技能表、职业表、上限、扩展字段全部按它切
-  const gameSystem = parseGameSystem(
-    has('gameSystem') ? b.gameSystem : (ctx?.gameSystem ?? current?.gameSystem ?? CLASSIC_ID),
-  );
-  const R = resolveRuleset(gameSystem);
+  const rawSystem = has('gameSystem')
+    ? b.gameSystem
+    : (ctx?.gameSystem ?? current?.gameSystem ?? CLASSIC_ID);
+  // 旧版把守秘人伴侣当成第三套规则（gameSystem:'kpcp'）：迁移为「七版 + 伴侣层」
+  const legacyKpcp = rawSystem === 'kpcp';
+  const gameSystem = legacyKpcp ? CLASSIC_ID : parseGameSystem(rawSystem);
+  // 伴侣层是开关：旧卡字段优先，其次调用方上下文
+  const kpcpIn = b.kpcp && typeof b.kpcp === 'object' ? b.kpcp : (current?.kpcp || {});
+  const kpcpEnabled = legacyKpcp || kpcpIn.enabled === true || ctx?.kpcpEnabled === true;
+  const R = kpcpEnabled ? applyKpcpLayer(resolveRuleset(gameSystem)) : resolveRuleset(gameSystem);
   if (need('gameSystem') || !partial) out.gameSystem = gameSystem;
-  const rctx = { ...ctx, ruleset: R };
+  const rctx = { ...ctx, ruleset: R, gameSystem, kpcpEnabled };
 
   if (need('name')) out.name = vStr(b.name, '角色名', { min: 1, max: 40, required: true });
   if (need('playerName')) out.playerName = vStr(b.playerName, '玩家名', { max: 40 });
@@ -567,6 +577,38 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
   if (need('coreChar')) out.coreChar = parseCoreChar(b.coreChar);
   if (need('talents')) out.talents = parseTalents(b.talents, R);
   if (need('keyConnection')) out.keyConnection = parseKeyConnection(b.keyConnection);
+
+  // 守秘人伴侣：第二母语（每门 10 点兴趣点）
+  if (need('extraLanguages') || !partial) {
+    out.extraLanguages = isKpcpLayer(R)
+      ? vArray(b.extraLanguages, '第二母语', { max: 3 })
+        .map((x) => (typeof x === 'string' ? x : x?.name))
+        .map((x) => vText(x, '第二母语', { max: 24 }))
+        .filter(Boolean)
+      : [];
+  }
+
+  // 守秘人伴侣：开关（六条房规在规则集里配置；这里的 toggles/customRules 仅作旧卡兼容回退）
+  if (need('kpcp') || !partial) {
+    const k = kpcpIn;
+    const toggles = {};
+    for (const t of R.toggles || []) {
+      if (typeof k.toggles?.[t.id] === 'boolean') toggles[t.id] = k.toggles[t.id];
+    }
+    const customRules = [];
+    for (const item of vArray(k.customRules, '自定义规则', { max: 30 })) {
+      if (!item || typeof item !== 'object') continue;
+      const name = vText(item.name, '规则名称', { max: 40 });
+      if (!name) continue;
+      customRules.push({
+        id: vText(item.id, '规则编号', { max: 40 }) || `custom-${customRules.length + 1}`,
+        name,
+        note: vText(item.note, '规则说明', { max: 400 }),
+        enabled: vBool(item.enabled, true),
+      });
+    }
+    out.kpcp = { enabled: kpcpEnabled, toggles, customRules };
+  }
 
   if (need('chars')) {
     const c = parseChars(b.chars);
@@ -632,23 +674,11 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
 
   if (need('background')) {
     const g = b.background && typeof b.background === 'object' ? b.background : {};
-    out.background = {
-      appearance: vText(g.appearance, '形象描述', { max: 600 }),
-      traits: vText(g.traits, '特质', { max: 600 }),
-      ideology: vText(g.ideology, '思想与信念', { max: 600 }),
-      injuries: vText(g.injuries, '伤口和疤痕', { max: 600 }),
-      people: vText(g.people, '重要之人', { max: 600 }),
-      phobias: vText(g.phobias, '恐惧症和躁狂症', { max: 600 }),
-      locations: vText(g.locations, '意义非凡之地', { max: 600 }),
-      tomes: vText(g.tomes, '神话典籍/法术/魔法物品', { max: 600 }),
-      possessions: vText(g.possessions, '宝贵之物', { max: 600 }),
-      encounters: vText(g.encounters, '第三类接触', { max: 600 }),
-    };
+    const fields = backgroundFieldsOf(R);
+    out.background = {};
+    for (const [key, label] of fields) out.background[key] = vText(g[key], label, { max: 600 });
   } else if (!partial) {
-    out.background = {
-      appearance: '', traits: '', ideology: '', injuries: '', people: '',
-      phobias: '', locations: '', tomes: '', possessions: '', encounters: '',
-    };
+    out.background = Object.fromEntries(backgroundFieldsOf(R).map(([k]) => [k, '']));
   }
 
   // 「模组经历」由角色卡详情页的专用接口维护，车卡编辑器并不管理它。
@@ -698,6 +728,8 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
     out.coreChar = out.coreChar ?? '';
     out.talents = out.talents ?? [];
     out.keyConnection = out.keyConnection ?? '';
+    out.kpcp = out.kpcp ?? { enabled: false, toggles: {}, customRules: [] };
+    out.extraLanguages = out.extraLanguages ?? [];
   }
   return out;
 }
@@ -706,7 +738,7 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
 const STAT_KEYS = ['STR', 'CON', 'SIZ', 'DEX', 'APP', 'INT', 'POW', 'EDU'];
 
 /** 职业点公式：接受 { terms:[{stat,mult}], max:[{stat,mult}] }，并做白名单校验 */
-function parsePointSpec(value) {
+function parsePointSpec(value, allowEmpty = false) {
   const src = value && typeof value === 'object' ? value : {};
   const read = (arr, field) => vArray(arr, field, { max: 8 }).map((t) => {
     const stat = vEnum(t?.stat, `${field} 属性`, STAT_KEYS);
@@ -715,7 +747,7 @@ function parsePointSpec(value) {
   });
   const terms = read(src.terms, '职业点公式');
   const max = read(src.max, '职业点取大项');
-  if (terms.length === 0 && max.length === 0) throw badRequest('职业点公式至少要有一项');
+  if (!allowEmpty && terms.length === 0 && max.length === 0) throw badRequest('职业点公式至少要有一项');
   return { terms, max };
 }
 
@@ -742,22 +774,45 @@ function parseChoiceGroups(value) {
     .filter((g) => g.length > 0);
 }
 
+/** 职业包条目：{key,label,final,choose?}（守秘人伴侣的 25 个固定职业包 / KP 自定义包） */
+function parsePackageEntries(value) {
+  return vArray(value, '职业包技能', { max: 40 })
+    .filter((e) => e && typeof e === 'object')
+    .map((e) => {
+      const key = vStr(e.key, '技能键', { max: 40 });
+      if (!key || !SKILL_BY_KEY[key]) return null;
+      return {
+        key,
+        label: vStr(e.label, '专精标签', { max: 24 }),
+        final: vInt(e.final, '技能终值', { min: 0, max: 999, def: 0 }),
+        choose: Array.isArray(e.choose)
+          ? e.choose.map((x) => vStr(x, '专精候选', { max: 24 })).filter(Boolean).slice(0, 8)
+          : [],
+      };
+    })
+    .filter(Boolean);
+}
+
 export function parseOccupationTemplate(body) {
   const b = body || {};
   const crMin = vInt(b.crMin, '信用评级下限', { min: 0, max: 99, def: 0 });
   const crMax = vInt(b.crMax, '信用评级上限', { min: 0, max: 99, def: 99 });
   if (crMin > crMax) throw badRequest('信用评级下限不能大于上限');
   return {
-    gameSystem: vEnum(b.gameSystem, '游戏规则', ['classic7e', 'pulp'], 'classic7e'),
+    gameSystem: vEnum(b.gameSystem, '游戏规则', ['classic7e', 'pulp', 'kpcp'], 'classic7e'),
     name: vStr(b.name, '职业名称', { min: 1, max: 24, required: true }),
+    kind: vEnum(b.kind, '职业类型', ['formula', 'package'], 'formula'),
+    total: vInt(b.total, '职业包合计', { min: 0, max: 2000, def: 0 }),
+    creditFixed: vInt(b.creditFixed, '固定信用评级', { min: 0, max: 99, def: 0 }),
     cr: [crMin, crMax],
     attr: vStr(b.attr, '技能点说明', { max: 40 }) || '自定义公式',
-    pts: parsePointSpec(b.pts),
+    pts: parsePointSpec(b.pts, (b.kind === 'package')),
     keys: parseOccupationKeys(b.keys),
     choices: parseChoiceGroups(b.choices),
     customKeys: parseCustomKeys(b.customKeys),
     social: vInt(b.social, '社交技能槽位', { min: 0, max: 6, def: 0 }),
     free: vInt(b.free, '任意特长槽位', { min: 0, max: 8, def: 0 }),
+    entries: parsePackageEntries(b.entries),
     desc: vText(b.desc, '职业简介', { max: 200 }),
   };
 }

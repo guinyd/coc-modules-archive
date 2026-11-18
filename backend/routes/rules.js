@@ -12,12 +12,13 @@ import { save, db } from '../lib/db.js';
 import { requireAuth } from '../lib/auth.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import {
-  isChief, isKeeper, allRuleSets, ruleSetById, ruleSetSummary, activeRuleSet, systemOf, baseAuditRules,
+  isChief, isKeeper, allRuleSets, ruleSetById, ruleSetSummary, activeRuleSet, systemOf, baseAuditRules, slotsOf, SYSTEM_SLOTS,
 } from '../lib/roles.js';
 import {
   AUDIT_RULE_META, DEFAULT_AUDIT_RULES, HOUSE_RULE_LIMIT, normalizeHouseRules,
 } from '../../shared/coc7e.js';
 import { parseAuditRules } from '../lib/validate.js';
+import { KPCP_DEFAULT_RULES, normalizeKpcpRules } from '../../shared/rulesets/kpcp.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -46,7 +47,11 @@ function parseSetBody(body) {
   const auditRules = b.auditRules === undefined ? {} :
     (b.auditRules && typeof b.auditRules === 'object' ? diffRules(parseAuditRules(b.auditRules), gameSystem) : {});
   const houseRules = normalizeHouseRules(Array.isArray(b.houseRules) ? b.houseRules.slice(0, HOUSE_RULE_LIMIT) : []);
-  return { name: parseName(b.name), gameSystem, auditRules, houseRules };
+  // 守秘人伴侣房规：任意基础规则（七版 / 通克）都可以带；undefined 表示「本次不改动」
+  const kpcp = b.kpcp === undefined ? undefined : normalizeKpcpRules(b.kpcp);
+  // 规则集是否「开启了伴侣房规」——只有开启的集才会出现在开启伴侣层的卡的房规页里
+  const kpcpEnabled = b.kpcpEnabled === undefined ? undefined : b.kpcpEnabled === true;
+  return { name: parseName(b.name), gameSystem, auditRules, houseRules, kpcp, kpcpEnabled };
 }
 
 function findOwnedSet(req, id) {
@@ -92,6 +97,8 @@ router.get('/rule-sets', (req, res) => {
       // 玩家在「房规」页可展开查看自己将接受哪些校验。
       if (item) {
         item.auditRules = { ...baseAuditRules(item.gameSystem), ...(s.auditRules || {}) };
+        item.kpcpEnabled = s.kpcpEnabled === true;
+        if (s.kpcp && s.kpcpEnabled) item.kpcp = normalizeKpcpRules(s.kpcp);
         if (!keeper) item.isActive = false;
       }
       return item;
@@ -106,13 +113,15 @@ router.post('/rule-sets', (req, res) => {
   const body = req.body || {};
   const scope = body.scope === 'global' ? 'global' : 'personal';
   if (scope === 'global' && !isChief(req.user)) throw forbidden('只有首席守秘人可以发布全局规则集');
-  const { name, gameSystem, auditRules, houseRules } = parseSetBody(body);
+  const { name, gameSystem, auditRules, houseRules, kpcp, kpcpEnabled } = parseSetBody(body);
   const now = Date.now();
   const set = {
     id: newId(), name, gameSystem, scope,
     ownerId: scope === 'global' ? null : req.user.id,
     ownerName: req.user.username || '',
     auditRules, houseRules,
+    kpcp: kpcp === undefined ? null : kpcp,
+    kpcpEnabled: kpcpEnabled === true,
     createdAt: now, updatedAt: now,
   };
   if (scope === 'global') {
@@ -130,7 +139,7 @@ router.put('/rule-sets/active', (req, res) => {
   if (!isKeeper(req.user)) throw forbidden('只有守秘人可以启用规则集');
   const id = req.body?.id ?? null;
   const sys = systemOf(req.body?.gameSystem);
-  const slot = sys === 'pulp' ? 'activeRuleSetPulpId' : 'activeRuleSetId';
+  const slot = slotsOf(sys).active;
   if (id === null || id === '') {
     req.user[slot] = null;
     req.user.updatedAt = Date.now();
@@ -151,7 +160,7 @@ router.put('/rule-sets/active', (req, res) => {
 
 router.put('/rule-sets/:id', (req, res) => {
   const set = findOwnedSet(req, req.params.id);
-  const { name, auditRules, houseRules } = parseSetBody({
+  const { name, auditRules, houseRules, kpcp, kpcpEnabled } = parseSetBody({
     ...req.body,
     name: req.body?.name ?? set.name,
     gameSystem: req.body?.gameSystem ?? set.gameSystem,
@@ -159,6 +168,8 @@ router.put('/rule-sets/:id', (req, res) => {
   set.name = name;
   set.auditRules = auditRules;
   set.houseRules = houseRules;
+  if (kpcp !== undefined) set.kpcp = kpcp;
+  if (kpcpEnabled !== undefined) set.kpcpEnabled = kpcpEnabled;
   // 记录真实用户名：首席改全局集时也刷新署名
   if (set.scope === 'global' && isChief(req.user)) set.ownerName = req.user.username || '';
   set.updatedAt = Date.now();
@@ -177,7 +188,9 @@ router.delete('/rule-sets/:id', (req, res) => {
     if (owner) {
       owner.ruleSets = (owner.ruleSets || []).filter((s) => s.id !== set.id);
       if (owner.activeRuleSetId === set.id) owner.activeRuleSetId = null;
-      if (owner.activeRuleSetPulpId === set.id) owner.activeRuleSetPulpId = null;
+      for (const sl of Object.values(SYSTEM_SLOTS)) {
+        if (owner[sl.active] === set.id) owner[sl.active] = null;
+      }
     }
   }
   // 引用它的角色卡保留 ruleSnapshot；未提交的卡清掉选择，避免指向空规则集
@@ -195,7 +208,7 @@ router.put('/rule-sets/:id/active', (req, res) => {
   const set = ruleSetById(req.params.id);
   if (!set) throw notFound('规则集不存在');
   const sys = systemOf(set.gameSystem);
-  if (sys === 'pulp') req.user.activeRuleSetPulpId = set.id;
+  if (sys !== 'classic7e') req.user[slotsOf(sys).active] = set.id;
   else req.user.activeRuleSetId = set.id;
   audit(req, 'ruleset.activate', { setId: set.id, name: set.name, gameSystem: sys });
   save();
@@ -217,6 +230,8 @@ router.post('/rule-sets/:id/duplicate', (req, res) => {
     ownerName: req.user.username || '',
     auditRules: { ...(src.auditRules || {}) },
     houseRules: normalizeHouseRules(src.houseRules || []),
+    kpcp: src.kpcp ? normalizeKpcpRules(src.kpcp) : null,
+    kpcpEnabled: src.kpcpEnabled === true,
     createdAt: now, updatedAt: now,
   };
   req.user.ruleSets = [...(req.user.ruleSets || []), set];

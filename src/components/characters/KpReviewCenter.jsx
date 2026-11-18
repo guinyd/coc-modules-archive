@@ -21,7 +21,10 @@ import {
   ALL_CHARS, AUDIT_RULE_META, CHAR_LABEL, DEFAULT_AUDIT_RULES, REVIEW_LABEL, SKILLS, SKILL_BY_KEY,
   SOCIAL_SKILLS, STATUS_LABEL, houseRuleSummary,
 } from '../../../shared/coc7e.js';
-import { CLASSIC_ID, GAME_SYSTEMS, resolveRuleset } from '../../../shared/rulesets/index.js';
+import { CLASSIC_ID, GAME_SYSTEMS, KPCP_ID, resolveCardRuleset, resolveRuleset } from '../../../shared/rulesets/index.js';
+import {
+  KPCP_TOGGLES, KPCP_TOGGLE_GROUPS, kpcpRuleSummary, normalizeKpcpRules,
+} from '../../../shared/rulesets/kpcp.js';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../../lib/api.js';
 import { eduGrowthLabel, grantEduReroll } from '../../../shared/coc7e.js';
 import EduQuickModal from './EduQuickModal.jsx';
@@ -599,7 +602,212 @@ function ruleTypeLabel(type) {
   return HOUSE_TYPES.find((t) => t.key === type)?.label || type;
 }
 
+/** 守秘人伴侣房规抽屉：规则集级开关 + 团内自定义规则，保存后对本规则下所有卡生效 */
+function KpcpRulesDrawer({ open, value, enabled, busy, onClose, onSave }) {
+  const [draft, setDraft] = useState(() => normalizeKpcpRules(value));
+  const [name, setName] = useState('');
+  const [note, setNote] = useState('');
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const toggles = draft.toggles || {};
+  const customRules = draft.customRules || [];
+  const summary = kpcpRuleSummary(draft);
+  const setToggle = (id, v) => setDraft({ ...draft, toggles: { ...toggles, [id]: v } });
+  const addRule = () => {
+    const n = name.trim();
+    if (!n) return;
+    setDraft({
+      ...draft,
+      customRules: [...customRules, {
+        id: `kr_${Date.now().toString(36)}`, name: n.slice(0, 40), note: note.trim().slice(0, 200), enabled: true,
+      }].slice(0, 30),
+    });
+    setName(''); setNote('');
+  };
+  const toggleRule = (id) => setDraft({
+    ...draft,
+    customRules: customRules.map((r) => (r.id === id ? { ...r, enabled: r.enabled === false } : r)),
+  });
+  const removeRule = (id) => setDraft({ ...draft, customRules: customRules.filter((r) => r.id !== id) });
+
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex justify-end">
+      <button type="button" aria-label="关闭" className="absolute inset-0 bg-black/55" onClick={onClose} />
+      <div role="dialog" aria-label="守秘人伴侣房规" className="relative flex h-full w-full max-w-[560px] flex-col border-l border-line-strong bg-paper-raised shadow-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-line-strong px-5 py-4">
+          <div>
+            <h3 className="flex items-center gap-2 font-serif text-[19px] font-bold text-ink">
+              <Shield className="h-4 w-4 text-amber-500" />守密人伴侣房规
+            </h3>
+            <p className="mt-1 text-[13px] leading-relaxed text-ink-mute">
+              这些规则随规则集保存，只对<b>开启「守秘人伴侣」</b>的卡生效——七版与通克卡都可以开启，未开启的卡不受影响。
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-[2px] p-1 text-ink-mute hover:text-ink" aria-label="关闭抽屉">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+          <div className="rounded-[2px] border border-amber-600/45 bg-amber-500/[0.06] p-3">
+            <Toggle
+              checked={enabled}
+              onChange={(v) => onSave({ enabled: v, draft })}
+              label={<span className="text-[14px] font-semibold text-ink">启用伴侣房规（本规则集）</span>}
+              hint={<span className="text-[12.5px] leading-relaxed text-ink-mute">
+                只有开启后，这套规则集才会出现在「开启守秘人伴侣」的卡的房规页里；未开启时即使配了开关也不会生效。
+              </span>}
+            />
+          </div>
+          {KPCP_TOGGLE_GROUPS.map((group) => {
+            const items = KPCP_TOGGLES.filter((t) => t.group === group);
+            if (!items.length) return null;
+            return (
+              <section key={group} className="space-y-2">
+                <h4 className="text-[13px] font-bold tracking-[0.16em] text-ink-mute">{group}</h4>
+                <div className="space-y-2">
+                  {items.map((t) => (
+                    <div key={t.id} className="rounded-[2px] border border-line-strong bg-paper/60 p-3">
+                      <Toggle
+                        checked={toggles[t.id] !== false}
+                        onChange={(v) => setToggle(t.id, v)}
+                        label={<span className="text-[14px] font-semibold text-ink">{t.label}</span>}
+                        hint={<span className="text-[12.5px] leading-relaxed text-ink-mute">{t.hint}{t.bookRef ? `（${t.bookRef}）` : ''}</span>}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+
+          <section className="space-y-3 border-t border-line pt-4">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-[13px] font-bold tracking-[0.16em] text-ink-mute">团内自定义规则</h4>
+              <span className="text-[12.5px] text-ink-mute">{customRules.filter((r) => r.enabled !== false).length} / {customRules.length} 生效</span>
+            </div>
+            {customRules.length ? (
+              <ul className="space-y-2">
+                {customRules.map((r) => (
+                  <li key={r.id} className="flex items-start gap-2 rounded-[2px] border border-line-strong bg-paper/60 p-3">
+                    <Toggle checked={r.enabled !== false} onChange={() => toggleRule(r.id)} label={<span className="text-[14px] text-ink">{r.name}</span>} />
+                    <p className="min-w-0 flex-1 text-[12.5px] leading-relaxed text-ink-mute">{r.note || '（未填写说明）'}</p>
+                    <button type="button" className="shrink-0 text-ink-mute hover:text-red-500" onClick={() => removeRule(r.id)} title="删除这条规则">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[13px] text-ink-mute">还没有自定义规则。可把本团的临时裁定写在这里，随规则集一起保存。</p>
+            )}
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_auto] sm:items-end">
+              <Field label="规则名"><Input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} placeholder="例：追击用敏捷对抗" /></Field>
+              <Field label="说明"><Input value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} placeholder="例：失败者失去 1D6 体力并脱离近身" /></Field>
+              <Button type="button" variant="secondary" onClick={addRule} disabled={!name.trim()}><Plus className="h-4 w-4" />添加</Button>
+            </div>
+          </section>
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-line-strong px-5 py-3">
+          <span className="text-[12.5px] text-ink-mute">已启用 {summary.enabledCount} / {KPCP_TOGGLES.length} 项 · 团规 {customRules.length} 条</span>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="ghost" onClick={onClose}>取消</Button>
+            <Button type="button" onClick={() => onSave({ enabled, draft })} disabled={busy}><Save className="h-4 w-4" />{busy ? '保存中…' : '保存房规'}</Button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 /** 房规 + 审卡规则同一页：规则集切换、规则编辑、自定义规则编辑 */
+/**
+ * 规则集详情抽屉：只读预览「审卡规则 + 自定义规则 + 守密人伴侣房规」，
+ * 给玩家与 KP 一个不用进编辑态就能看全的地方。
+ */
+function RuleSetDetailDrawer({ open, set, baseRules, onClose }) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+  if (!open || !set) return null;
+
+  const rules = { ...baseRules, ...(set.auditRules || {}) };
+  const changed = Object.keys(baseRules).filter((k) => rules[k] !== baseRules[k]);
+  const houses = Array.isArray(set.houseRules) ? set.houseRules : [];
+
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex justify-end">
+      <button type="button" aria-label="关闭" className="absolute inset-0 bg-black/55" onClick={onClose} />
+      <div role="dialog" aria-label="规则集详情" className="relative flex h-full w-full max-w-[560px] flex-col border-l border-line-strong bg-paper-raised shadow-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-line-strong px-5 py-4">
+          <div>
+            <h3 className="flex items-center gap-2 font-serif text-[19px] font-bold text-ink">
+              <Shield className="h-4 w-4 text-amber-500" />{set.name || '规则集'} · 详情
+            </h3>
+            <p className="mt-1 text-[13px] leading-relaxed text-ink-mute">
+              适用 {set.gameSystem === 'pulp' ? '通俗克苏鲁' : '克苏鲁的呼唤 第七版'}
+              {set.scope === 'global' ? ' · 全局默认' : ` · ${set.ownerName || '守秘人'}`}
+              {set.isActive ? ' · 当前使用' : ''}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-[2px] p-1 text-ink-mute hover:text-ink" aria-label="关闭抽屉">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+          <section className="space-y-2">
+            <h4 className="text-[13px] font-bold tracking-[0.16em] text-ink-mute">审卡规则</h4>
+            {changed.length ? (
+              <ul className="space-y-1.5">
+                {changed.map((k) => {
+                  const meta = AUDIT_RULE_META.find((m) => m.key === k);
+                  const val = rules[k];
+                  return (
+                    <li key={k} className="flex items-baseline justify-between gap-3 rounded-[2px] border border-line-strong bg-paper/60 px-3 py-2">
+                      <span className="text-[14px] text-ink">{meta?.label || k}</span>
+                      <span className="shrink-0 font-mono text-[13px] text-ink-soft">{typeof val === 'boolean' ? (val ? '开' : '关') : val}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-[13px] text-ink-mute">与官方基线一致，没有改动。</p>
+            )}
+          </section>
+
+          <section className="space-y-2">
+            <h4 className="text-[13px] font-bold tracking-[0.16em] text-ink-mute">自定义规则（房规）</h4>
+            {houses.length ? (
+              <ul className="space-y-1.5">
+                {houses.map((r, i) => (
+                  <li key={r.id || i} className="rounded-[2px] border border-line-strong bg-paper/60 px-3 py-2">
+                    <span className="text-[14px] text-ink">{houseRuleText(r)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[13px] text-ink-mute">这套规则集没有额外房规。</p>
+            )}
+          </section>
+
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function RulesTab({ showToast, showConfirm, currentUser }) {
   const isChief = currentUser?.kpRank === 'chief';
   const [rules, setRules] = useState(DEFAULT_AUDIT_RULES);
@@ -607,6 +815,10 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
   const [selectedId, setSelectedId] = useState('');
   const [setName, setSetName] = useState('');
   const [houseRules, setHouseRules] = useState([]);
+  const [kpcpRules, setKpcpRules] = useState(() => normalizeKpcpRules(null));
+  const [kpcpEnabled, setKpcpEnabled] = useState(false);
+  const [kpcpOpen, setKpcpOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [draftData, setDraftData] = useState({ rules: DEFAULT_AUDIT_RULES, houseRules: [] });
   const [draft, setDraft] = useState(blankDraft);
   const [loading, setLoading] = useState(true);
@@ -614,7 +826,10 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
   const [gameSystem, setGameSystem] = useState(CLASSIC_ID);
 
   const R = useMemo(() => resolveRuleset(gameSystem), [gameSystem]);
-  const isPulp = R.id !== CLASSIC_ID;
+  const kpcpSummary = useMemo(() => kpcpRuleSummary(kpcpRules), [kpcpRules]);
+  const isPulp = R.id === 'pulp';
+  // 伴侣房规是叠加层：七版与通克规则集都可以带自己的一套
+  const isKpcp = true;
   // 每套游戏规则各有自己的官方基线：官方 7e 用内置默认，通克再叠加规则集里的差异项
   const baseRules = useMemo(() => ({ ...DEFAULT_AUDIT_RULES, ...(R.auditRules || {}) }), [R]);
   const systemSets = useMemo(
@@ -636,6 +851,8 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
     setSetName('');
     setRules({ ...baseRules, ...(data?.rules || {}) });
     setHouseRules((data?.houseRules || []).map((r) => ({ ...r })));
+    setKpcpRules(normalizeKpcpRules(data?.draftKpcpRules || data?.kpcpRules));
+    setKpcpEnabled(data?.kpcpEnabled === true);
   }, [baseRules]);
 
   const fillSet = useCallback((set) => {
@@ -643,6 +860,8 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
     setSetName(set.name || '');
     setRules({ ...baseRules, ...(set.auditRules || {}) });
     setHouseRules((set.houseRules || []).map((r) => ({ ...r })));
+    setKpcpRules(normalizeKpcpRules(set.kpcp));
+    setKpcpEnabled(set.kpcpEnabled === true);
   }, [baseRules]);
 
   const refresh = useCallback(async (preferId, systemOverride) => {
@@ -713,6 +932,7 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
           gameSystem,
           auditRules: rules,
           houseRules: houseRules.filter((r) => r.type !== 'deriveBase'),
+          ...(isKpcp ? { kpcp: kpcpRules, kpcpEnabled } : {}),
         });
       } else {
         await apiPut(`/api/rule-sets/${selected.id}`, {
@@ -720,9 +940,33 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
           gameSystem,
           auditRules: rules,
           houseRules,
+          ...(isKpcp ? { kpcp: kpcpRules, kpcpEnabled } : {}),
         });
       }
     }, isDraft ? '临时规则已保存：只对你生效，不会新建规则集' : '规则集已保存', isDraft ? '' : selectedId);
+  };
+
+  const saveKpcpRules = async ({ enabled, draft: next }) => {
+    const value = normalizeKpcpRules(next);
+    const on = enabled === true;
+    setBusy(true);
+    try {
+      if (isDraft) {
+        await apiPut('/api/admin/audit-rules', {
+          gameSystem, auditRules: rules, kpcp: value, kpcpEnabled: on,
+          houseRules: houseRules.filter((r) => r.type !== 'deriveBase'),
+        });
+      } else {
+        await apiPut(`/api/rule-sets/${selected.id}`, {
+          name: (setName || '').trim() || '我的规则集', gameSystem,
+          auditRules: rules, houseRules, kpcp: value, kpcpEnabled: on,
+        });
+      }
+      setKpcpRules(value);
+      setKpcpEnabled(on);
+      await refresh(isDraft ? '' : selectedId);
+      showToast(on ? '守秘人伴侣房规已保存并启用' : '已关闭这套规则集的伴侣房规');
+    } catch (err) { showToast(err.message, 'error'); } finally { setBusy(false); }
   };
 
   const newSet = async () => {
@@ -830,10 +1074,40 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
   const stateTone = isDraft ? 'amber' : locked ? 'slate' : 'cyan';
 
   // 通克没有年龄补正与教育增强，「忽略年龄」房规对通克无意义
-  const typeOptions = HOUSE_TYPES.filter((t) => (allowDeriveBase || t.key !== 'deriveBase') && !(isPulp && t.key === 'ignoreAge'));
+  // 「忽略年龄」是独立开关，不再出现在类型下拉里
+  const typeOptions = HOUSE_TYPES.filter((t) => t.key !== 'ignoreAge' && (allowDeriveBase || t.key !== 'deriveBase'));
+  const ignoreAgeOn = houseRules.some((r) => r?.type === 'ignoreAge');
+  const setIgnoreAge = (on) => setHouseRules((prev) => {
+    const rest = prev.filter((r) => r?.type !== 'ignoreAge');
+    return on ? [...rest, { id: `hr_ignoreAge`, type: 'ignoreAge' }] : rest;
+  });
 
   return (
     <div className="space-y-5">
+      <RuleSetDetailDrawer
+        open={detailOpen}
+        set={selected}
+        baseRules={baseRules}
+        onClose={() => setDetailOpen(false)}
+      />
+
+      <KpcpRulesDrawer
+        key={kpcpOpen ? 'kpcp-open' : 'kpcp-closed'}
+        open={isKpcp && kpcpOpen}
+        value={kpcpRules}
+        enabled={kpcpEnabled}
+        busy={busy}
+        onClose={() => setKpcpOpen(false)}
+        onSave={async (payload) => {
+          if (payload && typeof payload === 'object' && 'draft' in payload) {
+            await saveKpcpRules(payload);
+            if (payload.enabled === true) setKpcpOpen(false);
+          } else {
+            await saveKpcpRules({ enabled: kpcpEnabled, draft: payload });
+            setKpcpOpen(false);
+          }
+        }}
+      />
       {/* -------------------------------------------------- 规则集 */}
       <Panel>
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line-strong px-5 py-3.5">
@@ -879,19 +1153,25 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="选择规则集">
-              <Select
-                value={selectedId}
-                onChange={(e) => pickSet(e.target.value)}
-                disabled={loading || busy}
-              >
-                <option value="">— 未选择 —</option>
-                {systemSets.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}{s.scope === 'global' ? '（全局）' : `（${s.ownerName || '守秘人'}）`}{s.isActive ? ' · 当前使用' : ''}
-                  </option>
-                ))}
-              </Select>
+            <Field label="选择规则集" hint="点「详情」可在侧边抽屉里看全这套规则集的审卡规则、房规与伴侣房规">
+              <div className="flex items-center gap-2">
+                <Select
+                  value={selectedId}
+                  onChange={(e) => pickSet(e.target.value)}
+                  disabled={loading || busy}
+                  className="min-w-0 flex-1"
+                >
+                  <option value="">— 未选择 —</option>
+                  {systemSets.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}{s.scope === 'global' ? '（全局）' : `（${s.ownerName || '守秘人'}）`}{s.isActive ? ' · 当前使用' : ''}
+                    </option>
+                  ))}
+                </Select>
+                <Button variant="ghost" onClick={() => setDetailOpen(true)} disabled={!selected}>
+                  <Eye className="w-4 h-4" />详情
+                </Button>
+              </div>
             </Field>
             <Field label="规则集名称" hint={isDraft ? '未选择规则集时不能命名' : locked ? '这套规则集不由你维护，名称只读' : undefined}>
               <Input
@@ -946,7 +1226,7 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
         </div>
         <div className="space-y-5 p-5">
           <p className="text-[16px] leading-relaxed text-slate-500">
-            默认值全部来自<b className="text-slate-300">{R.name}</b>的官方规则书{isPulp ? '（含通克专属的原型、天赋、奖励点与技能上限校验）' : ''}。
+            默认值全部来自<b className="text-slate-300">{R.name}</b>的官方规则书{isPulp ? '（含通克专属的原型、天赋、奖励点与技能上限校验）' : isKpcp ? '（含伴侣版背景 8 栏、职业包合计与专精下限校验）' : ''}。
           </p>
 
           <fieldset disabled={locked} className={cx('m-0 min-w-0 space-y-5 border-0 p-0', locked && 'opacity-70')}>
@@ -1030,6 +1310,46 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
               </span>
             </div>
           </fieldset>
+
+          {isKpcp ? (
+            <div className="mt-4 rounded-[2px] border border-amber-600/40 bg-amber-500/[0.05] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Shield className="h-4 w-4 text-amber-500" strokeWidth={1.7} />
+                  <h4 className="font-serif text-[16px] font-bold text-slate-100">守密人伴侣房规</h4>
+                  <Badge className={BADGE_LG} tone={kpcpEnabled ? 'amber' : 'slate'}>
+                    {kpcpEnabled ? `已启用 · ${kpcpSummary.enabledCount} / ${KPCP_TOGGLES.length} 项` : '未启用'}
+                  </Badge>
+                  {kpcpSummary.customRules.length ? (
+                    <Badge className={BADGE_LG} tone="slate">团规 {kpcpSummary.customRules.length} 条</Badge>
+                  ) : null}
+                </div>
+                <Button variant="secondary" onClick={() => setKpcpOpen(true)} disabled={loading || busy || locked}>
+                  <Wand2 className="w-4 h-4" />{kpcpEnabled ? '展开设置' : '启用并设置'}
+                </Button>
+              </div>
+              <p className="mt-2 text-[13.5px] leading-relaxed text-slate-500">
+                伴侣版把大量规则做成了可变项：开关与团规只放在这里，由守秘人统一设置。
+                <b>{kpcpEnabled ? '本规则集已开启伴侣房规' : '本规则集尚未开启伴侣房规'}</b>
+                —— 只有开启的规则集才会出现在「开启守秘人伴侣」的卡的房规页里，玩家选中后才生效。
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {kpcpSummary.items.filter((i) => i.on).map((i) => (
+                  <span key={i.id} className="rounded-[2px] border border-line-strong bg-paper-deep/40 px-2 py-0.5 text-[12.5px] text-slate-300">{i.label}</span>
+                ))}
+                {kpcpSummary.items.every((i) => !i.on) ? (
+                  <span className="text-[13px] text-slate-500">当前没有开启任何可选规则。</span>
+                ) : null}
+              </div>
+              {kpcpSummary.customRules.length ? (
+                <ul className="mt-2 space-y-1">
+                  {kpcpSummary.customRules.map((r) => (
+                    <li key={r.id} className="text-[13px] leading-relaxed text-slate-400">· {r.name}{r.note ? `：${r.note}` : ''}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </Panel>
 
@@ -1076,6 +1396,15 @@ function RulesTab({ showToast, showConfirm, currentUser }) {
                 ))}
               </div>
             )}
+
+            <div className="rounded-[2px] border border-line-strong bg-paper-raised p-3">
+              <Toggle
+                checked={ignoreAgeOn}
+                onChange={setIgnoreAge}
+                label="忽略年龄规则（房规开关）"
+                hint="开启后：车卡不套用年龄补正、不进行教育增强，年龄可填任意非负整数；审卡也不再提示年龄相关项。"
+              />
+            </div>
 
             <div className="border-t border-line pt-4">
               <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
@@ -1408,6 +1737,7 @@ function blankTemplate() {
     id: '', gameSystem: CLASSIC_ID, name: '', crMin: 0, crMax: 99, attr: '教育×4',
     pts: { terms: [{ stat: 'EDU', mult: 4 }], max: [] },
     keys: [], customKeys: [], choices: [], social: 0, free: 0, desc: '',
+    kind: 'formula', total: 0, creditFixed: 0, entries: [],
   };
 }
 
@@ -1435,7 +1765,11 @@ function DrawerField({ label, hint, required, className, children }) {
 /** 职业模板编辑器：勾选本职技能 + 组合技能点公式（右侧抽屉，避免宽表被裁切） */
 function TemplateEditor({ value, onClose, onSaved, showToast }) {
   const [form, setForm] = useState(() => ({ ...blankTemplate(), ...value, customKeys: value.customKeys || [] }));
-  const R = useMemo(() => resolveRuleset(form.gameSystem || CLASSIC_ID), [form.gameSystem]);
+  // 模板技能池按「归属规则版本」取：pulp 用通克表，kpcp 用伴侣修订表，其余七版表
+  const R = useMemo(() => {
+    const sys = form.gameSystem === KPCP_ID ? CLASSIC_ID : (form.gameSystem || CLASSIC_ID);
+    return resolveCardRuleset({ gameSystem: sys, kpcp: { enabled: form.gameSystem === KPCP_ID } });
+  }, [form.gameSystem]);
   const defs = R.skillByKey;
   const [q, setQ] = useState('');
   const [customKey, setCustomKey] = useState('');
@@ -1496,6 +1830,11 @@ function TemplateEditor({ value, onClose, onSaved, showToast }) {
     });
   };
 
+  const setEntry = (idx, patch) => setForm((prev) => ({
+    ...prev,
+    entries: (prev.entries || []).map((e, i) => (i === idx ? { ...e, ...patch } : e)),
+  }));
+
   const addTerm = () => setForm((prev) => ({ ...prev, pts: { ...prev.pts, terms: [...prev.pts.terms, { stat: 'EDU', mult: 2 }] } }));
   const removeTerm = (idx) => setForm((prev) => ({ ...prev, pts: { ...prev.pts, terms: prev.pts.terms.filter((_, i) => i !== idx) } }));
   const toggleMax = (stat) => setForm((prev) => {
@@ -1516,9 +1855,9 @@ function TemplateEditor({ value, onClose, onSaved, showToast }) {
       const payload = {
         gameSystem: form.gameSystem || CLASSIC_ID,
         name: form.name,
-        crMin: form.crMin,
-        crMax: form.crMax,
-        attr: form.attr,
+        crMin: form.kind === 'package' ? form.creditFixed : form.crMin,
+        crMax: form.kind === 'package' ? form.creditFixed : form.crMax,
+        attr: form.kind === 'package' ? '固定职业包' : form.attr,
         pts: { terms: form.pts.terms, max: form.pts.max },
         keys: form.keys,
         customKeys: form.customKeys || [],
@@ -1526,6 +1865,10 @@ function TemplateEditor({ value, onClose, onSaved, showToast }) {
         social: form.social,
         free: form.free,
         desc: form.desc,
+        kind: form.kind || 'formula',
+        total: form.kind === 'package' ? form.total : 0,
+        creditFixed: form.kind === 'package' ? form.creditFixed : 0,
+        entries: form.kind === 'package' ? (form.entries || []) : [],
       };
       if (form.id) await apiPut(`/api/admin/occupations/${form.id}`, payload);
       else await apiPost('/api/admin/occupations', payload);
@@ -1535,6 +1878,8 @@ function TemplateEditor({ value, onClose, onSaved, showToast }) {
       showToast(err.message, 'error');
     } finally { setBusy(false); }
   };
+
+  const entriesTotal = (form.entries || []).reduce((sum, e) => sum + (Number(e.final) || 0), 0);
 
   const formulaText = [
     ...form.pts.terms.map((t) => `${STAT_OPTIONS.find((s) => s[0] === t.stat)?.[1] || t.stat}×${t.mult}`),
@@ -1585,7 +1930,7 @@ function TemplateEditor({ value, onClose, onSaved, showToast }) {
               hint="模板只出现在所选规则的车卡职业列表里；切换规则会清空已勾选的内置本职技能"
             >
               <div className="flex flex-wrap gap-2">
-                {GAME_SYSTEMS.map((g) => (
+                {[...GAME_SYSTEMS, { id: KPCP_ID, name: '守秘人伴侣（叠加层）' }].map((g) => (
                   <button
                     key={g.id}
                     type="button"
@@ -1601,6 +1946,33 @@ function TemplateEditor({ value, onClose, onSaved, showToast }) {
               </div>
             </DrawerField>
 
+            {(form.gameSystem || CLASSIC_ID) === KPCP_ID ? (
+              <DrawerField
+                className="sm:col-span-2"
+                label="模板类型"
+                hint="守秘人伴侣的官方职业是「职业包」：每项技能给定固定终值，合计 300（飞行员 340、私家侦探 290）"
+              >
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { id: 'formula', label: '公式点法（七版口径）' },
+                    { id: 'package', label: '职业包（固定终值）' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, kind: opt.id }))}
+                      className={cx('border px-3.5 py-2 text-[14px] font-semibold transition-colors',
+                        (form.kind || 'formula') === opt.id
+                          ? 'border-amber-600 bg-amber-600 text-paper-raised'
+                          : 'border-line-strong bg-paper-raised text-slate-400 hover:border-amber-600/60')}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </DrawerField>
+            ) : null}
+
             <DrawerField className="sm:col-span-2" label="职业名称" required>
               <Input
                 className={EDITOR_INPUT}
@@ -1610,6 +1982,90 @@ function TemplateEditor({ value, onClose, onSaved, showToast }) {
                 placeholder="例：深潜者信徒"
               />
             </DrawerField>
+
+            {form.kind === 'package' ? (
+              <>
+                <DrawerField label="固定信用评级" hint="职业包按书给固定值">
+                  <NumberInput
+                    className={EDITOR_INPUT}
+                    min={0}
+                    max={99}
+                    value={form.creditFixed}
+                    onChange={(v) => setForm({ ...form, creditFixed: v === '' ? 0 : v })}
+                  />
+                </DrawerField>
+                <DrawerField label="技能点合计" hint={`包内合计：${entriesTotal} / ${form.total || 0} 点`}>
+                  <NumberInput
+                    className={EDITOR_INPUT}
+                    min={0}
+                    max={2000}
+                    value={form.total}
+                    onChange={(v) => setForm({ ...form, total: v === '' ? 0 : v })}
+                  />
+                </DrawerField>
+
+                <DrawerField
+                  className="sm:col-span-2"
+                  label="职业包技能"
+                  hint="每行给定技能与固定终值；专精技能可选方向，「任选」留空表示由玩家选择"
+                >
+                  <div className="min-w-0 space-y-2.5 border border-line-strong bg-paper p-3.5">
+                    {(form.entries || []).map((e, i) => (
+                      <div key={i} className="flex flex-wrap items-center gap-2">
+                        <Select
+                          value={e.key}
+                          onChange={(ev) => setEntry(i, { key: ev.target.value, label: '' })}
+                          className="!min-w-[10rem] !py-2.5 !text-[14px]"
+                        >
+                          <option value="">选择技能…</option>
+                          {R.skills.map((sk) => (
+                            <option key={sk.key} value={sk.key}>{sk.name}</option>
+                          ))}
+                        </Select>
+                        {defs[e.key]?.spec ? (
+                          <Select
+                            value={e.label || ''}
+                            onChange={(ev) => setEntry(i, { label: ev.target.value })}
+                            className="!min-w-[8rem] !py-2.5 !text-[14px]"
+                          >
+                            <option value="">方向（任选）</option>
+                            {(R.specOptions?.[defs[e.key].spec] || []).map((label) => (
+                              <option key={label} value={label}>{label}</option>
+                            ))}
+                          </Select>
+                        ) : null}
+                        <NumberInput
+                          className="!w-[6rem]"
+                          min={0}
+                          max={999}
+                          value={e.final}
+                          onChange={(v) => setEntry(i, { final: v === '' ? 0 : v })}
+                        />
+                        <span className="font-mono text-[13px] text-slate-500">点</span>
+                        <button
+                          type="button"
+                          className="text-[13px] text-vermilion hover:underline"
+                          onClick={() => setForm((prev) => ({ ...prev, entries: prev.entries.filter((_, j) => j !== i) }))}
+                        >
+                          删除
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Button
+                        variant="secondary"
+                        onClick={() => setForm((prev) => ({ ...prev, entries: [...(prev.entries || []), { key: '', label: '', final: 0 }] }))}
+                      >
+                        <Plus className="h-4 w-4" />添加技能
+                      </Button>
+                      <span className={cx('text-[13.5px]', entriesTotal > (form.total || 0) && 'text-vermilion')}>
+                        合计 {entriesTotal} 点{form.total ? ` / 上限 ${form.total} 点` : ''}
+                      </span>
+                    </div>
+                  </div>
+                </DrawerField>
+              </>
+            ) : null}
 
             <DrawerField label="信用评级下限" hint="0–99">
               <NumberInput
@@ -1630,7 +2086,11 @@ function TemplateEditor({ value, onClose, onSaved, showToast }) {
               />
             </DrawerField>
 
-            <DrawerField className="sm:col-span-2" label="技能点公式" hint={`当前：${formulaText || '（未设置）'}`}>
+            <DrawerField
+              className={cx('sm:col-span-2', form.kind === 'package' && 'hidden')}
+              label="技能点公式"
+              hint={`当前：${formulaText || '（未设置）'}`}
+            >
               <div className="min-w-0 space-y-2.5 border border-line-strong bg-paper p-3.5">
                 {form.pts.terms.map((t, i) => (
                   <div key={i} className="flex flex-wrap items-center gap-2.5">

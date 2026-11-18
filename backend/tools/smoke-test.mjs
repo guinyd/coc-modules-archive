@@ -1389,6 +1389,191 @@ try {
     if (r?.id) await api('DELETE', `/api/rule-sets/${r.id}`, { token: A });
   }
 
+  section('多规则系统：守秘人伴侣规则层（v10.13）');
+  const kpTag = Date.now().toString(36);
+  const kpChars = { STR: 70, CON: 60, SIZ: 50, DEX: 60, APP: 60, INT: 60, POW: 60, EDU: 70 };
+  const kpBg = {
+    description: '总穿一件旧呢外套', personality: '遇事先记笔记', significantPeoplePlaces: '波士顿的旧书店',
+    treasuredItems: '母亲的怀表', woundsScars: '', fears: '', tomesSpellsArtifacts: '', encountersStrangeEntities: '',
+  };
+  // 伴侣层：基础规则仍是七版，靠 kpcp.enabled 叠加
+  const kpBody = {
+    name: `伴侣卡_${kpTag}`, playerName: '烟测', age: 30, gender: '男', era: '1920s',
+    gameSystem: 'classic7e', kpcp: { enabled: true }, occupationId: 'kpcp:antiquarian',
+    chars: kpChars, background: kpBg,
+  };
+  const kpCard = await api('POST', '/api/characters', { token: A, body: kpBody });
+  ok('可在七版卡上开启伴侣层', kpCard.status === 200
+    && kpCard.json?.gameSystem === 'classic7e' && kpCard.json?.kpcp?.enabled === true,
+    JSON.stringify(kpCard.json).slice(0, 200));
+  ok('伴侣层 HP = ⌊(CON+SIZ)/10⌋ = 11', kpCard.json?.derived?.hp === 11, String(kpCard.json?.derived?.hp));
+  ok('伴侣层兴趣点 = INT+EDU = 130', kpCard.json?.derived?.budget?.interest === 130,
+    JSON.stringify(kpCard.json?.derived?.budget || {}));
+  ok('职业包预算 300', kpCard.json?.derived?.budget?.occupation === 300,
+    String(kpCard.json?.derived?.budget?.occupation));
+  ok('职业包信用评级固定 30', kpCard.json?.derived?.creditRange?.[0] === 30
+    && kpCard.json?.derived?.creditRange?.[1] === 30, JSON.stringify(kpCard.json?.derived?.creditRange));
+  ok('伴侣层背景 8 栏', Object.keys(kpCard.json?.background || {}).length === 8,
+    String(Object.keys(kpCard.json?.background || {}).length));
+  ok('伴侣层术语已替换', kpCard.json?.derived?.ruleset?.terms?.temporary === '震骇',
+    JSON.stringify(kpCard.json?.derived?.ruleset?.terms || {}));
+  const kpRead = await api('GET', `/api/characters/${kpCard.json.id}`, { token: A });
+  ok('伴侣卡回读一致', kpRead.status === 200 && kpRead.json?.kpcp?.enabled === true
+    && kpRead.json?.gameSystem === 'classic7e');
+  const kpAudit = await api('POST', `/api/admin/audit/${kpCard.json.id}`, { token: A });
+  ok('伴侣卡审卡 stats 仍记基础规则',
+    kpAudit.status === 200 && kpAudit.json?.stats?.gameSystem === 'classic7e',
+    JSON.stringify(kpAudit.json?.stats || {}).slice(0, 160));
+  ok('伴侣卡不会误报通克专属规则项',
+    !(kpAudit.json?.findings || []).some((f) => ['archetypeRequired', 'bonusBudgetExceeded'].includes(f.id)));
+  ok('伴侣卡审卡采用伴侣基线（背景至少 4 栏）',
+    !(kpAudit.json?.findings || []).some((f) => f.id === 'backgroundMinFields'));
+
+  // 旧数据兼容：gameSystem:'kpcp' 的请求自动迁移为「七版 + 伴侣层」
+  const kpLegacy = await api('POST', '/api/characters', {
+    token: A, body: { ...kpBody, name: `旧伴侣卡_${kpTag}`, gameSystem: 'kpcp' },
+  });
+  ok('旧 gameSystem:kpcp 自动迁移为七版 + 伴侣层',
+    kpLegacy.status === 200 && kpLegacy.json?.gameSystem === 'classic7e'
+    && kpLegacy.json?.kpcp?.enabled === true, JSON.stringify(kpLegacy.json).slice(0, 200));
+  if (kpLegacy.json?.id) await api('DELETE', `/api/characters/${kpLegacy.json.id}`, { token: A });
+
+  // 六条房规挂在规则集上：只有带 kpcp 配置的规则集才能被伴侣卡选用
+  const kpPlainSet = await api('POST', '/api/rule-sets', {
+    token: A,
+    body: { name: `普通七版集_${kpTag}`, gameSystem: 'classic7e', scope: 'personal', auditRules: { charMax: 88 }, houseRules: [] },
+  });
+  const kpNoRules = await api('POST', '/api/characters', {
+    token: A, body: { ...kpBody, name: `无房规伴侣卡_${kpTag}`, ruleSetId: kpPlainSet.json?.item?.id },
+  });
+  ok('伴侣层卡不能选不带伴侣房规的规则集 → 400', kpNoRules.status === 400,
+    JSON.stringify(kpNoRules.json).slice(0, 160));
+
+  const kpSet = await api('POST', '/api/rule-sets', {
+    token: A,
+    body: {
+      name: `伴侣规则集_${kpTag}`, gameSystem: 'classic7e', scope: 'personal',
+      auditRules: { charMax: 82 }, houseRules: [],
+      kpcpEnabled: true,
+      kpcp: { toggles: { derivedBases: true, movRule: false }, customRules: [{ id: 'r1', name: '团规一', note: '测试', enabled: true }] },
+    },
+  });
+  ok('七版规则集可携带伴侣房规（并标记为已开启）', kpSet.status === 201
+    && kpSet.json?.item?.gameSystem === 'classic7e'
+    && kpSet.json?.item?.kpcpEnabled === true
+    && kpSet.json?.item?.kpcp?.toggles?.derivedBases === true,
+    JSON.stringify(kpSet.json).slice(0, 220));
+  const kpSetId = kpSet.json?.item?.id;
+  const kpSetList = await api('GET', '/api/rule-sets', { token: A });
+  ok('规则集列表回传伴侣房规',
+    Array.isArray(kpSetList.json?.items)
+    && (kpSetList.json.items.find((x) => x.id === kpSetId)?.kpcp?.customRules || []).length === 1);
+
+  const kpOffSet = await api('POST', '/api/rule-sets', {
+    token: A,
+    body: {
+      name: `未开启伴侣集_${kpTag}`, gameSystem: 'classic7e', scope: 'personal',
+      auditRules: {}, houseRules: [], kpcpEnabled: false,
+      kpcp: { toggles: { derivedBases: true } },
+    },
+  });
+  const kpOffId = kpOffSet.json?.item?.id;
+  ok('未开启的规则集不向玩家暴露伴侣房规',
+    kpOffSet.status === 201
+    && kpOffSet.json?.item?.kpcpEnabled === false
+    && kpOffSet.json?.item?.kpcp == null,
+    JSON.stringify(kpOffSet.json).slice(0, 200));
+  const kpOffUse = await api('POST', '/api/characters', {
+    token: A, body: { ...kpBody, name: `未开启伴侣集卡_${kpTag}`, ruleSetId: kpOffId },
+  });
+  ok('未开启伴侣房规的规则集不能被伴侣层卡选用 → 400', kpOffUse.status === 400,
+    JSON.stringify(kpOffUse.json).slice(0, 160));
+  if (kpOffId) await api('DELETE', `/api/rule-sets/${kpOffId}`, { token: A });
+
+  const kpWithSet = await api('POST', '/api/characters', {
+    token: A, body: { ...kpBody, name: `房规伴侣卡_${kpTag}`, ruleSetId: kpSetId },
+  });
+  ok('伴侣层卡可选带伴侣房规的规则集', kpWithSet.status === 200
+    && kpWithSet.json?.ruleSetId === kpSetId, JSON.stringify(kpWithSet.json).slice(0, 200));
+  const kpClimb = (kpWithSet.json?.derived?.skills || []).filter((x) => x.key === 'climb')[0];
+  ok('规则集开关生效（推导基础值 → 攀爬 35）', kpClimb?.base === 35, String(kpClimb?.base));
+  const kpMov = kpWithSet.json?.derived?.mov;
+  ok('规则集关闭移动力口径 → 回到七版 9', kpMov === 9, String(kpMov));
+  if (kpWithSet.json?.id) await api('DELETE', `/api/characters/${kpWithSet.json.id}`, { token: A });
+
+  const kpDraftPut = await api('PUT', '/api/admin/audit-rules', {
+    token: A,
+    body: { gameSystem: 'classic7e', auditRules: {}, houseRules: [], kpcp: { toggles: { interestEduInt: false } } },
+  });
+  ok('临时规则可保存伴侣房规', kpDraftPut.status === 200
+    && kpDraftPut.json?.draftKpcpRules?.toggles?.interestEduInt === false,
+    JSON.stringify(kpDraftPut.json?.draftKpcpRules || {}).slice(0, 200));
+  ok('临时伴侣房规只对该规则生效（通克不受影响）',
+    (await api('GET', '/api/admin/audit-rules?gameSystem=pulp', { token: A })).json?.draftKpcpRules == null);
+  await api('DELETE', '/api/admin/audit-rules?gameSystem=classic7e', { token: A });
+  if (kpSetId) await api('DELETE', `/api/rule-sets/${kpSetId}`, { token: A });
+  if (kpPlainSet.json?.item?.id) await api('DELETE', `/api/rule-sets/${kpPlainSet.json.item.id}`, { token: A });
+
+  // 自定义职业模板：kpcp 模板只在伴侣层卡上可见
+  const kpTpl = await api('POST', '/api/admin/occupations', {
+    token: A,
+    body: {
+      name: `伴侣模板_${kpTag}`, gameSystem: 'kpcp', crMin: 30, crMax: 60, attr: '教育×2',
+      pts: { terms: [{ stat: 'EDU', mult: 2 }], max: [] },
+      keys: ['library', 'occult', 'history'], social: 1, free: 1,
+    },
+  });
+  ok('可建伴侣专属职业模板', kpTpl.status === 200 && kpTpl.json?.gameSystem === 'kpcp',
+    JSON.stringify(kpTpl.json).slice(0, 160));
+  const kpTplCard = await api('POST', '/api/characters', {
+    token: A, body: { ...kpBody, name: `伴侣模板卡_${kpTag}`, occupationId: kpTpl.json.id },
+  });
+  ok('伴侣层卡可用伴侣模板职业', kpTplCard.status === 200 && kpTplCard.json?.occupationId === kpTpl.json.id,
+    JSON.stringify(kpTplCard.json).slice(0, 160));
+  const kpCrossTpl = await api('POST', '/api/characters', {
+    token: A,
+    body: { ...kpBody, name: `越界模板卡_${kpTag}`, kpcp: { enabled: false }, occupationId: kpTpl.json.id },
+  });
+  ok('未开伴侣层的七版卡不能用伴侣模板职业 → 400', kpCrossTpl.status === 400);
+
+  const kpLang = await api('POST', '/api/characters', {
+    token: A,
+    body: { ...kpBody, name: `伴侣母语卡_${kpTag}`, extraLanguages: ['西班牙语', '拉丁语'] },
+  });
+  ok('第二母语可保存', kpLang.status === 200 && (kpLang.json?.extraLanguages || []).length === 2,
+    JSON.stringify(kpLang.json?.extraLanguages));
+  ok('第二母语起始值 = 教育', (kpLang.json?.derived?.skills || [])
+    .filter((x) => x.extraLanguage).every((x) => x.total === 70));
+  ok('第二母语每门扣 10 点兴趣', kpLang.json?.derived?.spent?.interest === 20,
+    JSON.stringify(kpLang.json?.derived?.spent || {}));
+  const kpLangRead = await api('GET', `/api/characters/${kpLang.json.id}`, { token: A });
+  ok('第二母语回读一致', (kpLangRead.json?.extraLanguages || []).join(',') === '西班牙语,拉丁语');
+
+  const kpPkgTpl = await api('POST', '/api/admin/occupations', {
+    token: A,
+    body: {
+      name: `伴侣职业包_${kpTag}`, gameSystem: 'kpcp', kind: 'package', total: 300, creditFixed: 45,
+      crMin: 45, crMax: 45, attr: '固定职业包',
+      entries: [{ key: 'library', final: 70 }, { key: 'occult', final: 60 }, { key: 'history', final: 50 }],
+    },
+  });
+  ok('可建伴侣职业包模板', kpPkgTpl.status === 200 && kpPkgTpl.json?.kind === 'package'
+    && (kpPkgTpl.json?.entries || []).length === 3, JSON.stringify(kpPkgTpl.json).slice(0, 240));
+  const kpPkgCard = await api('POST', '/api/characters', {
+    token: A, body: { ...kpBody, name: `伴侣职业包卡_${kpTag}`, occupationId: kpPkgTpl.json.id },
+  });
+  ok('职业包模板卡预算 = 包合计 300', kpPkgCard.json?.derived?.budget?.occupation === 300,
+    String(kpPkgCard.json?.derived?.budget?.occupation));
+  ok('职业包模板卡信用评级为固定值 45', kpPkgCard.json?.derived?.creditRange?.[0] === 45
+    && kpPkgCard.json?.derived?.creditRange?.[1] === 45, JSON.stringify(kpPkgCard.json?.derived?.creditRange));
+
+  for (const id of [kpCard.json?.id, kpTplCard.json?.id, kpLang.json?.id, kpPkgCard.json?.id]) {
+    if (id) await api('DELETE', `/api/characters/${id}`, { token: A });
+  }
+  for (const id of [kpTpl.json?.id, kpPkgTpl.json?.id]) {
+    if (id) await api('DELETE', `/api/admin/occupations/${id}`, { token: A });
+  }
+
   section('多 KP 权限（v10.1）');
   const suffix = Date.now().toString(36);
   const keeperName = `smoke_kp_${suffix}`;

@@ -1,0 +1,1503 @@
+[
+ {
+  "en": "Antiquarian",
+  "zh": "古物学家",
+  "skills": [
+   {
+    "skill": "Art/Craft (Appraise)",
+    "base": 5,
+    "final": 70,
+    "cost": 65
+   },
+   {
+    "skill": "Art/Craft (choose one)",
+    "base": 5,
+    "final": 35,
+    "cost": 30
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 30,
+    "cost": 30
+   },
+   {
+    "skill": "History",
+    "base": 5,
+    "final": 50,
+    "cost": 45
+   },
+   {
+    "skill": "Language (Other, choose one)",
+    "base": 1,
+    "final": 51,
+    "cost": 50
+   },
+   {
+    "skill": "Library Use",
+    "base": 20,
+    "final": 50,
+    "cost": 30
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 45,
+    "cost": 35
+   },
+   {
+    "skill": "Spot Hidden",
+    "base": 25,
+    "final": 40,
+    "cost": 15
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Artist",
+  "zh": "艺术家",
+  "skills": [
+   {
+    "skill": "Art/Craft (choose one)",
+    "base": 5,
+    "final": 80,
+    "cost": 75
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 25,
+    "cost": 25
+   },
+   {
+    "skill": "History",
+    "base": 5,
+    "final": 40,
+    "cost": 35
+   },
+   {
+    "skill": "Language (Other, choose one)",
+    "base": 1,
+    "final": 61,
+    "cost": 60
+   },
+   {
+    "skill": "Natural World",
+    "base": 10,
+    "final": 45,
+    "cost": 35
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Psychology",
+    "base": 10,
+    "final": 25,
+    "cost": 15
+   },
+   {
+    "skill": "Spot Hidden",
+    "base": 25,
+    "final": 50,
+    "cost": 25
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Athlete",
+  "zh": "运动员",
+  "skills": [
+   {
+    "skill": "Climb",
+    "base": 20,
+    "final": 65,
+    "cost": 45
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 20,
+    "cost": 20
+   },
+   {
+    "skill": "Fighting (Brawl)",
+    "base": 25,
+    "final": 50,
+    "cost": 25
+   },
+   {
+    "skill": "Jump",
+    "base": 20,
+    "final": 65,
+    "cost": 45
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 30,
+    "cost": 20
+   },
+   {
+    "skill": "Ride",
+    "base": 5,
+    "final": 50,
+    "cost": 45
+   },
+   {
+    "skill": "Swim",
+    "base": 20,
+    "final": 65,
+    "cost": 45
+   },
+   {
+    "skill": "Throw",
+    "base": 20,
+    "final": 75,
+    "cost": 55
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Author*",
+  "zh": "作家",
+  "skills": [
+   {
+    "skill": "Art (Literature)",
+    "base": 5,
+    "final": 70,
+    "cost": 65
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 20,
+    "cost": 20
+   },
+   {
+    "skill": "History",
+    "base": 5,
+    "final": 50,
+    "cost": 45
+   },
+   {
+    "skill": "Language (Other, choose one)",
+    "base": 1,
+    "final": 61,
+    "cost": 60
+   },
+   {
+    "skill": "Library Use",
+    "base": 20,
+    "final": 60,
+    "cost": 40
+   },
+   {
+    "skill": "Natural World",
+    "base": 10,
+    "final": 35,
+    "cost": 25
+   },
+   {
+    "skill": "Occult",
+    "base": 5,
+    "final": 20,
+    "cost": 15
+   },
+   {
+    "skill": "Psychology",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Clergy Member",
+  "zh": "神职人员",
+  "skills": [
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 25,
+    "cost": 25
+   },
+   {
+    "skill": "History",
+    "base": 5,
+    "final": 50,
+    "cost": 45
+   },
+   {
+    "skill": "Language (Other, choose one)",
+    "base": 1,
+    "final": 41,
+    "cost": 40
+   },
+   {
+    "skill": "Library Use",
+    "base": 20,
+    "final": 50,
+    "cost": 30
+   },
+   {
+    "skill": "Listen",
+    "base": 20,
+    "final": 50,
+    "cost": 30
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 50,
+    "cost": 40
+   },
+   {
+    "skill": "Psychology",
+    "base": 10,
+    "final": 35,
+    "cost": 25
+   },
+   {
+    "skill": "Reassure",
+    "base": 0,
+    "final": null,
+    "cost": 0
+   },
+   {
+    "skill": "Religion (choose one)",
+    "base": 10,
+    "final": 75,
+    "cost": 65
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Criminal",
+  "zh": "罪犯",
+  "skills": [
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 20,
+    "cost": 20
+   },
+   {
+    "skill": "Fighting (Brawl)",
+    "base": 25,
+    "final": 50,
+    "cost": 25
+   },
+   {
+    "skill": "Firearms (Handgun)",
+    "base": 20,
+    "final": 40,
+    "cost": 20
+   },
+   {
+    "skill": "Law",
+    "base": 5,
+    "final": 20,
+    "cost": 15
+   },
+   {
+    "skill": "Locksmith",
+    "base": 1,
+    "final": 41,
+    "cost": 40
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Psychology",
+    "base": 10,
+    "final": 35,
+    "cost": 25
+   },
+   {
+    "skill": "Sleight of Hand",
+    "base": 10,
+    "final": 75,
+    "cost": 65
+   },
+   {
+    "skill": "Spot Hidden",
+    "base": 25,
+    "final": 40,
+    "cost": 15
+   },
+   {
+    "skill": "Stealth",
+    "base": 20,
+    "final": 65,
+    "cost": 45
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Dilettante*",
+  "zh": "纨绔子弟",
+  "skills": [
+   {
+    "skill": "Art/Craft (choose one)",
+    "base": 5,
+    "final": 55,
+    "cost": 50
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 80,
+    "cost": 80
+   },
+   {
+    "skill": "Firearms (Rifle/Shotgun)",
+    "base": 25,
+    "final": 50,
+    "cost": 25
+   },
+   {
+    "skill": "Language (Other, choose one)",
+    "base": 1,
+    "final": 61,
+    "cost": 60
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 50,
+    "cost": 40
+   },
+   {
+    "skill": "Ride (Horse)",
+    "base": 5,
+    "final": 50,
+    "cost": 45
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Doctor of Medicine*",
+  "zh": "医师",
+  "skills": [
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 30,
+    "cost": 30
+   },
+   {
+    "skill": "First Aid",
+    "base": 30,
+    "final": 50,
+    "cost": 20
+   },
+   {
+    "skill": "Language (Latin)",
+    "base": 1,
+    "final": 51,
+    "cost": 50
+   },
+   {
+    "skill": "Library Use",
+    "base": 20,
+    "final": 50,
+    "cost": 30
+   },
+   {
+    "skill": "Medicine",
+    "base": 1,
+    "final": 81,
+    "cost": 80
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 20,
+    "cost": 10
+   },
+   {
+    "skill": "Psychology",
+    "base": 10,
+    "final": 30,
+    "cost": 20
+   },
+   {
+    "skill": "Science (Biology)",
+    "base": 1,
+    "final": 31,
+    "cost": 30
+   },
+   {
+    "skill": "Science (Pharmacy)",
+    "base": 1,
+    "final": 31,
+    "cost": 30
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Drifter",
+  "zh": "流浪者",
+  "skills": [
+   {
+    "skill": "Art/Craft (choose one)",
+    "base": 5,
+    "final": 40,
+    "cost": 35
+   },
+   {
+    "skill": "Climb",
+    "base": 20,
+    "final": 50,
+    "cost": 30
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 5,
+    "cost": 5
+   },
+   {
+    "skill": "Fighting (Brawl)",
+    "base": 25,
+    "final": 50,
+    "cost": 25
+   },
+   {
+    "skill": "Jump",
+    "base": 20,
+    "final": 45,
+    "cost": 25
+   },
+   {
+    "skill": "Listen",
+    "base": 20,
+    "final": 60,
+    "cost": 40
+   },
+   {
+    "skill": "Navigate",
+    "base": 10,
+    "final": 60,
+    "cost": 50
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 50,
+    "cost": 40
+   },
+   {
+    "skill": "Stealth",
+    "base": 20,
+    "final": 70,
+    "cost": 50
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Engineer",
+  "zh": "工程师",
+  "skills": [
+   {
+    "skill": "Art/Craft (Technical Drawing)",
+    "base": 5,
+    "final": 60,
+    "cost": 55
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 30,
+    "cost": 30
+   },
+   {
+    "skill": "Electrical Repair",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Library Use",
+    "base": 20,
+    "final": 40,
+    "cost": 20
+   },
+   {
+    "skill": "Mechanical Repair",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Operate Heavy Machinery",
+    "base": 1,
+    "final": 26,
+    "cost": 25
+   },
+   {
+    "skill": "Science (Engineering)",
+    "base": 1,
+    "final": 71,
+    "cost": 70
+   },
+   {
+    "skill": "Science (Physics)",
+    "base": 1,
+    "final": 41,
+    "cost": 40
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Entertainer",
+  "zh": "演艺人员",
+  "skills": [
+   {
+    "skill": "Art/Craft (choose Acting or Singing)",
+    "base": 5,
+    "final": 80,
+    "cost": 75
+   },
+   {
+    "skill": "Art/Craft (Disguise)",
+    "base": 5,
+    "final": 50,
+    "cost": 45
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 20,
+    "cost": 20
+   },
+   {
+    "skill": "Language (Other, choose one)",
+    "base": 1,
+    "final": 41,
+    "cost": 40
+   },
+   {
+    "skill": "Library Use",
+    "base": 20,
+    "final": 40,
+    "cost": 20
+   },
+   {
+    "skill": "Listen",
+    "base": 20,
+    "final": 30,
+    "cost": 10
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Psychology",
+    "base": 10,
+    "final": 30,
+    "cost": 20
+   },
+   {
+    "skill": "Sleight of Hand",
+    "base": 10,
+    "final": 50,
+    "cost": 40
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Farmer",
+  "zh": "农民",
+  "skills": [
+   {
+    "skill": "Art/Craft (Farming)",
+    "base": 5,
+    "final": 80,
+    "cost": 75
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 20,
+    "cost": 20
+   },
+   {
+    "skill": "Drive Auto (or Wagon)",
+    "base": 20,
+    "final": 50,
+    "cost": 30
+   },
+   {
+    "skill": "Firearms (Rifle/Shotgun)",
+    "base": 25,
+    "final": 50,
+    "cost": 25
+   },
+   {
+    "skill": "Mechanical Repair",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Natural World",
+    "base": 10,
+    "final": 50,
+    "cost": 40
+   },
+   {
+    "skill": "Operate Heavy Machinery",
+    "base": 1,
+    "final": 21,
+    "cost": 20
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Track",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "IT Worker [modern era only]",
+  "zh": "IT 从业者",
+  "skills": [
+   {
+    "skill": "Computer Use",
+    "base": 5,
+    "final": 70,
+    "cost": 65
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 40,
+    "cost": 40
+   },
+   {
+    "skill": "Electrical Repair",
+    "base": 10,
+    "final": 45,
+    "cost": 35
+   },
+   {
+    "skill": "Electronics",
+    "base": 1,
+    "final": 36,
+    "cost": 35
+   },
+   {
+    "skill": "Law",
+    "base": 5,
+    "final": 15,
+    "cost": 10
+   },
+   {
+    "skill": "Library Use",
+    "base": 20,
+    "final": 60,
+    "cost": 40
+   },
+   {
+    "skill": "Science (Mathematics)",
+    "base": 1,
+    "final": 61,
+    "cost": 60
+   },
+   {
+    "skill": "Spot Hidden",
+    "base": 25,
+    "final": 40,
+    "cost": 15
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Journalist*",
+  "zh": "记者",
+  "skills": [
+   {
+    "skill": "Art/Craft (Photography)",
+    "base": 5,
+    "final": 40,
+    "cost": 35
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 30,
+    "cost": 30
+   },
+   {
+    "skill": "History",
+    "base": 5,
+    "final": 55,
+    "cost": 50
+   },
+   {
+    "skill": "Law",
+    "base": 5,
+    "final": 20,
+    "cost": 15
+   },
+   {
+    "skill": "Library Use",
+    "base": 20,
+    "final": 70,
+    "cost": 50
+   },
+   {
+    "skill": "Listen",
+    "base": 20,
+    "final": 35,
+    "cost": 15
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 70,
+    "cost": 60
+   },
+   {
+    "skill": "Psychology",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Spot Hidden",
+    "base": 25,
+    "final": 40,
+    "cost": 15
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Lawyer",
+  "zh": "律师",
+  "skills": [
+   {
+    "skill": "Accounting",
+    "base": 5,
+    "final": 30,
+    "cost": 25
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 55,
+    "cost": 55
+   },
+   {
+    "skill": "History",
+    "base": 5,
+    "final": 25,
+    "cost": 20
+   },
+   {
+    "skill": "Law",
+    "base": 5,
+    "final": 70,
+    "cost": 65
+   },
+   {
+    "skill": "Library Use",
+    "base": 20,
+    "final": 60,
+    "cost": 40
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 75,
+    "cost": 65
+   },
+   {
+    "skill": "Psychology",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Reassure",
+    "base": 0,
+    "final": null,
+    "cost": 0
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Librarian*",
+  "zh": "图书管理员",
+  "skills": [
+   {
+    "skill": "Accounting",
+    "base": 5,
+    "final": 25,
+    "cost": 20
+   },
+   {
+    "skill": "Art/Craft (Art History)",
+    "base": 5,
+    "final": 25,
+    "cost": 20
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 25,
+    "cost": 25
+   },
+   {
+    "skill": "History",
+    "base": 5,
+    "final": 35,
+    "cost": 30
+   },
+   {
+    "skill": "Language (Other, choose one)",
+    "base": 1,
+    "final": 41,
+    "cost": 40
+   },
+   {
+    "skill": "Library Use",
+    "base": 20,
+    "final": 70,
+    "cost": 50
+   },
+   {
+    "skill": "Listen",
+    "base": 20,
+    "final": 40,
+    "cost": 20
+   },
+   {
+    "skill": "Natural World",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Occult",
+    "base": 5,
+    "final": 30,
+    "cost": 25
+   },
+   {
+    "skill": "Religion (choose one)",
+    "base": 10,
+    "final": 30,
+    "cost": 20
+   },
+   {
+    "skill": "Stealth",
+    "base": 20,
+    "final": 40,
+    "cost": 20
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Military Officer",
+  "zh": "军官",
+  "skills": [
+   {
+    "skill": "Accounting",
+    "base": 5,
+    "final": 20,
+    "cost": 15
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 40,
+    "cost": 40
+   },
+   {
+    "skill": "Fighting (Brawl)",
+    "base": 25,
+    "final": 45,
+    "cost": 20
+   },
+   {
+    "skill": "Firearms (Handgun)",
+    "base": 20,
+    "final": 55,
+    "cost": 35
+   },
+   {
+    "skill": "Firearms (Rifle/Shotgun)",
+    "base": 25,
+    "final": 45,
+    "cost": 20
+   },
+   {
+    "skill": "First Aid",
+    "base": 30,
+    "final": 50,
+    "cost": 20
+   },
+   {
+    "skill": "Language (Other, choose one)",
+    "base": 1,
+    "final": 31,
+    "cost": 30
+   },
+   {
+    "skill": "Navigate",
+    "base": 10,
+    "final": 50,
+    "cost": 40
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 50,
+    "cost": 40
+   },
+   {
+    "skill": "Psychology",
+    "base": 10,
+    "final": 30,
+    "cost": 20
+   },
+   {
+    "skill": "Survival",
+    "base": 10,
+    "final": 30,
+    "cost": 20
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Musician",
+  "zh": "音乐家",
+  "skills": [
+   {
+    "skill": "Art/Craft (choose a musical one)",
+    "base": 5,
+    "final": 75,
+    "cost": 70
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 30,
+    "cost": 30
+   },
+   {
+    "skill": "History",
+    "base": 5,
+    "final": 30,
+    "cost": 25
+   },
+   {
+    "skill": "Language (Other, choose one)",
+    "base": 1,
+    "final": 26,
+    "cost": 25
+   },
+   {
+    "skill": "Library Use",
+    "base": 20,
+    "final": 60,
+    "cost": 40
+   },
+   {
+    "skill": "Listen",
+    "base": 20,
+    "final": 70,
+    "cost": 50
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Psychology",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Parapsychologist",
+  "zh": "超心理学家",
+  "skills": [
+   {
+    "skill": "Art/Craft (Photography)",
+    "base": 5,
+    "final": 50,
+    "cost": 45
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 20,
+    "cost": 20
+   },
+   {
+    "skill": "History",
+    "base": 5,
+    "final": 25,
+    "cost": 20
+   },
+   {
+    "skill": "Language (Other, choose one)",
+    "base": 1,
+    "final": 41,
+    "cost": 40
+   },
+   {
+    "skill": "Library Use",
+    "base": 20,
+    "final": 50,
+    "cost": 30
+   },
+   {
+    "skill": "Occult",
+    "base": 5,
+    "final": 70,
+    "cost": 65
+   },
+   {
+    "skill": "Psychology",
+    "base": 10,
+    "final": 60,
+    "cost": 50
+   },
+   {
+    "skill": "Science (Anthropology)",
+    "base": 1,
+    "final": 31,
+    "cost": 30
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Pilot",
+  "zh": "飞行员",
+  "skills": [
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 50,
+    "cost": 50
+   },
+   {
+    "skill": "Electrical Repair",
+    "base": 10,
+    "final": 50,
+    "cost": 40
+   },
+   {
+    "skill": "Mechanical Repair",
+    "base": 10,
+    "final": 60,
+    "cost": 50
+   },
+   {
+    "skill": "Navigate",
+    "base": 10,
+    "final": 60,
+    "cost": 50
+   },
+   {
+    "skill": "Operate Heavy Machinery",
+    "base": 1,
+    "final": 41,
+    "cost": 40
+   },
+   {
+    "skill": "Pilot Aircraft",
+    "base": 1,
+    "final": 71,
+    "cost": 70
+   },
+   {
+    "skill": "Science (Astronomy)",
+    "base": 1,
+    "final": 41,
+    "cost": 40
+   }
+  ],
+  "total": 340,
+  "special": null
+ },
+ {
+  "en": "Police Detective*",
+  "zh": "警探",
+  "skills": [
+   {
+    "skill": "Art/Craft (choose Acting or Disguise)",
+    "base": 5,
+    "final": 25,
+    "cost": 20
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 35,
+    "cost": 35
+   },
+   {
+    "skill": "Drive Auto",
+    "base": 20,
+    "final": 40,
+    "cost": 20
+   },
+   {
+    "skill": "Fighting (Brawl)",
+    "base": 25,
+    "final": 45,
+    "cost": 20
+   },
+   {
+    "skill": "Firearms (Handgun)",
+    "base": 20,
+    "final": 50,
+    "cost": 30
+   },
+   {
+    "skill": "Firearms (Rifle/Shotgun)",
+    "base": 25,
+    "final": 40,
+    "cost": 15
+   },
+   {
+    "skill": "Law",
+    "base": 5,
+    "final": 60,
+    "cost": 55
+   },
+   {
+    "skill": "Listen",
+    "base": 20,
+    "final": 40,
+    "cost": 20
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Psychology",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Spot Hidden",
+    "base": 25,
+    "final": 50,
+    "cost": 25
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Police Officer",
+  "zh": "警员",
+  "skills": [
+   {
+    "skill": "Climb",
+    "base": 20,
+    "final": 40,
+    "cost": 20
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 20,
+    "cost": 20
+   },
+   {
+    "skill": "Drive Auto",
+    "base": 20,
+    "final": 50,
+    "cost": 30
+   },
+   {
+    "skill": "Fighting (Brawl)",
+    "base": 25,
+    "final": 50,
+    "cost": 25
+   },
+   {
+    "skill": "Firearms (Handgun)",
+    "base": 20,
+    "final": 40,
+    "cost": 20
+   },
+   {
+    "skill": "Firearms (Rifle/Shotgun)",
+    "base": 25,
+    "final": 45,
+    "cost": 20
+   },
+   {
+    "skill": "First Aid",
+    "base": 30,
+    "final": 50,
+    "cost": 20
+   },
+   {
+    "skill": "Law",
+    "base": 5,
+    "final": 50,
+    "cost": 45
+   },
+   {
+    "skill": "Navigate",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Psychology",
+    "base": 10,
+    "final": 30,
+    "cost": 20
+   },
+   {
+    "skill": "Spot Hidden",
+    "base": 25,
+    "final": 45,
+    "cost": 20
+   }
+  ],
+  "total": 300,
+  "special": null
+ },
+ {
+  "en": "Private Investigator",
+  "zh": "私家侦探",
+  "skills": [
+   {
+    "skill": "Art/Craft (Photography)",
+    "base": 5,
+    "final": 30,
+    "cost": 25
+   },
+   {
+    "skill": "Art/Craft (Disguise)",
+    "base": 5,
+    "final": 30,
+    "cost": 25
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 20,
+    "cost": 20
+   },
+   {
+    "skill": "Firearms (Handgun)",
+    "base": 20,
+    "final": 40,
+    "cost": 20
+   },
+   {
+    "skill": "Law",
+    "base": 5,
+    "final": 40,
+    "cost": 35
+   },
+   {
+    "skill": "Library Use",
+    "base": 20,
+    "final": 40,
+    "cost": 20
+   },
+   {
+    "skill": "Locksmith",
+    "base": 1,
+    "final": 31,
+    "cost": 30
+   },
+   {
+    "skill": "Persuade",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Psychology",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Spot Hidden",
+    "base": 25,
+    "final": 50,
+    "cost": 25
+   },
+   {
+    "skill": "Track",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   }
+  ],
+  "total": 290,
+  "special": null
+ },
+ {
+  "en": "Professor*",
+  "zh": "教授",
+  "skills": [],
+  "total": null,
+  "special": "SPECIAL"
+ },
+ {
+  "en": "Soldier",
+  "zh": "士兵",
+  "skills": [
+   {
+    "skill": "Climb",
+    "base": 20,
+    "final": 50,
+    "cost": 30
+   },
+   {
+    "skill": "Credit Rating",
+    "base": 0,
+    "final": 20,
+    "cost": 20
+   },
+   {
+    "skill": "Fighting (Brawl)",
+    "base": 25,
+    "final": 60,
+    "cost": 35
+   },
+   {
+    "skill": "Firearms (Handgun)",
+    "base": 20,
+    "final": 50,
+    "cost": 30
+   },
+   {
+    "skill": "Firearms (Rifle/Shotgun)",
+    "base": 25,
+    "final": 50,
+    "cost": 25
+   },
+   {
+    "skill": "First Aid",
+    "base": 30,
+    "final": 50,
+    "cost": 20
+   },
+   {
+    "skill": "Language (Other, choose one)",
+    "base": 1,
+    "final": 31,
+    "cost": 30
+   },
+   {
+    "skill": "Mechanical Repair",
+    "base": 10,
+    "final": 30,
+    "cost": 20
+   },
+   {
+    "skill": "Navigate",
+    "base": 10,
+    "final": 30,
+    "cost": 20
+   },
+   {
+    "skill": "Stealth",
+    "base": 20,
+    "final": 40,
+    "cost": 20
+   },
+   {
+    "skill": "Survival",
+    "base": 10,
+    "final": 40,
+    "cost": 30
+   },
+   {
+    "skill": "Swim",
+    "base": 20,
+    "final": 40,
+    "cost": 20
+   }
+  ],
+  "total": 300,
+  "special": null
+ }
+]

@@ -17,14 +17,16 @@ import {
 } from './coc7e-reference.js';
 import {
   CLASSIC_ID, DEFAULT_SPECS, RULESETS, GAME_SYSTEMS,
-  resolveRuleset, isClassicRuleset, rulesetOf,
+  resolveRuleset, isClassicRuleset, rulesetOf, resolveCardRuleset, isKpcpLayer,
+  applyKpcpLayer, KPCP_ID,
 } from './rulesets/index.js';
 
 export {
   SKILLS, SKILL_BY_KEY, SKILL_BY_NAME, SPEC_PRESETS, SPEC_OPTIONS, SPEC_SLOTS,
   SOCIAL_SKILLS, OCCUPATIONS, OCCUPATION_BY_ID, WEAPONS, WEAPON_BY_NAME,
   CLASSIC_ID, DEFAULT_SPECS, RULESETS, GAME_SYSTEMS,
-  resolveRuleset, isClassicRuleset, rulesetOf,
+  resolveRuleset, isClassicRuleset, rulesetOf, resolveCardRuleset, isKpcpLayer,
+  applyKpcpLayer, KPCP_ID,
 };
 
 /** 八大属性 + 幸运 */
@@ -73,6 +75,7 @@ export function isNamedSkill(key) {
 }
 export const NAMED_SKILL_HINT = {
   ownLanguage: { label: '语种', placeholder: '例：中文 / 英语 / 拉丁语', warn: '母语未选择语种（建议填写）' },
+  occult: { label: '可选专精', placeholder: '例：民俗学 / 秘教 / 地方传说（可留空）', warn: '' },
 };
 
 /** 新建角色卡时给专攻槽位预置的默认方向（规则书最常见的两项，见 rulesets/index.js） */
@@ -495,6 +498,18 @@ export function movement(str, dex, siz, age, armorPenalty = 0, waiveAgePenalty =
  * 不传时等价于官方 7e（`R.skillByKey` 缺省用引擎内置技能表），
  * 因此旧调用点无需改动，新规则集只需传自己的 R。
  */
+/**
+ * 伴侣层开关：规则集（ctx.kpcpRules.toggles）优先，旧卡 sheet.kpcp.toggles 回退，
+ * 最后回落到规则集声明的默认值。只在 isKpcpLayer(R) 为真时有意义。
+ */
+export function kpcpLayerToggle(R, sheet, ctx, id) {
+  if (!isKpcpLayer(R)) return false;
+  const raw = (ctx && ctx.kpcpRules && ctx.kpcpRules.toggles) || (sheet && sheet.kpcp && sheet.kpcp.toggles) || {};
+  if (typeof raw[id] === 'boolean') return raw[id];
+  const def = (R.toggles || []).find((t) => t.id === id);
+  return def ? def.def !== false : true;
+}
+
 const skillDefsOf = (R) => (R && R.skillByKey) || SKILL_BY_KEY;
 const specSlotsOf = (R) => (R && R.specSlots) || SPEC_SLOTS;
 const specPresetsOf = (R) => (R && R.specPresets) || SPEC_PRESETS;
@@ -523,9 +538,19 @@ export function specOptions(key, R = null) {
   return [...new Set([...curated, ...preset])];
 }
 /** 技能基础值（含专攻预设与 DEX/EDU 公式） */
-export function skillBase(key, custom, eff, R = null) {
+export function skillBase(key, custom, eff, R = null, sheet = null, ctx = null) {
   const def = skillDefsOf(R)[key];
   if (!def) return 0;
+  // 规则集可接管基础值（如守秘人伴侣「由属性推导基础值」可选规则）
+  if (typeof R?.baseFor === 'function') {
+    const overridden = R.baseFor(key, custom, eff, sheet, ctx);
+    if (typeof overridden === 'number' && Number.isFinite(overridden)) return overridden;
+  }
+  if (def.formula) {
+    const from = Number(eff?.[def.formula.from]) || 0;
+    const div = Math.max(1, Number(def.formula.div) || 1);
+    return Math.floor(from / div) + (Number(def.formula.add) || 0);
+  }
   if (def.flags?.includes('dexHalf')) return Math.floor((eff.DEX || 0) / 2);
   if (def.flags?.includes('edu')) return eff.EDU || 0;
   const preset = custom && def.spec ? specPresetsOf(R)[def.spec]?.[custom] : undefined;
@@ -588,23 +613,24 @@ export function resolveOccupation(occupationId, ctx = {}) {
   // KP 自定义职业模板优先（按游戏规则分开存放，调用方已按规则过滤）
   const custom = (ctx.customOccupations || []).find((o) => String(o.id) === String(occupationId));
   if (custom) return custom;
-  if (!isClassicRuleset(R)) {
-    const table = R.occupationById || {};
-    return table[occupationId] || table[String(occupationId)] || null;
-  }
-  return OCCUPATION_BY_ID[occupationId] || OCCUPATION_BY_ID[String(occupationId)] || null;
+  // 规则集自带职业表优先（七版包装后仍是 OCCUPATION_BY_ID；伴侣层则含 25 个职业包）
+  const table = R.occupationById || OCCUPATION_BY_ID;
+  return table[occupationId] || table[String(occupationId)] || null;
 }
 
 /** 全部职业（内置 + KP 自定义），供选择器使用 */
 export function allOccupations(ctx = {}) {
   const R = rulesetOf(null, ctx);
   const custom = ctx.customOccupations || [];
-  if (!isClassicRuleset(R)) return [...(R.occupations || []), ...custom];
-  return [...OCCUPATIONS, ...custom];
+  // 规则集自带职业表优先（伴侣层 = 基础职业 + 25 个职业包）
+  const base = Array.isArray(R.occupations) && R.occupations.length ? R.occupations : OCCUPATIONS;
+  return [...base, ...custom];
 }
 
 /** 职业点预算：按职业公式（教育×4 / 教育×2＋敏捷×2 / MAX(...)）计算 */
-export function occupationBudget(occ, eff) {
+export function occupationBudget(occ, eff, _R = null) {
+  // 职业包（守秘人伴侣 25 个样例职业）：合计点数直接写在职业条目里
+  if (occ?.kind === 'package') return Number(occ.total) || 0;
   if (!occ?.pts) return 0;
   let sum = 0;
   for (const t of occ.pts.terms || []) sum += (eff[t.stat] || 0) * t.mult;
@@ -733,14 +759,24 @@ export function computeSheet(sheet, ctx = {}) {
   const hp = Math.floor((eff.CON + eff.SIZ) / hpDivisor);
   const mp = Math.floor(eff.POW / 5);
   const dbb = damageBonusBuild(eff.STR, eff.SIZ);
-  const mv = movement(eff.STR, eff.DEX, eff.SIZ, age, s.armorPenalty, waivePenalty);
+  const baseMov = movement(eff.STR, eff.DEX, eff.SIZ, age, s.armorPenalty, waivePenalty);
+  // 规则集可改写移动力（守秘人伴侣：初始 7、严格大于才 +1）
+  const customMov = typeof R.movement === 'function'
+    ? R.movement(eff, s, { age, agePenalty: baseMov.agePenalty, armorPenalty: s.armorPenalty, waivePenalty, ctx })
+    : null;
+  // 规则集没给出可用结果时回落到七版算法（伴侣层关闭「移动力」房规即属此列）
+  const mv = customMov && Number.isFinite(customMov.mov) ? customMov : baseMov;
   const dodgeBase = Math.floor(eff.DEX / 2);
 
-  const occ = resolveOccupation(s.occupationId, ctx);
+  const occ = resolveOccupation(s.occupationId, { ...ctx, ruleset: R });
   const picks = s.occPicks || { free: [], social: [], choices: [] };
   const allowed = occupationAllowed(occ, picks, R);
   // 原本职（职业模板固定项 + 信用评级）与玩家在弹性槽位里自选的本职分开标记
-  const baseOcc = new Set([...(occ?.keys || []), 'credit']);
+  const baseOcc = new Set([
+    ...(occ?.keys || []),
+    ...(occ?.kind === 'package' ? (occ.entries || []).map((e) => e.key) : []),
+    'credit',
+  ]);
   // 奖励点（第三套预算）：通俗克苏鲁每个原型固定 100 点，只能投该原型列出的技能
   const bonusAllow = typeof R.bonusAllowed === 'function' ? R.bonusAllowed(s) : null;
   // 注意：DEFAULT_AUDIT_RULES 里的中性默认值是 0（官方 7e 没有第三套预算），
@@ -750,8 +786,8 @@ export function computeSheet(sheet, ctx = {}) {
     ? Math.max(0, clampInt(bonusBudgetRaw > 0 ? bonusBudgetRaw : R.bonusPoints, 0, 999, R.bonusPoints))
     : 0;
   const budget = {
-    occupation: occupationBudget(occ, effBase),
-    interest: typeof R.interest === 'function' ? R.interest(effBase) : effBase.INT * 2,
+    occupation: occupationBudget(occ, effBase, R),
+    interest: typeof R.interest === 'function' ? R.interest(effBase, s, ctx) : effBase.INT * 2,
     bonus: bonusBudget,
   };
   // 技能成功率上限：null / 0 表示无上限（通俗克苏鲁技能可以破 100）
@@ -773,7 +809,7 @@ export function computeSheet(sheet, ctx = {}) {
   for (const slot of blankSkills(R)) {
     const src = incoming.get(slot.id);
     const custom = cleanCustom(slot.key, src?.custom, R);
-    const rawBase = skillBase(slot.key, custom, eff, R);
+    const rawBase = skillBase(slot.key, custom, eff, R, s, ctx);
     const base = applyHouseBase(slot.key, rawBase, eff, houseBase);
     const o = clampInt(src?.occ, 0, inputMax, 0);
     const i = clampInt(src?.interest, 0, inputMax, 0);
@@ -802,6 +838,40 @@ export function computeSheet(sheet, ctx = {}) {
     });
   }
 
+  // 伴侣房规：专精下限 —— 同一统称技能下，**最高那一支保持自身数值不变**，
+  // 其余各支的基础值抬到「最高支总值的一半」，但不得低于自己原本的基础值。
+  // 若某支的（默认基础 + 加点）本身就高于当前最高支，则它才是参照支，自己不再被改写。
+  // 只改 base 与 total，不动 occ/interest/bonus/growth，因此不会反复叠算（避免越算越高）。
+  if (kpcpLayerToggle(R, s, ctx, 'specFloor')) {
+    const groups = new Map();
+    for (const row of skills) {
+      const def = defs[row.key];
+      if (!def?.spec || !row.custom) continue;
+      if (!groups.has(def.spec)) groups.set(def.spec, []);
+      groups.get(def.spec).push(row);
+    }
+    for (const rows of groups.values()) {
+      // 先按「当前总值」找出参照支（默认基础 + 加点 / 兴趣 / 奖励 / 成长）
+      let bestRow = null;
+      for (const row of rows) {
+        if (!bestRow || row.total > bestRow.total) bestRow = row;
+      }
+      if (!bestRow) continue;
+      const floorBase = Math.floor(bestRow.total / 2);
+      if (!Number.isFinite(floorBase) || floorBase <= 0) continue;
+      for (const row of rows) {
+        if (row === bestRow) continue; // 参照支沿用自身数值，不参与下限计算
+        if (floorBase <= row.base) continue; // 不低于该分支原本的基础值
+        const capExempt = defs[row.key]?.flags?.includes('nocap');
+        const total = Math.min(capExempt ? 999 : skillCap, floorBase + row.occ + row.interest + row.bonus + row.growth);
+        row.base = floorBase;
+        row.total = total;
+        row.half = Math.floor(total / 2);
+        row.fifth = Math.floor(total / 5);
+      }
+    }
+  }
+
   // 自定义技能：玩家自行命名、自填基础值；同样只信输入不信结果
   const customSeen = new Set();
   for (const item of Array.isArray(s.customSkills) ? s.customSkills : []) {
@@ -825,6 +895,34 @@ export function computeSheet(sheet, ctx = {}) {
       kind: 'custom',
       used: true,
     });
+  }
+
+  // 守秘人伴侣：花 10 点（兴趣点）可再购一门母语，起始值 = 教育（书 p.「修订：母语」）
+  const extraLanguages = [];
+  const extraOwnLangOn = kpcpLayerToggle(R, s, ctx, 'secondOwnLanguage');
+  if (extraOwnLangOn) {
+    const rawExtras = Array.isArray(s.extraLanguages) ? s.extraLanguages : [];
+    let seq = 0;
+    for (const item of rawExtras) {
+      const raw = typeof item === 'string' ? item : (typeof item?.name === 'string' ? item.name : '');
+      const lang = String(raw || '').trim().slice(0, 24);
+      if (!lang) continue;
+      seq += 1;
+      if (seq > 3) break;
+      const cost = 10;
+      const base = clampInt(eff.EDU, 0, inputMax, 0);
+      interestSpent += cost;
+      const id = `ownLanguage#extra-${seq}`;
+      skills.push({
+        id, key: 'ownLanguage', custom: lang, name: skillName('ownLanguage', lang, R),
+        base, occ: 0, interest: 0, growth: 0, total: base,
+        half: Math.floor(base / 2), fifth: Math.floor(base / 5),
+        isOccupation: false, pickedOccupation: false, capExempt: false,
+        spec: null, special: null, kind: 'standard', houseBase: false, used: true,
+        extraLanguage: true, cost,
+      });
+      extraLanguages.push({ id, name: lang, cost, total: base });
+    }
   }
 
   // 理智：起始 = min(意志 + 成长调整, 99 - 神话知识)；上限随克苏鲁神话增长而降低
@@ -898,9 +996,16 @@ export function computeSheet(sheet, ctx = {}) {
       // 通俗克苏鲁：自由特长槽的候选池（空表示任意技能）/ 英文职业名
       freePool: occ.freePool || [],
       nameEn: occ.nameEn || '',
+      // 守秘人伴侣：职业是「能力包」，携带逐技能最终值与教授特殊结构
+      kind: occ.kind || 'formula',
+      total: Number.isFinite(Number(occ.total)) ? Number(occ.total) : null,
+      entries: Array.isArray(occ.entries) ? occ.entries : [],
+      special: occ.special || null,
+      page: occ.page || '',
     } : null,
     /** 当前职业要求的信用评级区间，供界面高亮显示 */
     creditRange: occ?.cr || null,
+    creditFixed: Number.isFinite(Number(occ?.creditFixed)) ? Number(occ.creditFixed) : null,
     creditInRange: occ ? (() => {
       const [lo, hi] = occ.cr || [0, 99];
       const v = credit ? credit.total : 0;
@@ -908,7 +1013,7 @@ export function computeSheet(sheet, ctx = {}) {
     })() : null,
     allowedSkills: [...allowed],
     needs: occupationNeeds(occ, picks),
-    budget, spent, remaining,
+    budget, spent, remaining, extraLanguages,
     creditRating,
     wealth,
     skills,
@@ -919,13 +1024,28 @@ export function computeSheet(sheet, ctx = {}) {
       id: R.id,
       name: R.name,
       short: R.short,
+      layer: R.layer || null,
+      kpcpBaseId: R.kpcpBaseId || R.id,
       creditMode: R.creditMode || 'range',
       skillCap: Number.isFinite(skillCap) ? skillCap : null,
       hpDivisor,
       bonusPoints: budget.bonus,
-      interestFormula: budget.interest === (effBase.INT || 0) * 2 ? 'INT×2' : '自定义',
+      interestFormula: R.interestLabel
+        || (budget.interest === (effBase.INT || 0) * 2 ? 'INT×2' : '自定义'),
+      terms: R.terms || null,
+      backgroundFields: backgroundFieldsOf(R),
       ageRulesOff,
     },
+    /** 守秘人伴侣：是否启用 + 生效中的伴侣房规（规则集优先，旧卡回落到随卡字段） */
+    kpcp: isKpcpLayer(R)
+      ? (() => {
+        const defs = Object.fromEntries((R.toggles || []).map((t) => [t.id, t.def]));
+        const fromRules = (ctx?.kpcpRules && ctx.kpcpRules.toggles) || (s?.kpcp?.toggles) || {};
+        const rules = ((ctx?.kpcpRules && ctx.kpcpRules.customRules) || (s?.kpcp?.customRules) || [])
+          .filter((x) => x && x.enabled !== false);
+        return { enabled: true, toggles: { ...defs, ...fromRules }, customRules: rules };
+      })()
+      : null,
     /** 原型（通俗克苏鲁专属；官方 7e 恒为 null） */
     archetype: (() => {
       const a = typeof R.archetypeOf === 'function' ? R.archetypeOf(s) : null;
@@ -1568,11 +1688,23 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
       add('keyConnectionMissing', '尚未指定关键连接', 'warn',
         '从已填写的背景里挑 1 项作为「关键连接」（理智自救时使用）');
     } else {
-      const filledKeys = BACKGROUND_FIELDS
+      const filledKeys = backgroundFieldsOf(R)
         .filter(([k]) => String(sheet?.background?.[k] || '').trim()).map(([k]) => k);
       if (!filledKeys.includes(kc)) {
         add('keyConnectionInvalid', '关键连接指向空白背景', 'warn', '关键连接必须指向一条已填写的背景');
       }
+    }
+  }
+  // 守秘人伴侣（kpcp）：规则层开启后必须选定一套伴侣房规；职业包合计偏差提示
+  if (rulesOn && isKpcpLayer(R)) {
+    if (!ctx?.kpcpRules) {
+      add('kpcpRulesRequired', '尚未选择伴侣房规', 'warn',
+        '开启守秘人伴侣后，需要在车卡页选择一套由守秘人发布的伴侣房规；未选择时按房规默认值计算');
+    }
+    const occ = c.occupation;
+    if (occ?.kind === 'package' && Number.isFinite(occ.total) && occ.total !== 300) {
+      add('occPackageTotal', `职业包合计 ${occ.total} 点（原书即如此）`, 'info',
+        '飞行员 340、私家侦探 290 属原书偏差，已放行；其余职业包应为 300 点');
     }
   }
   // 房规检查项：与审卡规则共用同一求值路径（deriveBase 已体现在 computeSheet 中）
@@ -1631,13 +1763,14 @@ function cleanCustom(key, v, R = null) {
  * @param {string} gameSystem 规则集 id（'classic7e' | 'pulp'），决定技能表与扩展字段
  */
 export function blankSheet(ownerId = '', gameSystem = CLASSIC_ID) {
-  const R = resolveRuleset(gameSystem);
+  const legacyKpcp = gameSystem === KPCP_ID;
+  const R = legacyKpcp ? applyKpcpLayer(resolveRuleset(CLASSIC_ID)) : resolveRuleset(gameSystem);
   const chars = {};
   for (const k of ALL_CHARS) chars[k] = 0;
   return {
     name: '', playerName: '', occupationId: '', age: 25, gender: '', residence: '', birthplace: '', era: '1920s',
-    /** 游戏规则集：旧存档没有这个字段时按官方 7e 处理 */
-    gameSystem: R.id,
+    /** 游戏规则集：旧存档没有这个字段时按官方 7e 处理（旧版 kpcp 卡迁移为 7e + 伴侣层） */
+    gameSystem: legacyKpcp ? CLASSIC_ID : R.id,
     chars, eduBonus: 0, applyAgeAdjust: false, armorPenalty: 0, ageAlloc: {},   // 年龄补正默认不套用，由玩家主动开启
     charGrowth: {}, sanGrowth: 0,          // 属性/理智成长（剧本或房规奖励，单独记录）
 
@@ -1658,10 +1791,7 @@ export function blankSheet(ownerId = '', gameSystem = CLASSIC_ID) {
     currency: DEFAULT_CURRENCY['1920s'],
     extraAssets: '',
     assets: { spending: '', cash: '', assets: '' },
-    background: {
-      appearance: '', traits: '', ideology: '', injuries: '', people: '',
-      phobias: '', locations: '', tomes: '', possessions: '', encounters: '',
-    },
+    background: Object.fromEntries(backgroundFieldsOf(R).map(([k]) => [k, ''])),
     moduleLinks: [],
     experience: '',
     status: 'draft',
@@ -1675,10 +1805,24 @@ export function blankSheet(ownerId = '', gameSystem = CLASSIC_ID) {
     coreChar: '',            // 原型指定的核心属性（STR/CON/...）
     talents: [],             // 天赋 id 列表（2 项，部分原型强制）
     keyConnection: '',       // 关键连接：指向某一条已填背景的键名
+
+    // —— 守秘人伴侣规则层（仅 enabled 随卡保存；六条房规由规则集配置）——
+    kpcp: {
+      enabled: legacyKpcp,
+      toggles: {},           // 旧版随卡保存的开关（兼容回退；现以规则集的伴侣房规为准）
+      customRules: [],       // 旧版随卡自定义规则（兼容回退）
+    },
   };
 }
 
 /** 角色卡背景故事字段的中文标签（官方纸质卡版面顺序） */
+/** 某套规则使用的背景字段表（守秘人伴侣为 8 项，其余沿用官方 10 项） */
+export function backgroundFieldsOf(R = null) {
+  return Array.isArray(R?.backgroundFields) && R.backgroundFields.length
+    ? R.backgroundFields
+    : BACKGROUND_FIELDS;
+}
+
 export const BACKGROUND_FIELDS = [
   ['appearance', '形象描述'],
   ['traits', '特质'],

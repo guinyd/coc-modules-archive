@@ -12,7 +12,7 @@ import {
   ALL_CHARS, BACKGROUND_FIELDS, CHAR_LABEL, STATUS_LABEL,
   blankSheet, clampInt, computeSheet, skillName,
 } from './coc7e.js';
-import { CLASSIC_ID, resolveRuleset } from './rulesets/index.js';
+import { CLASSIC_ID, resolveCardRuleset } from './rulesets/index.js';
 import { normalizeSpells, normalizeTomes } from './occult.js';
 
 /** 允许在记录里传输的字段（其余一律丢弃） */
@@ -23,7 +23,7 @@ const FIELDS = [
   'occPicks', 'skills', 'customSkills', 'weapons', 'equipment', 'equipmentItems', 'spells', 'tomes', 'currency', 'extraAssets',
   'background', 'experience', 'notes', 'status',
   // 多规则系统：游戏规则与通俗克苏鲁专属输入（官方 7e 卡这些字段为空，导出无变化）
-  'gameSystem', 'pulpTone', 'chargenMethod', 'archetypeId', 'coreChar', 'talents', 'keyConnection',
+  'gameSystem', 'pulpTone', 'chargenMethod', 'archetypeId', 'coreChar', 'talents', 'keyConnection', 'extraLanguages', 'kpcp',
 ];
 
 // ------------------------------------------------------------------ 打包 / 解包
@@ -44,9 +44,10 @@ export function packCard(sheet) {
  */
 export function unpackCard(obj) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return { ok: false, error: '导入内容不是一张角色卡' };
-  const gameSystem = obj.gameSystem === 'pulp' || obj.gameSystem === 'classic7e'
-    ? obj.gameSystem
-    : (obj.ruleSet === 'pulp' ? 'pulp' : CLASSIC_ID);
+  const legacyKpcp = obj.gameSystem === 'kpcp';
+  const gameSystem = legacyKpcp
+    ? CLASSIC_ID
+    : (['pulp', 'classic7e'].includes(obj.gameSystem) ? obj.gameSystem : (obj.ruleSet === 'pulp' ? 'pulp' : CLASSIC_ID));
   const base = blankSheet('', gameSystem);
   const out = { ...base };
   const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
@@ -158,6 +159,22 @@ export function unpackCard(obj) {
   out.talents = Array.isArray(obj.talents)
     ? obj.talents.filter((t) => typeof t === 'string' && t).slice(0, 8)
     : [];
+  const togglesIn = obj.kpcp && typeof obj.kpcp === 'object' && obj.kpcp.toggles && typeof obj.kpcp.toggles === 'object' ? obj.kpcp.toggles : {};
+  out.kpcp = {
+    enabled: legacyKpcp || obj.kpcp?.enabled === true,
+    toggles: Object.fromEntries(Object.entries(togglesIn).filter(([k, v]) => typeof k === 'string' && typeof v === 'boolean').slice(0, 40)),
+    customRules: Array.isArray(obj.kpcp?.customRules)
+      ? obj.kpcp.customRules.slice(0, 30).map((r) => ({
+        id: typeof r?.id === 'string' ? r.id.slice(0, 40) : '',
+        name: typeof r?.name === 'string' ? r.name.slice(0, 40) : '',
+        note: typeof r?.note === 'string' ? r.note.slice(0, 400) : '',
+        enabled: r?.enabled !== false,
+      })).filter((r) => r.name)
+      : [],
+  };
+  out.extraLanguages = out.kpcp.enabled && Array.isArray(obj.extraLanguages)
+    ? obj.extraLanguages.map((x) => (typeof x === 'string' ? x : x?.name)).map((x) => str(x, 24)).filter(Boolean).slice(0, 3)
+    : [];
   out.keyConnection = str(obj.keyConnection, 40);
   // 导入的卡一律从「未提交审核」的草稿开始，且不带传奇标记（那要 KP 单独给）
   out.legendary = { ...base.legendary };
@@ -225,8 +242,11 @@ function skillRows(sheet, derived, R) {
  */
 export function buildCardMarkdown(character, derived) {
   const s = character || {};
-  const gameR = resolveRuleset(s.gameSystem || CLASSIC_ID);
-  const isPulp = gameR.id !== CLASSIC_ID;
+  const gameR = resolveCardRuleset(s);
+  const isPulp = gameR.id === 'pulp';
+  const isKpcp = gameR.id === 'kpcp';
+  const terms = gameR.terms || null;
+  const bgFields = gameR.backgroundFields || BACKGROUND_FIELDS;
   const d = derived || computeSheet(s, { ruleset: gameR });
   const lines = [];
   const name = text(s.name) || '未命名调查员';
@@ -253,6 +273,17 @@ export function buildCardMarkdown(character, derived) {
     lines.push(`- 核心属性：${d.coreChar ? `${CHAR_LABEL[d.coreChar] || d.coreChar} ${d.coreChar}` : '未指定'}`);
     lines.push(`- 通俗档位：${tone}`);
     lines.push(`- 车卡方式：${s.chargenMethod === 'quick' ? '速建' : '逐项掷骰'}`);
+  }
+  if (isKpcp) {
+    const on = Object.values(s.kpcp?.toggles || {}).filter(Boolean).length;
+    const custom = (s.kpcp?.customRules || []).filter((r) => r.enabled !== false).length;
+    const rep = s.kpcp?.reputation || {};
+    lines.push(`- 伴侣规则：${on} 项开启 · 团内自定义 ${custom} 条`);
+    if (Array.isArray(d.extraLanguages) && d.extraLanguages.length) {
+      lines.push(`- 第二母语：${d.extraLanguages.map((x) => `${x.name}（${x.total}%，花 ${x.cost} 点）`).join('、')}`);
+    }
+    lines.push(`- 声望：英勇 ${rep.heroism ?? 0} / 可靠 ${rep.reliability ?? 0} / 神秘 ${rep.mystery ?? 0}`);
+    lines.push(`- 理智术语：${terms?.temporary || '临时性疯狂'} / ${terms?.indefinite || '不定性疯狂'} / ${terms?.permanent || '永久性疯狂'}`);
   }
   lines.push(`- 状态：${STATUS_LABEL[s.status] || '草稿'}`, '');
 
@@ -283,7 +314,7 @@ export function buildCardMarkdown(character, derived) {
   if (isPulp) {
     const talentNames = (Array.isArray(s.talents) ? s.talents : [])
       .map((id) => gameR.talentById?.[id]?.zh || id);
-    const keyConn = BACKGROUND_FIELDS.find(([k]) => k === s.keyConnection);
+    const keyConn = bgFields.find(([k]) => k === s.keyConnection);
     lines.push('## 天赋与关键连接', '');
     lines.push(`- 天赋（${talentNames.length} 项）：${talentNames.length ? talentNames.join('、') : '未选择'}`);
     lines.push(`- 英雄奖励点：已用 ${d.spent?.bonus ?? 0} / ${d.budget?.bonus ?? 0}`);
@@ -321,7 +352,7 @@ export function buildCardMarkdown(character, derived) {
   lines.push('');
 
   lines.push('## 背景故事', '');
-  for (const [key, label] of BACKGROUND_FIELDS) {
+  for (const [key, label] of bgFields) {
     lines.push(`### ${label}`, '', body(s.background?.[key]), '');
   }
 

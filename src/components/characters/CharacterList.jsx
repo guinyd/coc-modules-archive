@@ -13,7 +13,7 @@ import {
   Trash2, Upload, User as UserIcon, Users,
 } from 'lucide-react';
 import { REVIEW_LABEL, STATUS_LABEL, computeSheet, validateSheet } from '../../../shared/coc7e.js';
-import { CLASSIC_ID, resolveRuleset } from '../../../shared/rulesets/index.js';
+import { CLASSIC_ID, resolveCardRuleset } from '../../../shared/rulesets/index.js';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api.js';
 import {
   deleteGuestSheet, listGuestSheets, guestCapacity, saveGuestSheet,
@@ -85,7 +85,10 @@ function CharacterCard({
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <Badge tone={STATUS_TONE[item.status] || 'slate'} className="!text-[14px] !tracking-[0.08em]">{STATUS_LABEL[item.status] || item.status}</Badge>
-              <Badge tone="violet" className="!text-[14px] !tracking-[0.08em]">{resolveRuleset(item.gameSystem || CLASSIC_ID).short}</Badge>
+              <Badge
+                tone={resolveCardRuleset(item).layer?.kpcp ? 'violetAlt' : 'violet'}
+                className="!text-[14px] !tracking-[0.08em]"
+              >{resolveCardRuleset(item).short}</Badge>
               {item.gameSystem === 'pulp' ? (
                 <Badge tone="amber" className="!text-[14px] !tracking-[0.08em]">{item.archetypeName || '未选原型'}</Badge>
               ) : null}

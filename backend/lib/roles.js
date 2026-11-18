@@ -14,6 +14,7 @@ import { db } from './db.js';
 import { forbidden } from './errors.js';
 import { CHIEF_KP_TITLE, DEFAULT_AUDIT_RULES, KP_TITLES, normalizeHouseRules } from '../../shared/coc7e.js';
 import { resolveRuleset } from '../../shared/rulesets/index.js';
+import { KPCP_DEFAULT_RULES, normalizeKpcpRules } from '../../shared/rulesets/kpcp.js';
 
 /** 任何守秘人（含首席） */
 export function isKeeper(user) {
@@ -110,9 +111,31 @@ export function officialAuditRules(gameSystem) {
   return baseAuditRules(gameSystem);
 }
 
-/** 游戏规则：除通俗（pulp）以外一律按官方第七版处理（兼容所有旧数据） */
+/**
+ * 基础游戏规则：只有官方七版与通俗克苏鲁两套。
+ * 守秘人伴侣（kpcp）自 v10.13 起不再是一套 gameSystem，而是可叠加在两套之上的规则层；
+ * 旧数据里 gameSystem === 'kpcp' 的角色按「官方七版 + 伴侣层」迁移。
+ */
 export function systemOf(value) {
   return value === 'pulp' ? 'pulp' : 'classic7e';
+}
+
+/** 旧数据 / 旧接口里可能出现的 kpcp 规则：
+ *  - gameSystem === 'kpcp'（v10.11 / v10.12 的独立规则）
+ *  - gameSystem === 'kpcp' 的规则集
+ * 用于迁移，不作为新数据的可选值。 */
+export function isLegacyKpcpSystem(value) {
+  return value === 'kpcp';
+}
+
+/** 每套游戏规则在用户记录上的槽位（当前启用的规则集 / 临时规则 / 临时房规） */
+export const SYSTEM_SLOTS = {
+  classic7e: { active: 'activeRuleSetId', rules: 'auditRules', houses: 'draftHouseRules' },
+  pulp: { active: 'activeRuleSetPulpId', rules: 'auditRulesPulp', houses: 'draftHouseRulesPulp' },
+};
+
+export function slotsOf(gameSystem) {
+  return SYSTEM_SLOTS[systemOf(gameSystem)] || SYSTEM_SLOTS.classic7e;
 }
 
 /** 某套游戏规则的官方审卡基线：官方 7e 用内置默认，通克再叠加规则集自带的差异项 */
@@ -135,7 +158,8 @@ export function auditRulesFor(actor, gameSystem) {
   const set = activeRuleSet(actor, sys);
   // 选了规则集就只用这套；未选择时用「临时规则」（按规则分开存，只对自己生效）
   if (set) return { ...base, ...(set.auditRules || {}) };
-  const raw = isKeeper(actor) ? (sys === 'pulp' ? actor.auditRulesPulp : actor.auditRules) : null;
+  const slot = slotsOf(sys).rules;
+  const raw = isKeeper(actor) ? actor[slot] : null;
   const draft = raw && typeof raw === 'object' ? raw : null;
   return { ...base, ...(draft || {}) };
 }
@@ -165,7 +189,7 @@ export function ruleSetById(id) {
 export function activeRuleSet(user, gameSystem) {
   if (!isKeeper(user)) return null;
   const sys = systemOf(gameSystem);
-  const id = sys === 'pulp' ? user.activeRuleSetPulpId : user.activeRuleSetId;
+  const id = user[slotsOf(sys).active];
   if (!id) return null;
   const set = ruleSetById(id);
   // 规则集与游戏规则必须匹配；旧数据没有 gameSystem 的一律算官方七版
@@ -179,7 +203,7 @@ export function houseRulesFor(actor, gameSystem) {
   const base = normalizeHouseRules(globalAuditSet(sys)?.houseRules || []);
   if (!actor || !isKeeper(actor)) return base;
   const set = activeRuleSet(actor, sys);
-  const fallback = sys === 'pulp' ? (actor.draftHouseRulesPulp || []) : (actor.draftHouseRules || []);
+  const fallback = actor[slotsOf(sys).houses] || [];
   const extra = set ? (set.houseRules || []) : fallback;
   const merged = new Map(base.map((r) => [r.id, r]));
   for (const r of normalizeHouseRules(extra)) merged.set(r.id, r);
@@ -195,10 +219,14 @@ export function globalAuditSet(gameSystem) {
 /** 给前端的规则集摘要（不含内部字段） */
 export function ruleSetSummary(set) {
   if (!set) return null;
+  const sys = systemOf(set.gameSystem);
   return {
     id: set.id,
     name: set.name,
-    gameSystem: systemOf(set.gameSystem),
+    gameSystem: sys,
+    // 未开启的规则集不对外暴露伴侣房规内容（避免玩家/前端误判为已配置）
+    kpcp: set.kpcpEnabled === true && set.kpcp ? normalizeKpcpRules(set.kpcp) : null,
+    kpcpEnabled: set.kpcpEnabled === true,
     scope: set.scope === 'global' ? 'global' : 'personal',
     ownerId: set.ownerId || null,
     ownerName: set.ownerName || '',
@@ -221,8 +249,31 @@ export function snapshotRuleSet(set) {
     scope: s.scope,
     houseRules: s.houseRules,
     auditRules: s.auditRules,
+    kpcp: s.kpcp,
+    kpcpEnabled: s.kpcpEnabled === true,
     at: Date.now(),
   };
+}
+
+/**
+ * 守秘人伴侣的可选房规（规则层配置）：优先「当前启用的规则集」，
+ * 其次「全局规则集」，再次 KP 的临时规则，最后回落到官方默认。
+ * v10.13 起任何基础规则（七版 / 通克）都可以带伴侣层，因此不再限定 kpcp 系统。
+ */
+export function kpcpRulesFor(actor, gameSystem) {
+  const sys = systemOf(gameSystem);
+  const active = actor ? activeRuleSet(actor, sys) : null;
+  if (active?.kpcpEnabled === true && active.kpcp) return normalizeKpcpRules(active.kpcp);
+  const global = globalAuditSet(sys);
+  if (global?.kpcpEnabled === true && global.kpcp) return normalizeKpcpRules(global.kpcp);
+  if (actor?.draftKpcpRules) return normalizeKpcpRules(actor.draftKpcpRules);
+  return normalizeKpcpRules(KPCP_DEFAULT_RULES);
+}
+
+/** 某套基础规则下「哪些规则集带了伴侣房规」——角色卡开启伴侣层时只能选这些 */
+export function kpcpRuleSetsFor(actor, gameSystem) {
+  const sys = systemOf(gameSystem);
+  return allRuleSets().filter((set) => systemOf(set.gameSystem) === sys && set.kpcpEnabled === true);
 }
 
 /** 允许普通 KP 在托管卡上直接改的字段（其余一律拒绝） */

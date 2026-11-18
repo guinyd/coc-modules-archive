@@ -19,7 +19,8 @@ import {
   ALL_CHARS, BACKGROUND_FIELDS, CHAR_LABEL, CHARS, MODULE_ROLES, REVIEW_LABEL,
   SKILL_BY_KEY, STATUS_LABEL, grantEduReroll, resetEduGrowth,
 } from '../../../shared/coc7e.js';
-import { CLASSIC_ID, resolveRuleset } from '../../../shared/rulesets/index.js';
+import { KPCP_TOGGLES } from '../../../shared/rulesets/kpcp.js';
+import { CLASSIC_ID, resolveCardRuleset } from '../../../shared/rulesets/index.js';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api.js';
 import {
   Badge, Button, Combobox, EmptyState, Field, Input, Modal, Panel, Select, Tabs, Textarea, WarningList, cx,
@@ -210,8 +211,9 @@ export default function CharacterDetail({
   if (!c) return null;
 
   const d = c.derived;
-  const R = resolveRuleset(c.gameSystem || CLASSIC_ID);
-  const isPulp = R.id !== CLASSIC_ID;
+  const R = resolveCardRuleset({ gameSystem: c.gameSystem || CLASSIC_ID, kpcp: c.kpcp });
+  const isPulp = R.id === 'pulp';
+  const isKpcp = R.layer?.kpcp === true;
   const talentNames = (Array.isArray(c.talents) ? c.talents : [])
     .map((id) => R.talentById?.[id]?.zh || id);
   const usedSkills = d.skills.filter((s) => s.used || s.occ > 0 || s.interest > 0 || s.growth > 0 || s.houseBase);
@@ -269,7 +271,7 @@ export default function CharacterDetail({
               <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[16px] leading-[1.7] text-ink-soft">
                 <span className="flex items-center gap-1.5">
                   <UserIcon className="w-3.5 h-3.5" />{c.ownerName}
-                  <Badge tone="violet" title={R?.name || ''}>{R?.short || 'coc7th'}</Badge>
+                  <Badge tone={R?.layer?.kpcp ? 'violetAlt' : 'violet'} title={R?.name || ''}>{R?.short || 'coc7th'}</Badge>
                 </span>
                 <span>{d.occupation?.name || '无职业'}</span>
                 {isPulp && d.archetype ? (
@@ -414,6 +416,15 @@ export default function CharacterDetail({
               关键连接：{BACKGROUND_FIELDS.find(([k]) => k === c.keyConnection)?.[1] || '未指定'}
               <span className="mx-2 text-ink-mute">·</span>
               档位：{R.chargen?.tones?.find((t) => t.id === (c.pulpTone || 'standard'))?.label || '默认通俗'}
+            </div>
+          ) : null}
+          {isKpcp ? (
+            <div className="sm:col-span-2">
+              守秘人伴侣：已开启 · {Object.values(d.kpcp?.toggles || {}).filter(Boolean).length} / {KPCP_TOGGLES.length} 项房规
+              <span className="mx-2 text-ink-mute">·</span>
+              团内自定义 {(d.kpcp?.customRules || []).length} 条
+              <span className="mx-2 text-ink-mute">·</span>
+              背景 8 栏 · 术语 {R.terms?.temporary || '震骇'} / {R.terms?.indefinite || '异变'} / {R.terms?.permanent || '永失'}
             </div>
           ) : null}
         </div>

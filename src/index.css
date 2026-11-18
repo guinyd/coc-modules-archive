@@ -34,6 +34,7 @@
   --color-ochre: #a8792b;
   --color-moon: #1a5b5f;
   --color-violet: #6b4bb0;
+  --color-violet-alt: #9c2f7a;
 
   --color-line: rgba(23, 17, 9, 0.17);
   --color-line-soft: rgba(23, 17, 9, 0.085);
@@ -149,6 +150,7 @@
   --color-ochre: #d8ac58;
   --color-moon: #86cfc8;
   --color-violet: #b79bf0;
+  --color-violet-alt: #e58ac8;
 
   --color-line: rgba(238, 228, 206, 0.2);
   --color-line-soft: rgba(238, 228, 206, 0.1);
