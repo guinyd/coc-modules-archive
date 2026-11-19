@@ -11,8 +11,9 @@ import {
   ageAdjust, effectiveChars, damageBonusBuild, occupationAllowed,
   OCCUPATIONS, normalizeHouseRules,
 } from '../shared/coc7e.js';
-import { buildDiceBotCommand, DICEBOT_FORMATS } from '../shared/dicebot.js';
+import { buildDiceBotCommand, DICEBOT_FORMATS, diceBotSkillNames } from '../shared/dicebot.js';
 import { buildCardBackup, buildCardMarkdown, importCardData } from '../shared/cardmd.js';
+import { resolveCardRuleset } from '../shared/rulesets/index.js';
 import {
   SPELL_CATALOG, SPELL_CATEGORIES, TOME_CATALOG,
   normalizeSpells, normalizeTomes, spellFromCatalog, tomeFromCatalog,
@@ -85,6 +86,17 @@ const cleanMixed = {
 };
 ok('本职技能只投兴趣点 → 合规', !auditSheet(cleanMixed, {}).findings.some((f) => f.id.startsWith('forbidMixedPoints')));
 
+function rulesetSkillSheet(extra = {}) {
+  const sheet = { ...base, ...extra };
+  const R = resolveCardRuleset(sheet);
+  const rows = blankSkills(R).map((s) => (
+    s.key === 'spotHidden' || s.key === 'naturalWorld' || s.key === 'persuade'
+      ? { ...s, interest: 5 }
+      : s
+  ));
+  return { ...sheet, skills: rows };
+}
+
 section('骰娘导入指令');
 const d = computeSheet(base);
 for (const f of DICEBOT_FORMATS) {
@@ -113,6 +125,58 @@ ok('专攻技能拆分支：去掉射击/格斗头、拆斜杠、补「步霰」
   return !cmd.includes('/')
     && has('手枪') && has('步枪') && has('霰弹枪') && has('步霰') && has('斗殴')
     && !cmd.includes('射击') && !cmd.includes('格斗');
+})());
+ok('规则集各自的技能名：七版用七版表', (() => {
+  const sheet = rulesetSkillSheet();
+  const sd = computeSheet(sheet, {});
+  const names = diceBotSkillNames(sheet, sd);
+  return names.includes('侦查') && names.includes('博物学') && !names.includes('自然学') && !names.includes('侦察');
+})());
+ok('规则集各自的技能名：通克用通克表（七版叫法降为别名）', (() => {
+  const sheet = rulesetSkillSheet({ gameSystem: 'pulp' });
+  const sd = computeSheet(sheet, {});
+  const names = diceBotSkillNames(sheet, sd);
+  const cmd = buildDiceBotCommand(sheet, sd, { bot: 'dice' });
+  return names.includes('侦察') && names.includes('博物学') && !names.includes('侦查')
+    && cmd.includes('侦查') && cmd.includes('自然学');
+})());
+ok('空专精的单槽技能（宗教）即使没填专精也导出统称与数值', (() => {
+  const sheet = rulesetSkillSheet({ gameSystem: 'classic7e', kpcp: { enabled: true, toggles: {}, customRules: [] } });
+  const sd = computeSheet(sheet, {});
+  const cmd = buildDiceBotCommand(sheet, sd, { bot: 'dice' });
+  return cmd.includes('宗教10') && cmd.includes('神学10');
+})());
+ok('技能别名只保留中文（不带 charm / naturalWorld 这类英文名）', (() => {
+  const sheets = [
+    rulesetSkillSheet(),
+    rulesetSkillSheet({ gameSystem: 'pulp' }),
+    rulesetSkillSheet({ gameSystem: 'classic7e', kpcp: { enabled: true, toggles: {}, customRules: [] } }),
+  ];
+  return sheets.every((sheet) => {
+    const cmd = buildDiceBotCommand(sheet, computeSheet(sheet, {}), { bot: 'dice' });
+    return !cmd.includes('charm') && !cmd.includes('naturalWorld') && !cmd.includes('religion')
+      && !cmd.includes('fastTalk') && !cmd.includes('persuade');
+  });
+})());
+ok('相邻英文技能名之间留空格（不再出现 charm40fastTalk40）', (() => {
+  const sheets = [
+    rulesetSkillSheet(),
+    rulesetSkillSheet({ gameSystem: 'pulp' }),
+    rulesetSkillSheet({ gameSystem: 'classic7e', kpcp: { enabled: true, toggles: {}, customRules: [] } }),
+  ];
+  return sheets.every((sheet) => {
+    const cmd = buildDiceBotCommand(sheet, computeSheet(sheet, {}), { bot: 'dice' });
+    return !/[A-Za-z]\d+[A-Za-z]\d/.test(cmd);
+  });
+})());
+ok('规则集各自的技能名：伴侣层用伴侣修订表（社交合并为「说服」，旧叫法进别名）', (() => {
+  const sheet = rulesetSkillSheet({ gameSystem: 'classic7e', kpcp: { enabled: true, toggles: {}, customRules: [] } });
+  const sd = computeSheet(sheet, {});
+  const names = diceBotSkillNames(sheet, sd);
+  const cmd = buildDiceBotCommand(sheet, sd, { bot: 'dice' });
+  return names.includes('自然学') && names.includes('说服') && names.includes('侦查')
+    && !names.includes('博物学') && !names.includes('取悦') && !names.includes('话术')
+    && cmd.includes('博物学') && cmd.includes('取悦') && cmd.includes('话术');
 })());
 ok('shiki 版带派生值与武器', (() => {
   const cmd = buildDiceBotCommand(base, d, { bot: 'shiki' });

@@ -1349,6 +1349,26 @@ try {
     // 伴侣版打印版面（v10.13.4）：状态栏精简、健康/理智独立行、战斗速查贴武器表
     await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='查看'); if(b) b.click(); return Boolean(b); })()`);
     await sleep(2200);
+
+    // 骰娘指令按规则集取名（v10.13.7）：伴侣层卡必须用伴侣修订表的技能名
+    await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('导出') && x.textContent.includes('骰娘'));
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(1200);
+    const kpBot = await page.eval(`(() => {
+      const ta = [...document.querySelectorAll('textarea')].find(t => (t.value || '').startsWith('.st '));
+      return ta ? ta.value : '';
+    })()`);
+    ok('伴侣层卡的骰娘指令改用伴侣修订表技能名（自然学 / 安抚）',
+      kpBot.includes('自然学') && kpBot.includes('安抚'), kpBot.slice(0, 160));
+    await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('关闭'));
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(700);
     await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('打印')); if(b) b.click(); return Boolean(b); })()`);
     await sleep(2600);
     const kpPrint = await page.eval(`(() => {
