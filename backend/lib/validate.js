@@ -453,7 +453,9 @@ function parseOccPicks(value, occupationId, R = null, customOccupations = []) {
   const choicesRaw = vArray(b.choices, '任选技能', { max: 12 });
 
   const free = freeRaw
-    .filter((k) => typeof k === 'string' && defs[k] && !defs[k].spec && (!pool || pool.has(k)))
+    // 带分支的技能组（格斗/射击/技艺/外语/科学…）按整组计入本职：与 shared/coc7e.js 的
+    // occupationAllowed 保持一致，分支由玩家在技能表里自选，这里不能把带 spec 的键筛掉。
+    .filter((k) => typeof k === 'string' && defs[k] && (!pool || pool.has(k)))
     .slice(0, occ ? Math.max(0, occ.free) : 0);
   const social = socialRaw
     .filter((k) => typeof k === 'string' && socialSkills.includes(k))

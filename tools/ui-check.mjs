@@ -883,8 +883,28 @@ try {
     await sleep(700);
     const growthUi = await page.eval(`document.body.innerText.includes('成长 +') && document.body.innerText.includes('99 − 神话知识')`);
     ok('属性卡提供「成长 +」并说明 SAN 上限公式', growthUi === true);
-    const groupPick = await page.eval(`document.body.innerText.includes('含全部分支')`);
-    ok('特长选择支持按组选取（含全部分支）', groupPick === true);
+    const groupPick = await page.eval(`(() => {
+      const btn = [...document.querySelectorAll('button')].find(b => b.textContent.includes('含全部分支'));
+      if (!btn) return { ok: false, label: '' };
+      const label = btn.textContent.replace('含全部分支', '').trim();
+      btn.click();
+      return { ok: true, label };
+    })()`);
+    await sleep(500);
+    const pickedLine = await page.eval(`(() => {
+      const p = [...document.querySelectorAll('p')].find(el => el.textContent.startsWith('已选：'));
+      return p ? p.textContent.trim() : '';
+    })()`);
+    ok('特长选择支持按组选取（含全部分支）',
+      groupPick?.ok === true && pickedLine.includes(groupPick.label),
+      `${groupPick?.label} / ${pickedLine}`);
+    // 再点一次取消，避免这条选择影响后面的保存与审卡断言
+    await page.eval(`(() => {
+      const btn = [...document.querySelectorAll('button')].find(b => b.textContent.includes('含全部分支'));
+      if (btn) btn.click();
+      return Boolean(btn);
+    })()`);
+    await sleep(400);
     const eduUi = await page.eval(`document.body.innerText.includes('教育增强（年龄成长）')`);
     ok('编辑器有「教育增强（年龄成长）」面板', eduUi === true);
     const eduManual = await page.eval(`[...document.querySelectorAll('button')].some(b => b.textContent.includes('清零教育补正'))`);

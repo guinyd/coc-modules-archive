@@ -1343,6 +1343,23 @@ try {
   ok('自定义模板的任选特长全部保留（4/4）',
     cardFree.status === 200 && cardFree.json?.occPicks?.free?.length === 4,
     JSON.stringify(cardFree.json?.occPicks));
+  // 带分支的技能组（艺术/手艺、格斗、射击…）可以作为「任选特长」整组选入，分支在技能表里自选。
+  // 早前后端把 defs[k].spec 的键直接筛掉，导致这类选择保存后消失（2026-11-19 用户反馈）。
+  const cardSpecPick = await api('POST', '/api/characters', {
+    token: A,
+    body: {
+      ...pulpBody, name: '分支特长卡', gameSystem: 'classic7e', occupationId: tplFree.json.id,
+      archetypeId: '', coreChar: '', talents: [], keyConnection: '',
+      occPicks: { free: ['art', 'law'], social: [], choices: [] },
+      skills: [{ id: 'art#0', key: 'art', custom: '表演', occ: 5, interest: 0, growth: 0 }],
+    },
+  });
+  ok('带分支的技能组能作为任选特长保存（艺术/手艺·表演）',
+    cardSpecPick.status === 200
+      && (cardSpecPick.json?.occPicks?.free || []).includes('art')
+      && (cardSpecPick.json?.skills || []).some((s) => s.id === 'art#0' && s.custom === '表演' && s.occ === 5),
+    JSON.stringify({ picks: cardSpecPick.json?.occPicks, skills: cardSpecPick.json?.skills?.filter((s) => s.id === 'art#0') }));
+
   const cardFreeDerived = await api('GET', `/api/characters/${cardFree.json?.id || ''}`, { token: A });
   ok('自定义模板按公式算职业点（教育×4）',
     cardFreeDerived.status === 200 && cardFreeDerived.json?.derived?.budget?.occupation
@@ -1371,7 +1388,7 @@ try {
     kpcpCard.status === 200 && kpcpCard.json?.occPicks?.free?.length === 2,
     JSON.stringify(kpcpCard.json?.occPicks));
 
-  for (const id of [cardFree.json?.id, kpcpCard.json?.id]) {
+  for (const id of [cardFree.json?.id, cardSpecPick.json?.id, kpcpCard.json?.id]) {
     if (id) await api('DELETE', `/api/characters/${id}`, { token: A });
   }
   for (const o of [tplFree.json, tplKpcp.json]) {
