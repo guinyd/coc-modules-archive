@@ -130,6 +130,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 try {
   let seedUser = null;
+  let tplSample = null;
   try {
     const dbFile = process.env.COCOC_DB_FILE || path.join(ROOT, '..', 'backend', 'data', 'database.json');
     void dbFile;
@@ -145,6 +146,34 @@ try {
     }),
   }).catch(() => null);
   if (login && login.ok) seedUser = await login.json();
+
+  // 自定义职业模板按归属规则分流（v10.13.10）：App 只在登录/挂载时拉一次 meta，
+  // 所以模板必须在页面加载之前建好，否则界面拿不到（这是测试时序问题，不是产品缺陷）。
+  if (seedUser?.token) {
+    const tag = String(Date.now()).slice(-5);
+    const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${seedUser.token}` };
+    const mk = async (name, gameSystem) => {
+      const r = await fetch(`${API}/api/admin/occupations`, {
+        method: 'POST',
+        headers: auth,
+        body: JSON.stringify({
+          name, gameSystem, crMin: 10, crMax: 40, attr: '教育×4',
+          pts: { terms: [{ stat: 'EDU', mult: 4 }], max: [] },
+          keys: ['libraryUse'], choices: [], social: 0, free: 3, desc: '界面自检模板',
+        }),
+      }).catch(() => null);
+      const j = r && r.ok ? await r.json() : null;
+      return j?.id || null;
+    };
+    const classicName = `UI模板七版${tag}`;
+    const pulpName = `UI模板通克${tag}`;
+    const kpcpName = `UI模板伴侣${tag}`;
+    const idA = await mk(classicName, 'classic7e');
+    const idB = await mk(pulpName, 'pulp');
+    const idC = await mk(kpcpName, 'kpcp');
+    if (idA && idB && idC) tplSample = { ids: [idA, idB, idC], classic: classicName, pulp: pulpName, kpcp: kpcpName };
+    else console.log('  （自定义模板样本创建失败，相关断言将跳过）');
+  }
 
   const browserWs = await waitBrowser();
   const browser = await Cdp.connect(browserWs);
@@ -246,6 +275,10 @@ try {
     await sleep(900);
     const pickerText = await page.eval('document.body.innerText');
     ok('职业选择弹窗可打开', pickerText.includes('选择职业') && pickerText.includes('会计师'));
+    ok('七版职业列表能看到七版自定义模板、看不到通克模板',
+      (!tplSample ? false
+        : pickerText.includes(tplSample.classic) && !pickerText.includes(tplSample.pulp)),
+      tplSample ? `${tplSample.classic} / ${tplSample.pulp}` : '未创建模板样本');
 
     // 回到首页，验证重构后拆分出去的模组视图仍正常
     await page.eval(`(() => {
@@ -1158,6 +1191,11 @@ try {
     await sleep(400);
     await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('选择职业')); if(b) b.click(); return Boolean(b); })()`);
     await sleep(900);
+    const pulpPickerText = await page.eval('document.body.innerText');
+    ok('通克职业列表能看到通克自定义模板、看不到七版模板',
+      (!tplSample ? false
+        : pulpPickerText.includes(tplSample.pulp) && !pulpPickerText.includes(tplSample.classic)),
+      tplSample ? `${tplSample.pulp} / ${tplSample.classic}` : '未创建模板样本');
     await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('警官')); if(b) b.click(); return Boolean(b); })()`);
     await sleep(900);
     // 通克必须先把属性掷出来（全 0 会被校验拦住，存不进库）
@@ -1292,6 +1330,10 @@ try {
     await sleep(1000);
     const occPicker = await page.eval('document.body.innerText');
     ok('伴侣层职业选择器可按「职业包」筛选', occPicker.includes('职业包'), occPicker.slice(0, 160));
+    ok('伴侣层职业选择器同时给出主体规则模板与伴侣模板（v10.13.11）',
+      (!tplSample ? false
+        : occPicker.includes(tplSample.classic) && occPicker.includes(tplSample.kpcp)),
+      tplSample ? `${tplSample.classic} / ${tplSample.kpcp}` : '未创建模板样本');
     await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('职业包')); if(b) b.click(); return Boolean(b); })()`);
     await sleep(800);
     await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('古物学家')); if(b) b.click(); return Boolean(b); })()`);
@@ -1466,6 +1508,16 @@ try {
     fs.writeFileSync(path.join(SHOTS, 'kpcp.png'), Buffer.from(kpShot.data, 'base64'));
   } else {
     console.log('  （未提供可用账号，跳过登录后的界面检查；可用 UI_USER/UI_PASS 环境变量指定）');
+  }
+
+  // 清理本轮种下的自定义模板，保持测试库可重复使用
+  if (tplSample?.ids?.length && seedUser?.token) {
+    for (const id of tplSample.ids) {
+      await fetch(`${API}/api/admin/occupations/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${seedUser.token}` },
+      }).catch(() => null);
+    }
   }
 
   cleanup(fail ? 1 : 0);

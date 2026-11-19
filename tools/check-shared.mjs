@@ -13,7 +13,7 @@ import {
 } from '../shared/coc7e.js';
 import { buildDiceBotCommand, DICEBOT_FORMATS, diceBotSkillNames } from '../shared/dicebot.js';
 import { buildCardBackup, buildCardMarkdown, importCardData } from '../shared/cardmd.js';
-import { resolveCardRuleset } from '../shared/rulesets/index.js';
+import { resolveCardRuleset, customOccupationsFor } from '../shared/rulesets/index.js';
 import {
   SPELL_CATALOG, SPELL_CATEGORIES, TOME_CATALOG,
   normalizeSpells, normalizeTomes, spellFromCatalog, tomeFromCatalog,
@@ -305,6 +305,22 @@ ok('探险家（古典）选游泳后只有游泳算本职', (() => {
   const occ = OCCUPATIONS.find((o) => o.id === 53);
   const a = occupationAllowed(occ, { choices: ['swim'] });
   return a.has('swim') && !a.has('climb');
+})());
+ok('自定义职业模板按归属规则分流（伴侣层＝主体模板 + 伴侣模板）', (() => {
+  const list = [
+    { id: 'c1', name: '七版模板', gameSystem: 'classic7e' },
+    { id: 'c2', name: '通克模板', gameSystem: 'pulp' },
+    { id: 'c3', name: '伴侣模板', gameSystem: 'kpcp' },
+    { id: 'c4', name: '旧模板（无字段）' },
+  ];
+  const ids = (R) => customOccupationsFor(R, list).map((o) => o.id).join(',');
+  const classic = resolveCardRuleset({ gameSystem: 'classic7e' });
+  const pulp = resolveCardRuleset({ gameSystem: 'pulp' });
+  const classicKpcp = resolveCardRuleset({ gameSystem: 'classic7e', kpcp: { enabled: true } });
+  return ids(classic) === 'c1,c4'
+    && ids(pulp) === 'c2'
+    // 伴侣层是叠加：主体规则模板必须继续可见，伴侣模板一并给出（v10.13.11）
+    && ids(classicKpcp) === 'c1,c3,c4';
 })());
 ok('忽略年龄规则可被房规白名单接受', normalizeHouseRules([{ type: 'ignoreAge' }])[0]?.type === 'ignoreAge');
 ok('忽略年龄规则不套用年龄补正（APP 65 不再 −5）', (() => {

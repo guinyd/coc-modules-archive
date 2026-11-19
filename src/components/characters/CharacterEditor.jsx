@@ -28,7 +28,7 @@ import {
   blankEduGrowth, blankLegendary, blankLegendaryBonus, grantEduReroll, resetEduGrowth, houseRuleSummary,
   AUDIT_RULE_META, DEFAULT_AUDIT_RULES,
 } from '../../../shared/coc7e.js';
-import { CLASSIC_ID, GAME_SYSTEMS, isKpcpLayer, resolveCardRuleset, resolveRuleset } from '../../../shared/rulesets/index.js';
+import { CLASSIC_ID, GAME_SYSTEMS, KPCP_ID, customOccupationsFor, isKpcpLayer, resolveCardRuleset, resolveRuleset } from '../../../shared/rulesets/index.js';
 import { KPCP_TOGGLES, normalizeKpcpRules } from '../../../shared/rulesets/kpcp.js';
 import { PULP_CRIT, PULP_HEALING, PULP_ID, PULP_LUCK_SPENDS, PULP_TONES, pulpTalentTables } from '../../../shared/rulesets/pulp.js';
 import { rollCharacteristics, rollLuck, educationCheck } from '../../lib/dice.js';
@@ -854,12 +854,13 @@ export default function CharacterEditor({
   const isKpcp = isKpcpLayer(R);
   const kpcpTog = sheet.kpcp?.toggles || {};
   const bgFields = R?.backgroundFields || BACKGROUND_FIELDS;
-  const occupations = useMemo(
-    () => (R.id === CLASSIC_ID && !R.layer?.kpcp
-      ? [...OCCUPATIONS, ...(customOccupations || [])]
-      : R.occupations),
-    [R, customOccupations],
-  );
+  const occupations = useMemo(() => {
+    const base = Array.isArray(R.occupations) && R.occupations.length ? R.occupations : OCCUPATIONS;
+    // 自定义职业模板按「归属规则」跟着卡走：伴侣模板只在伴侣层卡出现（后端 rulesCtx 同口径），
+    // 其余模板按基础规则匹配——七版看七版、通克看通克，互不串门。
+    const mine = customOccupationsFor(R, customOccupations);
+    return [...base, ...mine];
+  }, [R, customOccupations]);
   // 房规按游戏规则隔离：通克卡只列通克规则集，coc7th 卡只列官方规则集
   const systemRuleSets = useMemo(
     () => (ruleSets || []).filter((s) => (s.gameSystem || CLASSIC_ID) === R.id

@@ -361,6 +361,11 @@ export default function App() {
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
   useEffect(() => { fetchCharacterMeta(); }, [fetchCharacterMeta]);
+  // 进入车卡编辑器时重拉一次职业模板：KP 在审卡中心刚发布/改过的模板要能立刻选到，
+  // 否则玩家必须整页刷新才看得到（v10.13.11）。
+  useEffect(() => {
+    if (view === 'characterEdit' || view === 'characterPrint') fetchCharacterMeta();
+  }, [view, fetchCharacterMeta]);
   useEffect(() => { fetchKeeperRoster(); }, [currentUser, fetchKeeperRoster]);
 
   useEffect(() => {

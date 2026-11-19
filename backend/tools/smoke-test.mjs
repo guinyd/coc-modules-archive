@@ -1322,6 +1322,62 @@ try {
     if (t?.id) await api('DELETE', `/api/admin/occupations/${t.id}`, { token: A });
   }
 
+  // 2.1) 自定义模板的「任选特长」必须真的生效（此前 occ 查不到模板会被裁成 0），伴侣模板上限 12
+  const freeSeed = {
+    name: `特长模板_${sysTag}`, crMin: 10, crMax: 50, attr: '教育×4',
+    pts: { terms: [{ stat: 'EDU', mult: 4 }], max: [] },
+    keys: ['libraryUse'], social: 0, free: 4, choices: [],
+  };
+  const tplFree = await api('POST', '/api/admin/occupations', {
+    token: A, body: { ...freeSeed, gameSystem: 'classic7e' },
+  });
+  const freePicks = ['anthropology', 'archaeology', 'history', 'law'];
+  const cardFree = await api('POST', '/api/characters', {
+    token: A,
+    body: {
+      ...pulpBody, name: '模板特长卡', gameSystem: 'classic7e', occupationId: tplFree.json.id,
+      archetypeId: '', coreChar: '', talents: [], keyConnection: '',
+      occPicks: { free: freePicks, social: [], choices: [] },
+    },
+  });
+  ok('自定义模板的任选特长全部保留（4/4）',
+    cardFree.status === 200 && cardFree.json?.occPicks?.free?.length === 4,
+    JSON.stringify(cardFree.json?.occPicks));
+  const cardFreeDerived = await api('GET', `/api/characters/${cardFree.json?.id || ''}`, { token: A });
+  ok('自定义模板按公式算职业点（教育×4）',
+    cardFreeDerived.status === 200 && cardFreeDerived.json?.derived?.budget?.occupation
+      === (cardFreeDerived.json?.derived?.eff?.EDU || 0) * 4,
+    JSON.stringify(cardFreeDerived.json?.derived?.budget));
+
+  const tplKpcp = await api('POST', '/api/admin/occupations', {
+    token: A, body: { ...freeSeed, name: `伴侣特长模板_${sysTag}`, gameSystem: 'kpcp', free: 12 },
+  });
+  ok('伴侣职业模板允许 12 个任选特长', tplKpcp.status === 200 && tplKpcp.json?.free === 12,
+    JSON.stringify(tplKpcp.json).slice(0, 160));
+  const tplKpcpOver = await api('POST', '/api/admin/occupations', {
+    token: A, body: { ...freeSeed, name: `伴侣超限模板_${sysTag}`, gameSystem: 'kpcp', free: 13 },
+  });
+  ok('伴侣模板任选特长超过 12 → 400', tplKpcpOver.status === 400);
+  const kpcpCard = await api('POST', '/api/characters', {
+    token: A,
+    body: {
+      ...pulpBody, name: '伴侣模板卡', gameSystem: 'classic7e', occupationId: tplKpcp.json.id,
+      archetypeId: '', coreChar: '', talents: [], keyConnection: '',
+      kpcp: { enabled: true, toggles: {}, customRules: [] },
+      occPicks: { free: ['history', 'law'], social: [], choices: [] },
+    },
+  });
+  ok('伴侣层卡可用伴侣模板且特长保留',
+    kpcpCard.status === 200 && kpcpCard.json?.occPicks?.free?.length === 2,
+    JSON.stringify(kpcpCard.json?.occPicks));
+
+  for (const id of [cardFree.json?.id, kpcpCard.json?.id]) {
+    if (id) await api('DELETE', `/api/characters/${id}`, { token: A });
+  }
+  for (const o of [tplFree.json, tplKpcp.json]) {
+    if (o?.id) await api('DELETE', `/api/admin/occupations/${o.id}`, { token: A });
+  }
+
   // 3) 审卡规则集按游戏规则分开：各有一套「当前启用集」
   const setPulp = await api('POST', '/api/rule-sets', {
     token: A,

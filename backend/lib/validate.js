@@ -438,9 +438,11 @@ function parseAgeAlloc(value) {
   return out;
 }
 
-function parseOccPicks(value, occupationId, R = null) {
+function parseOccPicks(value, occupationId, R = null, customOccupations = []) {
+  // KP 自定义职业模板不在规则集职业表里，必须单独查，否则 occ 为 null 会把任选特长/社交全部裁成 0
+  const custom = (customOccupations || []).find((o) => String(o.id) === String(occupationId));
   const occ = occupationId
-    ? (R && R.id !== CLASSIC_ID ? (R.occupationById || {})[occupationId] : OCCUPATION_BY_ID[occupationId])
+    ? (custom || (R && R.id !== CLASSIC_ID ? (R.occupationById || {})[occupationId] : OCCUPATION_BY_ID[occupationId]))
     : null;
   const defs = R?.skillByKey || SKILL_BY_KEY;
   const socialSkills = R?.socialSkills || SOCIAL_SKILLS;
@@ -632,7 +634,7 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
   if (need('agePenaltyWaived')) out.agePenaltyWaived = vBool(b.agePenaltyWaived, false);
   if (need('notes')) out.notes = vText(b.notes, '备注', { max: 4000 });
   if (need('armorPenalty')) out.armorPenalty = vInt(b.armorPenalty, '护甲减值', { min: 0, max: 10, def: 0 });
-  if (need('occPicks')) out.occPicks = parseOccPicks(b.occPicks, occId, R);
+  if (need('occPicks')) out.occPicks = parseOccPicks(b.occPicks, occId, R, ctx.customOccupations);
 
   if (has('skills')) {
     const parsed = parseSkills(b.skills, R);
@@ -795,11 +797,13 @@ function parsePackageEntries(value) {
 
 export function parseOccupationTemplate(body) {
   const b = body || {};
+  // 守秘人伴侣的职业模板可以用到 12 个任选特长槽（伴侣职业包普遍是 2–4 个，房规职业留更宽的余量）
+  const gameSystem = vEnum(b.gameSystem, '游戏规则', ['classic7e', 'pulp', 'kpcp'], 'classic7e');
   const crMin = vInt(b.crMin, '信用评级下限', { min: 0, max: 99, def: 0 });
   const crMax = vInt(b.crMax, '信用评级上限', { min: 0, max: 99, def: 99 });
   if (crMin > crMax) throw badRequest('信用评级下限不能大于上限');
   return {
-    gameSystem: vEnum(b.gameSystem, '游戏规则', ['classic7e', 'pulp', 'kpcp'], 'classic7e'),
+    gameSystem,
     name: vStr(b.name, '职业名称', { min: 1, max: 24, required: true }),
     kind: vEnum(b.kind, '职业类型', ['formula', 'package'], 'formula'),
     total: vInt(b.total, '职业包合计', { min: 0, max: 2000, def: 0 }),
@@ -811,7 +815,7 @@ export function parseOccupationTemplate(body) {
     choices: parseChoiceGroups(b.choices),
     customKeys: parseCustomKeys(b.customKeys),
     social: vInt(b.social, '社交技能槽位', { min: 0, max: 6, def: 0 }),
-    free: vInt(b.free, '任意特长槽位', { min: 0, max: 8, def: 0 }),
+    free: vInt(b.free, '任意特长槽位', { min: 0, max: gameSystem === 'kpcp' ? 12 : 8, def: 0 }),
     entries: parsePackageEntries(b.entries),
     desc: vText(b.desc, '职业简介', { max: 200 }),
   };

@@ -2167,11 +2167,14 @@ function TemplateEditor({ value, onClose, onSaved, showToast }) {
                   onChange={(v) => setForm({ ...form, social: v === '' ? 0 : v })}
                 />
               </DrawerField>
-              <DrawerField label="任意特长槽位">
+              <DrawerField
+                label="任意特长槽位"
+                hint={form.gameSystem === KPCP_ID ? '伴侣模板最多 12 个' : '官方模板最多 8 个'}
+              >
                 <NumberInput
                   className={EDITOR_INPUT}
                   min={0}
-                  max={8}
+                  max={form.gameSystem === KPCP_ID ? 12 : 8}
                   value={form.free}
                   onChange={(v) => setForm({ ...form, free: v === '' ? 0 : v })}
                 />

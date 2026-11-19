@@ -35,7 +35,7 @@ import {
   systemOf, kpcpRulesFor,
 } from '../lib/roles.js';
 import { parseCharacter, parseReview, parseBatchReview, vArray, vEnum, vId, vStr } from '../lib/validate.js';
-import { resolveRuleset, applyKpcpLayer } from '../../shared/rulesets/index.js';
+import { resolveRuleset, applyKpcpLayer, customOccupationsFor } from '../../shared/rulesets/index.js';
 import { audit } from '../lib/audit.js';
 import {
   ALL_CHARS, CHARS, STATUSES, REVIEW_STATUSES, computeSheet, validateSheet, blankSkills, auditSheet,
@@ -211,10 +211,7 @@ function rulesCtx(houseRules, auditRules, gameSystem, kpcpRules, kpcpEnabled = f
   const rs = kpcpEnabled ? applyKpcpLayer(base) : base;
   return {
     // 自定义职业模板：伴侣层卡可用 kpcp 模板（技能池为伴侣修订表），其余卡只用自己的规则
-    customOccupations: customOccupations().filter((o) => {
-      const raw = o.gameSystem === 'kpcp' ? 'kpcp' : systemOf(o.gameSystem);
-      return raw === 'kpcp' ? kpcpEnabled === true : raw === sys;
-    }),
+    customOccupations: customOccupationsFor(rs, customOccupations()),
     houseRules: list,
     auditRules: auditRules && typeof auditRules === 'object' ? auditRules : undefined,
     ignoreAge: houseIgnoresAge(list),

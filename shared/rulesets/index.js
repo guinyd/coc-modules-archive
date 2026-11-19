@@ -137,6 +137,23 @@ export function rulesetOf(sheet, ctx = {}) {
  * 「技能来源」：自定义职业模板/规则表单需要按归属规则取技能池。
  *   classic7e → 七版技能；pulp → 通克技能；kpcp → 伴侣修订技能（职业模板专用标记）
  */
+/**
+ * KPC 自定义职业模板按「归属规则」筛选（车卡器 / 后端 rulesCtx / 打印共用）。
+ *  - 伴侣层卡：基础规则的模板 + 伴侣模板都给（层只是叠加，主体规则仍是七版/通克，
+ *    所以主体模板必须继续可见；伴侣模板按伴侣修订表勾技能，也一并给出）
+ *  - 其余卡：按基础规则匹配（七版看七版、通克看通克），旧数据缺字段算七版
+ * 规则层 card.kpcp.enabled 与规则集 gameSystem 是两件事，这里只看卡片当前解析出的 R。
+ */
+export function customOccupationsFor(R, list = []) {
+  const baseSys = R?.kpcpBaseId || R?.id || CLASSIC_ID;
+  const hasKpcp = R?.layer?.kpcp === true;
+  return (Array.isArray(list) ? list : []).filter((o) => {
+    const sys = o?.gameSystem === KPCP_ID ? KPCP_ID
+      : (o?.gameSystem === PULP_ID ? PULP_ID : CLASSIC_ID);
+    return sys === baseSys || (hasKpcp && sys === KPCP_ID);
+  });
+}
+
 export function skillSourceOf(gameSystem) {
   if (gameSystem === PULP_ID) return PULP_RULESET;
   if (gameSystem === KPCP_ID) return applyKpcpLayer(CLASSIC_RULESET);
