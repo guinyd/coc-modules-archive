@@ -9,7 +9,7 @@
 import {
   blankSheet, blankSkills, computeSheet, validateSheet, auditSheet,
   ageAdjust, effectiveChars, damageBonusBuild, occupationAllowed,
-  OCCUPATIONS, normalizeHouseRules,
+  OCCUPATIONS, normalizeHouseRules, backgroundFieldsOf,
 } from '../shared/coc7e.js';
 import { buildDiceBotCommand, DICEBOT_FORMATS, diceBotSkillNames } from '../shared/dicebot.js';
 import { buildCardBackup, buildCardMarkdown, importCardData } from '../shared/cardmd.js';
@@ -139,6 +139,16 @@ ok('规则集各自的技能名：通克用通克表（七版叫法降为别名�
   const cmd = buildDiceBotCommand(sheet, sd, { bot: 'dice' });
   return names.includes('侦察') && names.includes('博物学') && !names.includes('侦查')
     && cmd.includes('侦查') && cmd.includes('自然学');
+})());
+ok('背景故事栏目按规则集取（七版/通克 10 栏，伴侣层 8 栏）', (() => {
+  const klass = backgroundFieldsOf(resolveCardRuleset({ gameSystem: 'classic7e' }));
+  const pulp = backgroundFieldsOf(resolveCardRuleset({ gameSystem: 'pulp' }));
+  const kpcp = backgroundFieldsOf(resolveCardRuleset({ gameSystem: 'classic7e', kpcp: { enabled: true, toggles: {}, customRules: [] } }));
+  const keysOf = (f) => f.map(([k]) => k);
+  return klass.length === 10 && keysOf(klass).includes('appearance')
+    && pulp.length === 10 && keysOf(pulp).includes('encounters')
+    && kpcp.length === 8 && keysOf(kpcp).includes('description')
+    && keysOf(kpcp).includes('encountersStrangeEntities') && !keysOf(kpcp).includes('appearance');
 })());
 ok('空专精的单槽技能（宗教）即使没填专精也导出统称与数值', (() => {
   const sheet = rulesetSkillSheet({ gameSystem: 'classic7e', kpcp: { enabled: true, toggles: {}, customRules: [] } });

@@ -1399,6 +1399,26 @@ try {
     ok('伴侣层可添加第二母语（每门 10 点）',
       hasLangBlock === true && langText.includes('母语（西班牙语）'), langText.slice(0, 200));
 
+    // 背景故事栏目按规则集取（v10.13.13）：编辑器先填伴侣版的「描述」，保存后到详情页核对
+    await page.eval(`(() => {
+      const tab = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === '背景故事');
+      if (tab) tab.click();
+      return Boolean(tab);
+    })()`);
+    await sleep(800);
+    const kpBgFill = await page.eval(`(() => {
+      const text = document.body.innerText;
+      const ta = [...document.querySelectorAll('textarea')]
+        .find((t) => (t.closest('label')?.innerText || '').includes('描述'));
+      if (!ta) return { ok: false, label: false, text: text.slice(0, 200) };
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(ta, 'UI 样本描述：雨夜撞见旧神');
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      return { ok: true, label: text.includes('遭遇奇异实体'), text: text.slice(0, 200) };
+    })()`);
+    ok('伴侣层编辑器的背景故事是伴侣修订的 8 栏',
+      kpBgFill?.ok === true && kpBgFill?.label === true, JSON.stringify(kpBgFill));
+
     const kpSaved = await page.eval(`(() => {
       const b = [...document.querySelectorAll('button')].find((x) => x.textContent.includes('保存角色卡'));
       if (b) b.click();
@@ -1411,6 +1431,20 @@ try {
     // 伴侣版打印版面（v10.13.4）：状态栏精简、健康/理智独立行、战斗速查贴武器表
     await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='查看'); if(b) b.click(); return Boolean(b); })()`);
     await sleep(2200);
+
+    // 审卡阅览/详情页的背景故事同样要按规则集取栏目（v10.13.13）
+    await page.eval(`(() => {
+      const tab = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === '背景故事');
+      if (tab) tab.click();
+      return Boolean(tab);
+    })()`);
+    await sleep(800);
+    const kpDetailBg = await page.eval('document.body.innerText');
+    ok('详情/审卡阅览：伴侣层卡的背景故事按 8 栏显示并带出已填内容',
+      kpDetailBg.includes('重要之人与之地') && kpDetailBg.includes('遭遇奇异实体')
+      && kpDetailBg.includes('UI 样本描述：雨夜撞见旧神')
+      && !kpDetailBg.includes('形象描述') && !kpDetailBg.includes('第三类接触'),
+      kpDetailBg.slice(0, 300));
 
     // 骰娘指令按规则集取名（v10.13.7）：伴侣层卡必须用伴侣修订表的技能名
     await page.eval(`(() => {

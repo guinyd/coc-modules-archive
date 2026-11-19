@@ -16,8 +16,8 @@ import {
   User as UserIcon, Wand2, XCircle,
 } from 'lucide-react';
 import {
-  ALL_CHARS, BACKGROUND_FIELDS, CHAR_LABEL, CHARS, MODULE_ROLES, REVIEW_LABEL,
-  SKILL_BY_KEY, STATUS_LABEL, grantEduReroll, resetEduGrowth,
+  ALL_CHARS, CHAR_LABEL, CHARS, MODULE_ROLES, REVIEW_LABEL,
+  SKILL_BY_KEY, STATUS_LABEL, backgroundFieldsOf, grantEduReroll, resetEduGrowth,
 } from '../../../shared/coc7e.js';
 import { KPCP_TOGGLES } from '../../../shared/rulesets/kpcp.js';
 import { CLASSIC_ID, resolveCardRuleset } from '../../../shared/rulesets/index.js';
@@ -212,6 +212,8 @@ export default function CharacterDetail({
 
   const d = c.derived;
   const R = resolveCardRuleset({ gameSystem: c.gameSystem || CLASSIC_ID, kpcp: c.kpcp });
+  // 背景故事栏目按规则集取：伴侣层是 8 栏（描述/性格/…），七版与通克沿用官方 10 栏
+  const bgFields = backgroundFieldsOf(R);
   const isPulp = R.id === 'pulp';
   const isKpcp = R.layer?.kpcp === true;
   const talentNames = (Array.isArray(c.talents) ? c.talents : [])
@@ -413,7 +415,7 @@ export default function CharacterDetail({
             <div className="sm:col-span-2">
               天赋（{talentNames.length} 项）：{talentNames.length ? talentNames.join('、') : '未选择'}
               <span className="mx-2 text-ink-mute">·</span>
-              关键连接：{BACKGROUND_FIELDS.find(([k]) => k === c.keyConnection)?.[1] || '未指定'}
+              关键连接：{bgFields.find(([k]) => k === c.keyConnection)?.[1] || '未指定'}
               <span className="mx-2 text-ink-mute">·</span>
               档位：{R.chargen?.tones?.find((t) => t.id === (c.pulpTone || 'standard'))?.label || '默认通俗'}
             </div>
@@ -732,7 +734,7 @@ export default function CharacterDetail({
         <Panel className="animate-in fade-in p-5 sm:p-6">
           <h3 className="mb-5 flex items-center font-serif text-[17px] font-bold text-ink"><BookOpen className="mr-2 h-4 w-4 text-forest" />背景故事</h3>
           <div className="grid md:grid-cols-2 gap-5">
-            {BACKGROUND_FIELDS.map(([key, label]) => (
+            {bgFields.map(([key, label]) => (
               <div key={key}>
                 <div className="mb-2.5 border-b border-line pb-2 text-[14px] font-bold tracking-[0.04em] text-ink-soft">{label}</div>
                 <p className="min-h-[2rem] whitespace-pre-wrap text-[16px] leading-[1.9] text-ink-soft">
