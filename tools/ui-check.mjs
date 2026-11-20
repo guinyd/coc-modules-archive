@@ -184,6 +184,17 @@ try {
   await page.send('Runtime.enable');
   await page.send('Page.enable');
 
+  /** 等页面出现某段文字：冷启动的 Vite 首次编译比固定 sleep 慢得多 */
+  async function waitForText(text, timeout = 15000) {
+    const deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+      const hit = await page.eval(`document.body.innerText.includes(${JSON.stringify(text)})`).catch(() => false);
+      if (hit) return true;
+      await sleep(400);
+    }
+    return false;
+  }
+
   /** 新建角色卡现在要先选游戏规则：默认选「克苏鲁的呼唤 第七版」 */
   async function pickClassic() {
     await page.eval(`(() => {
@@ -196,7 +207,9 @@ try {
 
   console.log('\n== 加载站点 ==');
   await page.send('Page.navigate', { url: BASE });
-  await sleep(2500);
+  await waitForText('秘密调查档案馆');
+  await waitForText('收录世界上不可名状的超自然案件');
+  await sleep(600);
   const bootstrapped = await page.eval('document.querySelector("#root")?.children.length > 0');
   ok('React 应用挂载成功', bootstrapped === true);
 
@@ -333,20 +346,25 @@ try {
     const hasExportBtn = await page.eval(`[...document.querySelectorAll('button')].some(b => b.textContent.trim() === '导出')`);
     ok('列表卡片上有「导出」（角色卡 Markdown / 骰娘指令）', hasExportBtn === true);
     const waiveToggled = await page.eval(`(async () => {
-      const b = [...document.querySelectorAll('button')].find(x => /豁免年龄|恢复年龄/.test(x.textContent));
-      if (!b) return null;
-      const before = /豁免年龄/.test(b.textContent) ? 'waived' : 'normal';
-      b.click();
-      await new Promise((r) => setTimeout(r, 1400));
-      const fresh = [...document.querySelectorAll('button')].find(x => /豁免年龄|恢复年龄/.test(x.textContent));
-      const after = fresh && /豁免年龄/.test(fresh.textContent) ? 'waived' : 'normal';
-      return { before, after };
+      const pick = () => [...document.querySelectorAll('button')].filter(x => /豁免年龄|恢复年龄/.test(x.textContent));
+      // 贴了伴侣层 / 通俗规则的卡会忽略年龄规则，按钮点不动 —— 逐张试，只要有一张能翻过来即算通过
+      for (let i = 0; i < Math.min(pick().length, 5); i += 1) {
+        const b = pick()[i];
+        if (!b) break;
+        const before = /豁免年龄/.test(b.textContent) ? 'waived' : 'normal';
+        b.click();
+        await new Promise((r) => setTimeout(r, 1400));
+        const fresh = pick()[i];
+        const after = fresh && /豁免年龄/.test(fresh.textContent) ? 'waived' : 'normal';
+        if (before !== after) return { before, after, index: i };
+      }
+      return { before: 'same', after: 'same' };
     })()`);
     ok('豁免年龄是一键开关（点击后徽标状态改变）',
       waiveToggled && waiveToggled.before !== waiveToggled.after, JSON.stringify(waiveToggled));
     // 复原，避免影响后续断言
     await page.eval(`(() => {
-      const b = [...document.querySelectorAll('button')].find(x => /豁免年龄|恢复年龄/.test(x.textContent));
+      const b = [...document.querySelectorAll('button')].find(x => /恢复年龄/.test(x.textContent));
       if (b) b.click();
       return true;
     })()`);
@@ -1656,6 +1674,261 @@ try {
 
     const kpShot = await page.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(path.join(SHOTS, 'kpcp.png'), Buffer.from(kpShot.data, 'base64'));
+
+    // ---------------------------------------------------------------- KP 工具箱（v10.14.1）
+    // 数据不落库：只验证界面可用、算得对、防呆生效，不校验任何接口。
+    // 两个工具的草稿存在 localStorage，先清掉，免得上一轮留下的集群/角色影响断言。
+    await page.eval(`(() => {
+      localStorage.removeItem('archive.kpTools.statusCards.v1');
+      localStorage.removeItem('archive.kpTools.massCombat.v1');
+      return true;
+    })()`);
+    await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button, a')].find((x) => (x.textContent || '').includes('KP 控制台'));
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(1200);
+    const kpToolTab = await page.eval(`(() => {
+      const tabs = [...document.querySelectorAll('button')]
+        .map((b) => b.textContent.trim())
+        .filter((t) => /^(KP 工具箱|历史记录与分析|全模组带团盘点)/.test(t));
+      return { has: tabs[0]?.includes('KP 工具箱') === true, list: tabs.slice(0, 3), text: document.body.innerText };
+    })()`);
+    ok('KP 控制台的「KP 工具箱」标签排在第一个',
+      kpToolTab?.has === true, JSON.stringify(kpToolTab?.list));
+    ok('工具箱首屏列出两张工具卡片（带团记录卡 / 群战集群）',
+      kpToolTab?.text?.includes('带团状态记录卡') && kpToolTab?.text?.includes('群战集群构建器'),
+      kpToolTab?.text?.slice(0, 300));
+    ok('工具箱说明「数据只在本机、不上传服务器」',
+      kpToolTab?.text?.includes('不上传服务器'), kpToolTab?.text?.slice(0, 200));
+
+    // 工具一：带团状态记录卡 —— 填一位角色，预览要立刻出现
+    await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.includes('带团状态记录卡'));
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(900);
+    const statusOpen = await page.eval('document.body.innerText');
+    ok('带团记录卡工具打开后有字段模块与桌面/纸面两种视图',
+      statusOpen.includes('字段模块') && statusOpen.includes('桌面模式') && statusOpen.includes('A4 预览'),
+      statusOpen.slice(0, 200));
+    const statusFilled = await page.eval(`(() => {
+      const label = [...document.querySelectorAll('label')]
+        .find((l) => /^角色$/.test((l.innerText || '').trim().split('\\n')[0]) && l.querySelector('input'));
+      const input = label?.querySelector('input');
+      if (!input) return { ok: false };
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, 'UI 调查员甲');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return { ok: true };
+    })()`);
+    await sleep(600);
+    const statusText = await page.eval('document.body.innerText');
+    ok('带团记录卡：填入角色名后 A4 预览同步显示',
+      statusFilled?.ok === true && statusText.includes('UI 调查员甲'), JSON.stringify(statusFilled));
+
+    // 浮层必须真正铺满视口：编辑器在 .page-in（带 transform）里，fixed 会被祖先捕获
+    const overlayFit = await page.eval(`(() => {
+      const el = [...document.body.children].find((d) => /z-\\[60\\]/.test((d.className || '').toString()));
+      if (!el) return { ok: false };
+      const r = el.getBoundingClientRect();
+      return {
+        ok: Math.abs(r.width - document.documentElement.clientWidth) < 2 && Math.abs(r.left) < 1,
+        w: Math.round(r.width),
+        vw: document.documentElement.clientWidth,
+      };
+    })()`);
+    ok('工具浮层铺满视口（portal 到 body）', overlayFit?.ok === true, JSON.stringify(overlayFit));
+
+    // 桌面模式：在系统内直接勾选，写回同一份本机草稿
+    const deskClick = await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === '☐ 重伤' && !x.disabled);
+      if (b) b.click();
+      return { ok: Boolean(b) };
+    })()`);
+    await sleep(500);
+    const deskChecked = await page.eval(`(() => ({
+      on: [...document.querySelectorAll('button')].some((x) => x.textContent.trim() === '☑ 重伤' && !x.disabled),
+    }))()`);
+    ok('桌面模式：系统内可以直接勾选状态（不用打印）',
+      deskClick?.ok === true && deskChecked?.on === true, JSON.stringify({ deskClick, deskChecked }));
+
+    // 切到 A4 预览仍要有纸面
+    const toPaper = await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'A4 预览');
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(500);
+    const paperText = await page.eval('document.body.innerText');
+    ok('带团记录卡：桌面模式与 A4 预览可自由切换',
+      toPaper === true && paperText.includes('带团状态记录卡'), paperText.slice(0, 160));
+    ok('带团记录卡：勾选框与重伤/异变字段齐备',
+      statusText.includes('重伤值') && statusText.includes('异变值')
+      && statusText.includes('临时疯狂') && statusText.includes('震骇'),
+      statusText.slice(0, 200));
+
+    // A4 预览必须缩放到位：纸面 210mm 比容器宽时会冒出横向滚动条，纸被挤到半边
+    const previewFit = await page.eval(`(() => {
+      const host = [...document.querySelectorAll('div')]
+        .find((d) => /overflow-x-auto/.test(d.className || '') && (d.textContent || '').includes('带团状态记录卡'));
+      if (!host) return { ok: false, why: 'no-host' };
+      const label = [...document.querySelectorAll('span, div')]
+        .map((n) => (n.textContent || '').trim())
+        .find((t) => /^\\d{1,3}%$/.test(t));
+      return {
+        ok: host.scrollWidth <= host.clientWidth + 1,
+        zoom: label || '',
+        sw: host.scrollWidth,
+        cw: host.clientWidth,
+      };
+    })()`);
+    ok('带团记录卡：A4 预览自动缩放到容器内（不出横向滚动条）',
+      previewFit?.ok === true,
+      JSON.stringify(previewFit));
+
+    // 打印时把应用骨架整个撤掉，否则 #root 的占位会先吐一张空白页
+    const printSkeleton = await page.eval(`(async () => {
+      const css = await fetch('/src/index.css').then((r) => r.text()).catch(() => '');
+      const plain = css.replace(/\\/\\*[\\s\\S]*?\\*\\//g, '');
+      return {
+        hideRoot: /body:has\\(\\.print-tool\\)\\s*>\\s*#root\\s*\\{[^}]*display:\\s*none/.test(plain),
+        pageSize: /@page\\s*\\{[^}]*size:\\s*A4/.test(plain),
+        hasCss: css.length > 1000,
+      };
+    })()`);
+    ok('打印：应用骨架在打印时隐藏、纸面按 A4 输出（不再先吐空白页）',
+      printSkeleton?.hideRoot === true && printSkeleton?.pageSize === true,
+      JSON.stringify(printSkeleton));
+
+    // 防呆：有内容且未导出时，点返回要先拦一下
+    await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.includes('返回工具箱'));
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(500);
+    const leaveGuard = await page.eval('document.body.innerText');
+    ok('防呆：未导出就关闭工具会先提示「还没导出就离开」',
+      leaveGuard.includes('还没导出就离开'), leaveGuard.slice(0, 160));
+    await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === '继续编辑');
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(400);
+
+    // 工具二：群战集群构建器 —— 默认样本 50/50/65/45/35 应得 57 HP、+5D6、9%、70%
+    await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === '返回工具箱');
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(600);
+    await page.eval(`(() => {
+      const still = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === '仍然关闭');
+      if (still) { still.click(); return 'closed'; }
+      return 'direct';
+    })()`);
+    await sleep(700);
+    await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.includes('群战集群构建器'));
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(900);
+    const massText = await page.eval('document.body.innerText');
+    ok('群战构建器：力量×2 生命=(体质+体型)÷10 得 57',
+      massText.includes('57'), massText.slice(0, 300));
+    ok('群战构建器：伤害加值取体格大一级、闪避=敏捷÷5、攻击翻倍',
+      massText.includes('+5D6') && massText.includes('9%') && massText.includes('70%'),
+      massText.slice(0, 300));
+    ok('群战构建器：给出三档战力衰减门槛',
+      massText.includes('满编') && massText.includes('半残') && massText.includes('濒散'),
+      massText.slice(0, 300));
+
+    // 多集群：加一个集群后应出现两组编辑面板，打印预览变成 A4 × 2
+    const addUnit = await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === '添加集群');
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(700);
+    const multiUnit = await page.eval(`(() => {
+      const nameInputs = [...document.querySelectorAll('input')]
+        .filter((i) => (i.getAttribute('placeholder') || '').includes('邪教徒小队') || (i.value || '').includes('邪教徒小队'));
+      const txt = document.body.innerText;
+      return {
+        panels: nameInputs.length,
+        preview: /打印预览（A4 × 2）/.test(txt),
+      };
+    })()`);
+    ok('群战构建器：可以并列多个集群（A4 × 2，同页打印）',
+      addUnit === true && (multiUnit?.panels || 0) >= 2 && multiUnit?.preview === true,
+      JSON.stringify(multiUnit));
+
+    // 自定义攻击技能：不止格斗，加一条「斧头 40」应算出 80%
+    const addAttack = await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === '添加技能');
+      if (b) { b.click(); return true; }
+      return false;
+    })()`);
+    await sleep(500);
+    const attackRow = await page.eval(`(() => {
+      const rows = [...document.querySelectorAll('input')]
+        .filter((i) => (i.getAttribute('placeholder') || '').includes('格斗'));
+      const row = rows[rows.length - 1];
+      if (!row) return { ok: false, why: 'no-input' };
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(row, '斧头');
+      row.dispatchEvent(new Event('input', { bubbles: true }));
+      const rowBox = row.closest('div') || row.parentElement;
+      const num = [...(rowBox?.querySelectorAll('input') || [])].find((i) => i !== row);
+      if (num) {
+        setter.call(num, '40');
+        num.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      return { ok: true, hasValueInput: Boolean(num) };
+    })()`);
+    await sleep(600);
+    const attackText = await page.eval('document.body.innerText');
+    ok('群战构建器：攻击技能可自定义（斧头 40 → 80%）并参与计算',
+      addAttack === true && attackRow?.ok === true
+      && attackText.includes('斧头') && attackText.includes('80%'),
+      JSON.stringify({ addAttack, attackRow, head: attackText.slice(0, 200) }));
+    let massDamage = 0;
+    for (let i = 0; i < 3; i += 1) {
+      const hit = await page.eval(`(() => {
+        const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === '−10' && !x.disabled);
+        if (b) b.click();
+        return Boolean(b);
+      })()`);
+      if (hit) massDamage += 1;
+      await sleep(320);
+    }
+    await sleep(400);
+    const massStage = await page.eval(`(() => {
+      const chip = [...document.querySelectorAll('span')]
+        .find((s) => /^(满编|半残|濒散) · 每回合/.test((s.textContent || '').trim()));
+      return { text: chip ? chip.textContent.trim() : '' };
+    })()`);
+    ok('群战构建器：系统内扣血后衰减阶段实时变化（57 扣 30 → 半残带惩罚骰）',
+      massDamage === 3 && /半残/.test(massStage?.text || '') && /惩罚骰/.test(massStage?.text || ''),
+      JSON.stringify({ massDamage, massStage }));
+    await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.includes('返回工具箱'));
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(400);
+    await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === '仍然关闭');
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(500);
   } else {
     console.log('  （未提供可用账号，跳过登录后的界面检查；可用 UI_USER/UI_PASS 环境变量指定）');
   }

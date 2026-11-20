@@ -790,16 +790,24 @@ html.theme-push::view-transition-group(root) {
   .print-root, .print-root * { visibility: visible; }
   .print-root {
     position: static;
+    /* 打印层跟着 body 的可打印宽度走：body 已在 print 下收窄为 190mm，
+       这里再写死毫米数会把右对齐的数值顶出纸边。 */
     width: 100%;
     margin: 0;
   }
   html, body { margin: 0 !important; padding: 0 !important; }
+  /* 打印排版视口要和 @page 的可打印宽度一致：浏览器按 body 宽度铺版，
+     body 还是屏幕宽度（1400+px）时，右对齐内容会被切在纸边。 */
+  body:has(.print-tool) { width: 186mm !important; overflow: hidden !important; }
   .no-print { display: none !important; }
   .print-page { page-break-after: always; }
   .print-page:last-child { page-break-after: auto; }
   /* 页面由 @page 的 8mm 外边距提供留白；纸张盒子不再重复 210mm 宽和 padding，
      否则打印时会因内容区只有 194×281mm 而整体缩放、出现额外白边。 */
-  .print-root .print-paper { width: auto; min-height: 0; padding: 0; background: transparent !important; box-shadow: none; }
+  .print-root .print-paper { width: auto; min-height: 0; padding: 0; background: #ffffff !important; box-shadow: none; }
+  /* 工具浮层的打印层挂在 body 上：把应用骨架整个撤掉，
+     否则 #root 里那一大段 visibility:hidden 的页面仍占位置，会先吐出一张空白页。 */
+  body:has(.print-tool) > #root { display: none !important; }
   .print-avoid-break { break-inside: avoid; }
 }
 

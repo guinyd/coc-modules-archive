@@ -17,6 +17,7 @@ import { buildCardBackup, buildCardMarkdown, importCardData } from '../shared/ca
 import { resolveCardRuleset, customOccupationsFor } from '../shared/rulesets/index.js';
 import { KPCP_DEFAULT_RULES, KPCP_AUDIT_RULES } from '../shared/rulesets/kpcp.js';
 import { PULP_AUDIT_RULES } from '../shared/rulesets/pulp.js';
+import { buildMassUnit, attritionTable, attritionStage } from '../shared/massCombat.js';
 import {
   SPELL_CATALOG, SPELL_CATEGORIES, TOME_CATALOG,
   normalizeSpells, normalizeTomes, spellFromCatalog, tomeFromCatalog,
@@ -436,6 +437,57 @@ ok('规则集自带的审卡基线只包含真实规则项', (() => {
   if (stray.length) console.log(`    规则集里多出来的键：${stray.join(', ')}`);
   return stray.length === 0;
 })());
+
+section('群战集群构建器（v10.14.1）');
+// 公式全部来自守秘人伴侣的群战规则：属性放大、生命合成、体格与伤害加值、闪避与攻击
+const massSample = buildMassUnit({ STR: 50, CON: 50, SIZ: 65, DEX: 45, brawl: 35 });
+ok('群战：力量×2、体质×5、体型×5',
+  massSample.str === 100 && massSample.con === 250 && massSample.siz === 325,
+  JSON.stringify({ str: massSample.str, con: massSample.con, siz: massSample.siz }));
+ok('群战：生命 =（放大后体质 + 体型）÷10',
+  massSample.hpMax === 57, String(massSample.hpMax));
+ok('群战：伤害加值取「群体体格大一级」的档位',
+  massSample.db === '+5D6' && massSample.build === 5,
+  JSON.stringify({ build: massSample.build, db: massSample.db, base: massSample.baseDb }));
+ok('群战：闪避 = 敏捷÷5、攻击技能翻倍',
+  massSample.dodge === 9 && massSample.attack === 70,
+  JSON.stringify({ dodge: massSample.dodge, attack: massSample.attack }));
+// 战力衰减：>一半 3 次；低于一半 2 次并加惩罚骰；低于五分之一 1 次
+ok('群战：战力衰减三档门限与攻击次数',
+  attritionStage(57, 57).attacks === 3
+  && attritionStage(28, 57).attacks === 2 && attritionStage(28, 57).penaltyDie === true
+  && attritionStage(11, 57).attacks === 1,
+  JSON.stringify([attritionStage(57, 57), attritionStage(28, 57), attritionStage(11, 57)]));
+ok('群战：衰减表给出三档区间与提示',
+  (() => {
+    const rows = attritionTable(57);
+    return rows.length === 3
+      && rows.map((r) => r.label).join(',') === '满编,半残,濒散'
+      && rows[1].range === '12 – 28' && rows[2].range === '≤ 11';
+  })(), JSON.stringify(attritionTable(57)));
+// 当前生命留空要按满编算（曾经把空串当 0，一打开就是「濒散」）
+ok('群战：当前生命留空时视为满编（不是 0）',
+  buildMassUnit({ STR: 50, CON: 50, SIZ: 65, DEX: 45, brawl: 35, hpNow: '' }).stage.stage === 3
+  && buildMassUnit({ STR: 50, CON: 50, SIZ: 65, DEX: 45, brawl: 35 }).hpNow === 57
+  && buildMassUnit({ STR: 50, CON: 50, SIZ: 65, DEX: 45, brawl: 35, hpNow: 0 }).stage.stage === 1,
+  JSON.stringify([
+    buildMassUnit({ STR: 50, CON: 50, SIZ: 65, DEX: 45, brawl: 35, hpNow: '' }).stage,
+    buildMassUnit({ STR: 50, CON: 50, SIZ: 65, DEX: 45, brawl: 35, hpNow: 0 }).stage,
+  ]));
+
+// 群战：支持多个攻击技能（刀、斧头、擒拿等），每项各自 ×2
+ok('群战：支持多个攻击技能（每项 ×2）',
+  (() => {
+    const u = buildMassUnit({
+      STR: 50, CON: 50, SIZ: 65, DEX: 45,
+      attacks: [{ label: '格斗', value: 35 }, { label: '斧头', value: 40 }],
+    });
+    return u.attacks.length === 2
+      && u.attacks[1].label === '斧头'
+      && u.attacks[1].base === 40
+      && u.attacks[1].total === 80
+      && u.attack === 70;
+  })(), JSON.stringify(buildMassUnit({ STR: 50, CON: 50, SIZ: 65, DEX: 45, attacks: [{ label: '格斗', value: 35 }, { label: '斧头', value: 40 }] }).attacks));
 
 console.log(`\n================ 自检：${pass} 通过 / ${fails.length} 失败 ================`);
 if (fails.length) { console.log('失败项：\n - ' + fails.join('\n - ')); process.exit(1); }

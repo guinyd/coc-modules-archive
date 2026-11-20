@@ -17,6 +17,7 @@ import { apiDelete, apiGet, apiPost } from '../lib/api.js';
 import {
   Button, Combobox, EmptyState, Field, Input, PageHeader, Panel, Select, Tabs, cx,
 } from './ui.jsx';
+import KpToolbox from './kp/KpToolbox.jsx';
 
 /** 深墨表头里的小字：宽字距、纸色、全大写 */
 const TH = 'px-4 py-3 text-left text-[14px] font-semibold uppercase tracking-[0.18em] text-paper/60';
@@ -49,7 +50,7 @@ function LedgerCell({
 
 export default function KpDashboardPanel({ modules, showToast, showConfirm, handlePreview, users = [] }) {
   const [sessions, setSessions] = useState([]);
-  const [kpTab, setKpTab] = useState('history');
+  const [kpTab, setKpTab] = useState('toolbox');
   const [overviewFilter, setOverviewFilter] = useState('all');
   const [form, setForm] = useState({ moduleId: '', date: '', duration: '', investigators: [] });
   const [moduleQuery, setModuleQuery] = useState('');
@@ -168,10 +169,12 @@ export default function KpDashboardPanel({ modules, showToast, showConfirm, hand
       </section>
 
       <Tabs
-        items={[{ value: 'history', label: '历史记录与分析' }, { value: 'overview', label: '全模组带团盘点' }]}
+        items={[{ value: 'toolbox', label: 'KP 工具箱' }, { value: 'history', label: '历史记录与分析' }, { value: 'overview', label: '全模组带团盘点' }]}
         value={kpTab}
         onChange={setKpTab}
       />
+
+      {kpTab === 'toolbox' && <KpToolbox />}
 
       {kpTab === 'history' && (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
