@@ -325,9 +325,9 @@ export const KPCP_WEAPON_TABLES = [
 /* ---------------- 审卡规则（叠加在基础规则之上） ---------------- */
 
 export const KPCP_AUDIT_RULES = {
+  // 只放「真会被 auditSheet 消费」的项；专精下限（specFloor）与职业点总和是伴侣层
+  // 自己的开关（KPCP_TOGGLES.specFloor / 职业包点数），不走审卡规则表。
   backgroundMinFields: KPCP_BACKGROUND_START,
-  occTotalTolerance: true,
-  specFloor: true,
 };
 
 /* ---------------- 旧职业 → 伴侣修订表的路由 ---------------- */

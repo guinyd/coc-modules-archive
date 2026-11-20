@@ -2309,8 +2309,9 @@ export default function CharacterEditor({
             </div>
           </div>
 
-          {/* 下滚时点数条吸顶：技能表很长，任何时候都要能看见还剩多少点 */}
-          <div className="sticky top-1 z-20 -mx-1 rounded-[2px] border border-line bg-paper/95 px-2 py-2 shadow-[0_6px_16px_-12px_rgba(0,0,0,0.45)] backdrop-blur-sm">
+          {/* 下滚时点数条吸顶：技能表很长，任何时候都要能看见还剩多少点。
+              顶部导航是 sticky 的（报头 22px + 工具栏 64px），吸顶位置必须让开它，否则会被压在导航底下。 */}
+          <div className="sticky top-[64px] sm:top-[86px] z-20 -mx-1 rounded-[2px] border border-line bg-paper/95 px-2 py-2 shadow-[0_6px_16px_-12px_rgba(0,0,0,0.45)] backdrop-blur-sm">
             <div className="grid sm:grid-cols-2 gap-4">
               <ProgressBar used={derived.spent.occupation} total={derived.budget.occupation} label="职业技能点" />
               <ProgressBar used={derived.spent.interest} total={derived.budget.interest} label="兴趣技能点" hint={isKpcp ? '（教育+智力）' : '（智力×2）'} />

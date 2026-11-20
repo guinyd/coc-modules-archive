@@ -1131,6 +1131,34 @@ try {
   ok('审卡沿用提交时冻结的规则', houseAudit.json.rules?.charMax === 95
     && houseAudit.json.findings.some((f) => f.detail.includes('智力至少 90')));
 
+  // v10.14.0：规则集必须能把「全局规则里开着的检查」显式关回 0（0 = 不检查）
+  const gPut = await api('PUT', '/api/admin/audit-rules/global', {
+    token: A, body: { interestSkillMax: 60 },
+  });
+  ok('首席可设置全局兴趣技能上限', gPut.status === 200 && gPut.json.rules?.interestSkillMax === 60);
+  const offSetRes = await api('POST', '/api/rule-sets', {
+    token: A,
+    body: { name: '关检查规则集', scope: 'personal', auditRules: { interestSkillMax: 0 } },
+  });
+  const offSet = offSetRes.json?.item;
+  ok('规则集能把继承来的检查关回 0（0 = 不检查也算显式改过）',
+    offSetRes.status === 201 && offSet?.auditRules?.interestSkillMax === 0 && offSet?.auditRules?.charMax === 90);
+  const offCard = await api('POST', '/api/characters', {
+    token: A,
+    body: {
+      ...blank, name: '关检查测试卡', ruleSetId: offSet.id,
+      skills: [{ id: 'dodge', key: 'dodge', occ: 0, interest: 60, growth: 0 }],
+    },
+  });
+  const offAudit = await api('POST', `/api/admin/audit/${offCard.json.id}`, { token: A });
+  ok('审卡按规则集执行：兴趣上限 0 时不再报「兴趣技能成功率上限」',
+    offAudit.json.rules?.interestSkillMax === 0
+    && !offAudit.json.findings.some((f) => f.id === 'interestSkillMax'),
+    JSON.stringify(offAudit.json.findings || []).slice(0, 200));
+  await api('DELETE', `/api/characters/${offCard.json.id}`, { token: A });
+  await api('DELETE', `/api/rule-sets/${offSet.id}`, { token: A });
+  await api('DELETE', '/api/admin/audit-rules/global', { token: A });
+
   // 新房规形态：固定值 / 属性乘法 / 多目标技能组；并验证卡上 ruleSetId 与 houseBase 标记
   const mkSet2 = await api('POST', '/api/rule-sets', {
     token: A,

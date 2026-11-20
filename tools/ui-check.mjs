@@ -1204,9 +1204,22 @@ try {
         return cls.includes('sticky') && (d.textContent || '').includes('职业技能点') && (d.textContent || '').includes('兴趣技能点');
       });
       if (!el) return { ok: false, reason: 'no sticky bar' };
-      return { ok: getComputedStyle(el).position === 'sticky', reason: getComputedStyle(el).position };
+      const nav = document.querySelector('nav');
+      const navBottom = nav ? Math.round(nav.getBoundingClientRect().bottom) : 0;
+      // 抽屉/弹窗会把 body 锁成 overflow:hidden，滚动量测前先解锁并关掉平滑滚动
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+      document.documentElement.style.scrollBehavior = 'auto';
+      const y0 = Math.round(el.getBoundingClientRect().top + window.scrollY);
+      window.scrollTo(0, y0 + 240);
+      const r = el.getBoundingClientRect();
+      const position = getComputedStyle(el).position;
+      const scrollY = Math.round(window.scrollY);
+      const stuck = position === 'sticky' && r.bottom > navBottom && r.top >= navBottom - 2 && r.top < navBottom + 140;
+      window.scrollTo(0, 0);
+      return { ok: stuck, position, top: Math.round(r.top), navBottom, scrollY, hidden: r.bottom <= navBottom };
     })()`);
-    ok('技能分配页的点数条吸顶（滚动时仍能看见职业/兴趣剩余）', stickyBar.ok === true, JSON.stringify(stickyBar));
+    ok('技能分配页的点数条吸顶在导航下方（滚动时仍能看见职业/兴趣剩余）', stickyBar.ok === true, JSON.stringify(stickyBar));
 
     // v10.13.14：英雄奖励点投入（详情页要能看见加点情况）
     const bonusFilled = await page.eval(`(() => {
@@ -1477,13 +1490,19 @@ try {
     await sleep(800);
     const kpBgFill = await page.eval(`(() => {
       const text = document.body.innerText;
-      const ta = [...document.querySelectorAll('textarea')]
-        .find((t) => (t.closest('label')?.innerText || '').includes('描述'));
-      if (!ta) return { ok: false, label: false, text: text.slice(0, 200) };
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-      setter.call(ta, 'UI 样本描述：雨夜撞见旧神');
-      ta.dispatchEvent(new Event('input', { bubbles: true }));
-      return { ok: true, label: text.includes('遭遇奇异实体'), text: text.slice(0, 200) };
+      const fill = (needle, value) => {
+        const ta = [...document.querySelectorAll('textarea')]
+          .find((t) => (t.closest('label')?.innerText || '').includes(needle));
+        if (!ta) return false;
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(ta, value);
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      };
+      const ok = fill('描述', 'UI 样本描述：雨夜撞见旧神');
+      // 经历记录也在背景故事页（v10.13.14 起），详情页要跟着显示
+      fill('经历记录', 'UI 样本经历：雨夜追踪的第七天');
+      return { ok, label: text.includes('遭遇奇异实体'), text: text.slice(0, 200) };
     })()`);
     ok('伴侣层编辑器的背景故事是伴侣修订的 8 栏',
       kpBgFill?.ok === true && kpBgFill?.label === true, JSON.stringify(kpBgFill));
@@ -1518,6 +1537,10 @@ try {
       && kpDetailBg.includes('UI 样本描述：雨夜撞见旧神')
       && !kpDetailBg.includes('形象描述') && !kpDetailBg.includes('第三类接触'),
       kpDetailBg.slice(0, 300));
+    // v10.14.0：非编辑状态下「经历记录」也在背景故事页（关联模组仍在「装备与经历」）
+    ok('详情/审卡阅览：经历记录显示在背景故事页',
+      kpDetailBg.includes('经历记录') && kpDetailBg.includes('UI 样本经历：雨夜追踪的第七天'),
+      kpDetailBg.slice(-300));
 
     // 骰娘指令按规则集取名（v10.13.7）：伴侣层卡必须用伴侣修订表的技能名
     await page.eval(`(() => {

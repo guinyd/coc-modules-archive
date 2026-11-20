@@ -754,6 +754,13 @@ export default function CharacterDetail({
               </div>
             ))}
           </div>
+          {/* 经历记录跟着「背景故事」走（与编辑器同一版位）：只读预览与 KP 审卡都能看到 */}
+          {c.experience ? (
+            <div className="mt-6 border-t border-line pt-5">
+              <div className="mb-2 text-[14px] font-bold tracking-[0.04em] text-ink-soft">经历记录</div>
+              <p className="whitespace-pre-wrap rounded-[2px] border border-line-strong bg-paper-deep/40 p-3.5 text-[16px] leading-[1.85] text-ink-soft">{c.experience}</p>
+            </div>
+          ) : null}
         </Panel>
       )}
 
@@ -855,12 +862,6 @@ export default function CharacterDetail({
                 <div className="whitespace-pre-wrap text-[14px] leading-[1.8] text-ink-soft">{c.extraAssets || '—'}</div>
               </div>
             </div>
-            {c.experience ? (
-              <div>
-                <div className="mb-2 text-[14.5px] font-bold text-ink">经历记录</div>
-                <p className="whitespace-pre-wrap rounded-[2px] border border-line-strong bg-paper-deep/40 p-3.5 text-[16px] leading-[1.85] text-ink-soft">{c.experience}</p>
-              </div>
-            ) : null}
           </Panel>
 
           <Panel className="p-5 sm:p-6">

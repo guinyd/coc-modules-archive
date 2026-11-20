@@ -6,15 +6,17 @@
  * 尤其是骰娘指令格式与编码导入导出这类"看起来对、其实错一位"的东西。
  */
 
+import { readFileSync } from 'node:fs';
 import {
   blankSheet, blankSkills, computeSheet, validateSheet, auditSheet,
   ageAdjust, effectiveChars, damageBonusBuild, occupationAllowed,
-  OCCUPATIONS, normalizeHouseRules, backgroundFieldsOf,
+  OCCUPATIONS, normalizeHouseRules, backgroundFieldsOf, AUDIT_RULE_META,
 } from '../shared/coc7e.js';
 import { buildDiceBotCommand, DICEBOT_FORMATS, diceBotSkillNames } from '../shared/dicebot.js';
 import { buildCardBackup, buildCardMarkdown, importCardData } from '../shared/cardmd.js';
 import { resolveCardRuleset, customOccupationsFor } from '../shared/rulesets/index.js';
-import { KPCP_DEFAULT_RULES } from '../shared/rulesets/kpcp.js';
+import { KPCP_DEFAULT_RULES, KPCP_AUDIT_RULES } from '../shared/rulesets/kpcp.js';
+import { PULP_AUDIT_RULES } from '../shared/rulesets/pulp.js';
 import {
   SPELL_CATALOG, SPELL_CATEGORIES, TOME_CATALOG,
   normalizeSpells, normalizeTomes, spellFromCatalog, tomeFromCatalog,
@@ -414,5 +416,26 @@ ok('原型核心属性低于设定的下限时报错，设 0 不检查', (() => 
   const off = auditSheet(sheet, { coreCharMin: 0 }).findings.some((f) => f.id === 'coreCharMin');
   return hit && !off;
 })());
+section('审卡规则表全量生效（v10.14.0）');
+// 结构性自查：规则集里能配的每一项，auditSheet 里都必须真的读它。
+// 只靠「界面能填、保存成功」不够——曾经就出现过存了但审卡根本不看的项（occTotalTolerance / specFloor）。
+ok('规则表里每一项都被引擎真正消费（没有「存了不生效」的项）', (() => {
+  // 有的项在 auditSheet 里（r.xxx），有的在 computeSheet 的预算里（auditRules?.xxx），两者都算生效
+  const src = readFileSync(new URL('../shared/coc7e.js', import.meta.url), 'utf8');
+  const dead = AUDIT_RULE_META
+    .map((m) => m.key)
+    .filter((k) => !new RegExp(`(?:r\\.|auditRules\\??\\.)${k}\\b`).test(src));
+  if (dead.length) console.log(`    未生效：${dead.join(', ')}`);
+  return dead.length === 0;
+})());
+// 规则集基线里写进去的键也必须是真规则（不能塞没人读的自定义键充数）
+ok('规则集自带的审卡基线只包含真实规则项', (() => {
+  const known = new Set(AUDIT_RULE_META.map((m) => m.key));
+  const stray = [...Object.keys(PULP_AUDIT_RULES || {}), ...Object.keys(KPCP_AUDIT_RULES || {})]
+    .filter((k) => !known.has(k));
+  if (stray.length) console.log(`    规则集里多出来的键：${stray.join(', ')}`);
+  return stray.length === 0;
+})());
+
 console.log(`\n================ 自检：${pass} 通过 / ${fails.length} 失败 ================`);
 if (fails.length) { console.log('失败项：\n - ' + fails.join('\n - ')); process.exit(1); }

@@ -30,7 +30,8 @@ import {
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { requireAuth, requireAdmin, optionalAuth } from '../lib/auth.js';
 import {
-  isChief, isCustodian, custodianIds, canManageCard, canReviewCard, auditRulesFor, keeperDirectory,
+  isChief, isCustodian, custodianIds, canManageCard, canReviewCard, auditRulesFor, globalAuditRules,
+  keeperDirectory,
   ruleSetById, ruleSetSummary, snapshotRuleSet, houseRulesFor, activeRuleSet, isKeeper,
   systemOf, kpcpRulesFor,
 } from '../lib/roles.js';
@@ -230,7 +231,9 @@ function cardRules(character, actor) {
   const snap = character?.ruleSnapshot;
   if (snap && typeof snap === 'object') {
     return {
-      auditRules: { ...auditRulesFor(actor, sys), ...(snap.auditRules || {}) },
+      // 快照是「提交那一刻该规则集真实生效的完整阈值」；旧数据里可能只存了差异项，
+      // 所以仍以全局继承层为底叠一次，保证两种快照都能得到同一套判据。
+      auditRules: { ...globalAuditRules(sys), ...(snap.auditRules || {}) },
       houseRules: Array.isArray(snap.houseRules) ? snap.houseRules : [],
       kpcp: kpcpEnabled ? (snap.kpcpEnabled === true && snap.kpcp ? snap.kpcp : kpcpRulesFor(actor, sys)) : null,
       kpcpEnabled,
@@ -243,7 +246,8 @@ function cardRules(character, actor) {
   const set = raw && systemOf(raw.gameSystem) === sys ? raw : null;
   if (set) {
     return {
-      auditRules: { ...auditRulesFor(actor, sys), ...(set.auditRules || {}) },
+      // 玩家选了规则集：判据 = 全局继承层 + 该集差异，**不掺审卡人自己的规则集**
+      auditRules: { ...globalAuditRules(sys), ...(set.auditRules || {}) },
       houseRules: Array.isArray(set.houseRules) ? set.houseRules : [],
       kpcp: kpcpEnabled ? (set.kpcpEnabled === true && set.kpcp ? set.kpcp : kpcpRulesFor(actor, sys)) : null,
       kpcpEnabled,

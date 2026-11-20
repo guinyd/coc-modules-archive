@@ -12,7 +12,8 @@ import { save, db } from '../lib/db.js';
 import { requireAuth } from '../lib/auth.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import {
-  isChief, isKeeper, allRuleSets, ruleSetById, ruleSetSummary, activeRuleSet, systemOf, baseAuditRules, slotsOf, SYSTEM_SLOTS,
+  isChief, isKeeper, allRuleSets, ruleSetById, ruleSetSummary, activeRuleSet, systemOf,
+  globalAuditRules, slotsOf, SYSTEM_SLOTS,
 } from '../lib/roles.js';
 import {
   AUDIT_RULE_META, DEFAULT_AUDIT_RULES, HOUSE_RULE_LIMIT, normalizeHouseRules,
@@ -31,9 +32,15 @@ function parseName(value) {
   return name;
 }
 
-/** 只存与「该游戏规则的官方基线」不同的项，方便叠加与比较 */
+/**
+ * 只存「与继承层不同」的项。
+ *
+ * 继承层 = globalAuditRules(规则)（官方基线 < 首席全局规则），**不是**官方基线本身。
+ * 用官方基线比较会把「显式改回官方默认」（最典型 0 = 不检查）判成「没改过」而丢弃，
+ * 结果规则集永远关不掉全局层里开着的检查（v10.14.0 修复）。
+ */
 function diffRules(full, gameSystem) {
-  const base = baseAuditRules(gameSystem);
+  const base = globalAuditRules(gameSystem);
   const out = {};
   for (const meta of AUDIT_RULE_META) {
     if (full[meta.key] !== base[meta.key]) out[meta.key] = full[meta.key];
@@ -80,6 +87,8 @@ function summaryFor(req, set) {
   const active = activeRuleSet(req.user, s.gameSystem);
   return {
     ...s,
+    // 对外始终给「真实生效」的完整阈值：界面上的数字就是审卡会执行的数字
+    auditRules: { ...globalAuditRules(s.gameSystem), ...(s.auditRules || {}) },
     isMine: s.ownerId === req.user.id,
     isActive: Boolean(active && active.id === s.id),
   };
@@ -93,10 +102,10 @@ router.get('/rule-sets', (req, res) => {
   res.json({
     items: allRuleSets().map((s) => {
       const item = summaryFor(req, s);
-      // 发布出来的规则集对玩家透明：返回与「该规则的官方基线」合并后的完整审卡阈值，
-      // 玩家在「房规」页可展开查看自己将接受哪些校验。
+      // 发布出来的规则集对玩家透明：返回该规则集「真实生效」的完整审卡阈值
+      // （继承层 = 全局规则 < 本集差异），玩家在「房规」页看到的就是审卡会执行的版本。
       if (item) {
-        item.auditRules = { ...baseAuditRules(item.gameSystem), ...(s.auditRules || {}) };
+        item.auditRules = { ...globalAuditRules(item.gameSystem), ...(s.auditRules || {}) };
         item.kpcpEnabled = s.kpcpEnabled === true;
         if (s.kpcp && s.kpcpEnabled) item.kpcp = normalizeKpcpRules(s.kpcp);
         if (!keeper) item.isActive = false;

@@ -237,7 +237,13 @@ export function ruleSetSummary(set) {
   };
 }
 
-/** 提交审核时冻结的规则快照 */
+/**
+ * 提交审核时冻结的规则快照。
+ *
+ * auditRules 存的是**该规则集真实生效的完整阈值**（全局继承层 < 本集差异），而不是
+ * 规则集里的差异项：审卡时直接按快照执行，既不受审卡人自己那套规则影响，也不会因为
+ * 全局规则后来改动而让已提交的卡变了判据（v10.14.0 修复）。
+ */
 export function snapshotRuleSet(set) {
   const s = ruleSetSummary(set);
   if (!s) return null;
@@ -248,7 +254,7 @@ export function snapshotRuleSet(set) {
     ownerName: s.ownerName,
     scope: s.scope,
     houseRules: s.houseRules,
-    auditRules: s.auditRules,
+    auditRules: { ...globalAuditRules(s.gameSystem), ...(s.auditRules || {}) },
     kpcp: s.kpcp,
     kpcpEnabled: s.kpcpEnabled === true,
     at: Date.now(),
