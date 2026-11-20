@@ -2309,9 +2309,12 @@ export default function CharacterEditor({
             </div>
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-4">
-            <ProgressBar used={derived.spent.occupation} total={derived.budget.occupation} label="职业技能点" />
-            <ProgressBar used={derived.spent.interest} total={derived.budget.interest} label="兴趣技能点" hint={isKpcp ? '（教育+智力）' : '（智力×2）'} />
+          {/* 下滚时点数条吸顶：技能表很长，任何时候都要能看见还剩多少点 */}
+          <div className="sticky top-1 z-20 -mx-1 rounded-[2px] border border-line bg-paper/95 px-2 py-2 shadow-[0_6px_16px_-12px_rgba(0,0,0,0.45)] backdrop-blur-sm">
+            <div className="grid sm:grid-cols-2 gap-4">
+              <ProgressBar used={derived.spent.occupation} total={derived.budget.occupation} label="职业技能点" />
+              <ProgressBar used={derived.spent.interest} total={derived.budget.interest} label="兴趣技能点" hint={isKpcp ? '（教育+智力）' : '（智力×2）'} />
+            </div>
           </div>
 
           {isPulp ? (
@@ -2593,6 +2596,21 @@ export default function CharacterEditor({
               </Field>
             ))}
           </div>
+
+          <Panel className="space-y-4 p-5 sm:p-6">
+            <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink"><FileText className="h-4 w-4 text-ochre" />跑团经历</h3>
+            <Field className={FIELD} label="经历记录" hint="自由记述，会打印在角色卡的「经历」栏">
+              <Textarea rows={4} maxLength={4000} value={sheet.experience} onChange={(e) => patch({ experience: e.target.value })} />
+            </Field>
+            <div className="flex flex-wrap items-center gap-1.5 text-[14px] leading-[1.7] text-ink-soft">
+              <Download className="w-3.5 h-3.5" />
+              {guest ? '访客角色卡保存在本机，登录收录后才能在详情页关联模组。' : '关联模组请到「角色卡详情」页操作（玩家与 KP 均可添加）。'}
+              {!guest && sheet.moduleLinks?.length > 0 ? (
+                <span className="text-forest/90">当前已关联 {sheet.moduleLinks.length} 个模组，保存时会原样保留。</span>
+              ) : null}
+            </div>
+          </Panel>
+
         </Panel>
       )}
 
@@ -2813,20 +2831,6 @@ export default function CharacterEditor({
             <Field className={FIELD} label="额外资产（选填）" hint="规则表之外的房产、遗产、藏品等，自由填写，会打印在角色卡上">
               <Textarea rows={2} maxLength={400} value={sheet.extraAssets} onChange={(e) => patch({ extraAssets: e.target.value })} />
             </Field>
-          </Panel>
-
-          <Panel className="space-y-4 p-5 sm:p-6">
-            <h3 className="flex items-center gap-2 font-serif text-[16px] font-bold tracking-[0.01em] text-ink"><FileText className="h-4 w-4 text-ochre" />跑团经历</h3>
-            <Field className={FIELD} label="经历记录" hint="自由记述，会打印在角色卡的「经历」栏">
-              <Textarea rows={4} maxLength={4000} value={sheet.experience} onChange={(e) => patch({ experience: e.target.value })} />
-            </Field>
-            <div className="flex flex-wrap items-center gap-1.5 text-[14px] leading-[1.7] text-ink-soft">
-              <Download className="w-3.5 h-3.5" />
-              {guest ? '访客角色卡保存在本机，登录收录后才能在详情页关联模组。' : '关联模组请到「角色卡详情」页操作（玩家与 KP 均可添加）。'}
-              {!guest && sheet.moduleLinks?.length > 0 ? (
-                <span className="text-forest/90">当前已关联 {sheet.moduleLinks.length} 个模组，保存时会原样保留。</span>
-              ) : null}
-            </div>
           </Panel>
 
           <Panel className="space-y-3 p-5 sm:p-6">

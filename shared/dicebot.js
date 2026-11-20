@@ -132,10 +132,24 @@ function specTokens(custom) {
  * ② 其它规则集里**同一个 key** 的名字（七版/通克/伴侣互认，旧骰娘也能认）
  * ③ 名字里的斜杠压平（艺术/手艺 → 艺术和手艺）
  */
-function aliasesFor(key, name, R) {
-  const table = R?.layer?.kpcp
+function aliasTable(R) {
+  return R?.layer?.kpcp
     ? SKILL_ALIASES_BY_RULESET.kpcp
     : (SKILL_ALIASES_BY_RULESET[R?.id] || SKILL_ALIASES);
+}
+
+/** 只取手写别名表里的中文叫法（不做跨规则集互认）：专攻组的统称用它，避免
+ *  「母语」把通克的「语言」/ 伴侣版的「外语」当成别名一起带出去。 */
+function tableAliasesFor(name, R) {
+  const table = aliasTable(R);
+  const { head } = parenSplit(name);
+  const out = new Set([...(table[name] || []), ...(table[head] || [])]);
+  out.delete(name);
+  return [...out].filter((a) => a && !/[A-Za-z]/.test(a));
+}
+
+function aliasesFor(key, name, R) {
+  const table = aliasTable(R);
   const { head } = parenSplit(name);
   const out = new Set([...(table[name] || []), ...(table[head] || [])]);
   for (const rs of Object.values(RULESETS)) {
@@ -149,11 +163,24 @@ function aliasesFor(key, name, R) {
   return [...out].filter((a) => a && !/[A-Za-z]/.test(a));
 }
 
+/** 专攻组里「统称本身也要导出」的名字（骰娘按这些词条记录整组与分支） */
+const NAMED_SPEC_HEADS = new Set(['外语', '母语', '语言', '宗教', '神秘学']);
+
 /** 需要导出的技能（普通技能全给基础值；专攻技能只给已选方向/投过点的） */
 function skillsForExport(derived, R) {
   const defs = R?.skillByKey || SKILL_BY_KEY;
   const out = [];
-  for (const s of derived.skills || []) {
+  // 伴侣版的「第二母语」在派生表末尾追加，导出时挪到母语紧后面，输出更像一张正常的卡
+  // （母语80 法语80 拉丁语80，而不是跑到指令最末尾去）
+  let list = Array.isArray(derived.skills) ? derived.skills.slice() : [];
+  const extras = list.filter((s) => s.extraLanguage);
+  if (extras.length) {
+    const rest = list.filter((s) => !s.extraLanguage);
+    const at = rest.findIndex((s) => s.key === 'ownLanguage');
+    rest.splice(at >= 0 ? at + 1 : rest.length, 0, ...extras);
+    list = rest;
+  }
+  for (const s of list) {
     const def = defs[s.key];
     const display = s.name || def?.name || s.key;
     if (s.kind === 'custom') {
@@ -173,13 +200,25 @@ function skillsForExport(derived, R) {
         continue;
       }
       const tokens = specTokens(s.custom);
-      out.push({ tokens, total: s.total, aliases: [] });
+      // 统称本身也有意义的专攻组（外语 / 母语 / 宗教 / 神秘学…）：统称 + 分支一起给，
+      // 例如「宗教50神学50天主教50」「神秘学37炼金术37」。射击 / 格斗 / 艺术这类
+      // 只认分支名的组仍只给分支，避免指令里多出无意义的上位词。
+      const namedHead = NAMED_SPEC_HEADS.has(head);
+      out.push({
+        // 顺序对齐官方 Excel：统称 → 旧叫法 → 具体分支（宗教 神学 天主教）
+        tokens: namedHead ? [head, ...tableAliasesFor(head, R), ...tokens] : tokens,
+        total: s.total,
+        aliases: [],
+      });
       continue;
     }
     const { head, qual } = parenSplit(display);
     if (qual) {
-      // 标名技能（母语 / 伴侣版神秘学…）：统称与「统称+方向」各给一条
-      out.push({ tokens: [head, `${head}${qual}`, qual], total: s.total });
+      // 标名技能（母语 / 宗教 / 伴侣版神秘学…）：给统称 + 分支名，**不再拼「统称+方向」**。
+      // 骰娘只认「法语 / 拉丁语 / 天主教」这类独立词条，`母语法语` 是 Excel 的显示写法，
+      // 塞进指令只会变成无意义的脏词；同一技能多行分支靠 emitted 去重，最终得到
+      // 「母语80法语80拉丁语80」「宗教50神学50天主教50」。
+      out.push({ tokens: [head, qual], total: s.total, aliases: tableAliasesFor(head, R) });
       continue;
     }
     // 名字里带斜杠（伴侣版「艺术/手艺」）：导出时压平，原名进别名

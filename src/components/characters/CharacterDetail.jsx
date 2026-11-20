@@ -239,6 +239,9 @@ export default function CharacterDetail({
                             ? (s.pickedOccupation ? <span className="text-vermilion mr-1.5">❤</span> : <span className="text-forest mr-1.5">★</span>)
                             : <span className="text-ink-mute/70 mr-1.5">·</span>)}
                         <span className={cx(s.special && 'font-bold text-ink')}>{s.name}</span>
+                        {isPulp && s.bonus > 0 ? (
+                          <span className="ml-1.5 rounded-[2px] border border-amber-600/45 bg-ochre/10 px-1 text-[12.5px] leading-[1.6] text-ochre" title="英雄奖励点（原型白名单）">+{s.bonus} 奖励</span>
+                        ) : null}
                       </td>
                       <td className="px-1 py-1.5 text-center font-mono text-[14px] text-ink-mute">{s.base}</td>
                       <td className={cx('px-1 py-1.5 text-center font-mono', s.occ ? 'text-ochre' : 'text-ink-mute/45')}>{s.occ || '-'}</td>
@@ -467,6 +470,14 @@ export default function CharacterDetail({
                   <div className="text-ink-mute">自定义技能</div>
                   <div className="tabular mt-1 font-serif text-[17px] font-bold text-ink">{c.audit.stats.customSkillCount}</div>
                 </div>
+                {isPulp ? (
+                  <div className="rounded-[2px] border border-line-strong bg-paper-deep/40 p-3">
+                    <div className="text-ink-mute">英雄奖励点</div>
+                    <div className="tabular mt-1 font-serif text-[17px] font-bold text-ink">
+                      {d.spent?.bonus ?? 0} / {d.budget?.bonus ?? 0}
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               {c.audit.findings.length > 0 ? (

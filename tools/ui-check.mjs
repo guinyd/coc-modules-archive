@@ -563,6 +563,8 @@ try {
       ok('切到通克后显示通克专属审卡项',
         pulpRulesText.includes('必须选择原型') && pulpRulesText.includes('英雄奖励点总量'), pulpRulesText.slice(0, 160));
       ok('「忽略年龄」已从类型下拉拆成独立开关（通克页同样可见）', pulpRulesText.includes('忽略年龄'));
+      ok('通克审卡新增「核心属性下限」（v10.13.14）',
+        pulpRulesText.includes('核心属性下限'), pulpRulesText.slice(0, 200));
 
       // v10.13：kpcp 改为叠加层——房规卡片在任何规则页（含通克页）都出现
       ok('规则页出现「守密人伴侣房规」卡片（叠加层）',
@@ -1189,6 +1191,47 @@ try {
     })()`);
     ok('核心属性自动落在原型属性上', coreVal === 'DEX' || coreVal === 'APP' || coreVal === '', coreVal);
 
+    // v10.13.14：技能分配页的点数条吸顶（下滚时仍能看见剩余点）
+    await page.eval(`(() => {
+      const tab = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === '技能分配');
+      if (tab) tab.click();
+      return Boolean(tab);
+    })()`);
+    await sleep(900);
+    const stickyBar = await page.eval(`(() => {
+      const el = [...document.querySelectorAll('div')].find((d) => {
+        const cls = String(d.getAttribute('class') || '');
+        return cls.includes('sticky') && (d.textContent || '').includes('职业技能点') && (d.textContent || '').includes('兴趣技能点');
+      });
+      if (!el) return { ok: false, reason: 'no sticky bar' };
+      return { ok: getComputedStyle(el).position === 'sticky', reason: getComputedStyle(el).position };
+    })()`);
+    ok('技能分配页的点数条吸顶（滚动时仍能看见职业/兴趣剩余）', stickyBar.ok === true, JSON.stringify(stickyBar));
+
+    // v10.13.14：英雄奖励点投入（详情页要能看见加点情况）
+    const bonusFilled = await page.eval(`(() => {
+      const det = [...document.querySelectorAll('details')].find((d) => (d.textContent || '').includes('英雄奖励点'));
+      if (!det) return { ok: false, reason: 'no bonus panel' };
+      det.open = true;
+      const input = det.querySelector('input');
+      if (!input) return { ok: false, reason: 'no input' };
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '10');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return { ok: true };
+    })()`);
+    await sleep(600);
+    pulpText = await page.eval('document.body.innerText');
+    ok('英雄奖励点可以投入原型白名单技能', bonusFilled.ok === true && /\d+ \/ 100|已用 10/.test(pulpText),
+      JSON.stringify(bonusFilled));
+    // 回到属性与职业页继续后续断言
+    await page.eval(`(() => {
+      const tab = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === '属性与职业');
+      if (tab) tab.click();
+      return Boolean(tab);
+    })()`);
+    await sleep(800);
+
     // 天赋勾选
     await page.eval(`(() => {
       const rows = [...document.querySelectorAll('button')].filter((b) => (b.textContent || '').includes('明察秋毫'));
@@ -1232,6 +1275,32 @@ try {
     const listText = await page.eval('document.body.innerText');
     ok('通克卡保存后列表出现「通克」标记',
       savedPulp === true && listText.includes('通克'), listText.slice(0, 160));
+
+    // v10.13.14：非编辑状态（详情页 / KP 审卡）也要看得见原型奖励点的加点情况
+    await page.eval(`(() => {
+      const title = [...document.querySelectorAll('h3')].find((h) => h.textContent.includes('通克自检英雄'));
+      let node = title;
+      let btn = null;
+      while (node && !btn) {
+        btn = [...node.querySelectorAll('button')].find((b) => b.textContent.trim() === '查看');
+        node = node.parentElement;
+      }
+      if (!btn) return false;
+      btn.click();
+      return true;
+    })()`);
+    await sleep(1600);
+    const pulpDetail = await page.eval('document.body.innerText');
+    ok('通克详情页显示英雄奖励点（预算 + 已加点技能）',
+      pulpDetail.includes('英雄奖励点') && pulpDetail.includes('奖励'),
+      pulpDetail.split(String.fromCharCode(10)).join('|').slice(0, 200));
+    // 回到编辑页继续后续流程（v10.13 伴侣层流程会重新进入列表）
+    await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.includes('编辑'));
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(1200);
 
     const shot = await page.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(path.join(SHOTS, 'editor.png'), Buffer.from(shot.data, 'base64'));
@@ -1418,6 +1487,10 @@ try {
     })()`);
     ok('伴侣层编辑器的背景故事是伴侣修订的 8 栏',
       kpBgFill?.ok === true && kpBgFill?.label === true, JSON.stringify(kpBgFill));
+    // v10.13.14：「经历记录」移到背景故事最下方（关联模组仍在详情页，位置不变）
+    const kpBgStory = await page.eval('document.body.innerText');
+    ok('「经历记录」已并入背景故事页（最下方）',
+      kpBgStory.includes('经历记录') && kpBgStory.includes('关联模组请到'), kpBgStory.slice(-200));
 
     const kpSaved = await page.eval(`(() => {
       const b = [...document.querySelectorAll('button')].find((x) => x.textContent.includes('保存角色卡'));

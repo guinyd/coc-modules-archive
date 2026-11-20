@@ -1219,6 +1219,7 @@ export const DEFAULT_AUDIT_RULES = {
   // —— 规则集专属项（官方 7e 全部关闭；通俗克苏鲁在自己的 auditRules 里打开）——
   requireArchetype: false,     // 必须先选原型
   coreCharMax: 0,              // 核心属性上限（0 = 不检查）
+  coreCharMin: 0,              // 核心属性下限（0 = 不检查；通克原型 (1D6+13)×5 自然下限 70）
   talentsCount: 0,             // 期望天赋数量（0 = 不检查）
   bonusPoints: 0,              // 英雄奖励点总量（0 = 该规则集没有第三套预算）
   bonusWhitelist: false,       // 奖励点只能投原型列出的技能
@@ -1249,6 +1250,7 @@ export const AUDIT_RULE_META = [
   // —— 通俗克苏鲁专属（官方 7e 规则集没有这些概念，保持默认值即完全不生效）——
   { key: 'requireArchetype', group: 'pulp', label: '必须选择原型', type: 'boolean', hint: '通俗克苏鲁建卡第一步；未选原型时英雄奖励点不可用' },
   { key: 'coreCharMax', group: 'pulp', label: '核心属性上限', type: 'number', hint: '(1D6+13)×5 的上限 95；0 = 不检查' },
+  { key: 'coreCharMin', group: 'pulp', label: '核心属性下限', type: 'number', hint: '原型指定的核心属性最低值；按 (1D6+13)×5 自然下限 70 取；0 = 不检查' },
   { key: 'talentsCount', group: 'pulp', label: '期望天赋数量', type: 'number', hint: '默认通俗 2 项；低通俗 0-1、高通俗 3（按通俗指示器调整）；0 = 不检查' },
   { key: 'bonusPoints', group: 'pulp', label: '英雄奖励点总量', type: 'number', hint: '每个原型固定 100 点，只能投原型列出的技能；0 = 关闭第三套预算' },
   { key: 'bonusWhitelist', group: 'pulp', label: '奖励点限原型技能', type: 'boolean', hint: '关闭后奖励点可投任意技能（房规放宽用）' },
@@ -1463,12 +1465,15 @@ export function evaluateHouseRules(sheet, houseRules, computed) {
 export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
   const R = rulesetOf(sheet, ctx);
   // 基线 = 官方 7e ⊕ 该规则集的差异；再把 KP 显式改过的项盖上去。
-  // 只覆盖「与官方基线不同」的入参，避免规则集自己的阈值被全局默认值悄悄抵消。
+  // 用**本规则的基线**（而不是官方默认值）判断「KP 有没有改过这一项」：
+  // 与基线相同 = 没动过，跳过；不同（哪怕正好等于官方默认的 0）说明 KP 显式改过，
+  // 必须盖上去。旧实现拿 DEFAULT_AUDIT_RULES 比较，于是「把通克/房规的阈值改回 0 =
+  // 不检查」会被静默丢弃，审卡里继续按规则集原来的阈值报警。
   const base = { ...DEFAULT_AUDIT_RULES, ...(R.auditRules || {}) };
   const input = rulesInput && typeof rulesInput === 'object' ? rulesInput : {};
   const r = { ...base };
   for (const [k, v] of Object.entries(input)) {
-    if (Object.hasOwn(DEFAULT_AUDIT_RULES, k) && v === DEFAULT_AUDIT_RULES[k]) continue;
+    if (Object.hasOwn(base, k) && v === base[k]) continue;
     r[k] = v;
   }
   const c = computeSheet(sheet, { ...ctx, auditRules: r });
@@ -1573,10 +1578,13 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
   }
 
   if (rulesOn && num(r.backgroundMinFields) > 0) {
-    const filled = Object.values(sheet?.background || {}).filter((v) => String(v || '').trim()).length;
+    // 栏目数按当前规则集算（七版 10 栏 / 伴侣版 8 栏），不要写死 10
+    const bgFields = backgroundFieldsOf(R);
+    const bgTotal = bgFields.length || 10;
+    const filled = bgFields.filter(([k]) => String(sheet?.background?.[k] || '').trim()).length;
     if (filled < num(r.backgroundMinFields)) {
       add('backgroundMinFields', '背景故事不完整', 'warn',
-        `仅填写 ${filled} / 10 栏，要求至少 ${num(r.backgroundMinFields)} 栏`);
+        `仅填写 ${filled} / ${bgTotal} 栏，要求至少 ${num(r.backgroundMinFields)} 栏`);
     }
   }
 
@@ -1624,6 +1632,9 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
     } else if (!c.archetype.coreChar.includes(core)) {
       add('coreCharInvalid', '核心属性不在原型范围内', 'error',
         `原型【${c.archetype.zh}】的核心属性只能是 ${c.archetype.coreChar.map((k) => CHAR_LABEL[k]).join(' / ')}，当前为 ${CHAR_LABEL[core] || core}`);
+    } else if (rulesOn && num(r.coreCharMin) > 0 && c.eff[core] < num(r.coreCharMin)) {
+      add('coreCharMin', '核心属性低于下限', 'error',
+        `核心属性 ${CHAR_LABEL[core]} ${c.eff[core]} 低于 (1D6+13)×5 的下限 ${num(r.coreCharMin)}`);
     } else if (rulesOn && num(r.coreCharMax) > 0 && c.eff[core] > num(r.coreCharMax)) {
       add('coreCharMax', '核心属性超出上限', 'error',
         `核心属性 ${CHAR_LABEL[core]} ${c.eff[core]} 超过 (1D6+13)×5 的上限 ${num(r.coreCharMax)}`);

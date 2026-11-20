@@ -14,6 +14,7 @@ import {
 import { buildDiceBotCommand, DICEBOT_FORMATS, diceBotSkillNames } from '../shared/dicebot.js';
 import { buildCardBackup, buildCardMarkdown, importCardData } from '../shared/cardmd.js';
 import { resolveCardRuleset, customOccupationsFor } from '../shared/rulesets/index.js';
+import { KPCP_DEFAULT_RULES } from '../shared/rulesets/kpcp.js';
 import {
   SPELL_CATALOG, SPELL_CATEGORIES, TOME_CATALOG,
   normalizeSpells, normalizeTomes, spellFromCatalog, tomeFromCatalog,
@@ -340,5 +341,78 @@ ok('忽略年龄规则不套用年龄补正（APP 65 不再 −5）', (() => {
 ok('忽略年龄规则隐藏年龄范围提示', !validateSheet({ ...base, age: 130 }, { ignoreAge: true }).some((x) => x.includes('年龄超')));
 ok('忽略年龄规则隐藏教育未结算提示', !auditSheet({ ...base, applyAgeAdjust: true }, {}, { ignoreAge: true }).findings.some((f) => f.id === 'eduUnsettled'));
 
+section('骰娘导入指令：标名技能拆分（v10.13.14）');
+ok('伴侣版多门母语拆成「母语 + 各分支」，不再出现「母语法语」这种联合词', (() => {
+  const sheet = {
+    ...blankSheet('u1', 'classic7e'),
+    kpcp: { enabled: true, toggles: KPCP_DEFAULT_RULES.toggles },
+    chars: { STR: 60, CON: 50, SIZ: 45, DEX: 44, APP: 71, INT: 75, POW: 75, EDU: 80 },
+    extraLanguages: ['法语', '拉丁语'],
+  };
+  const R = resolveCardRuleset(sheet);
+  sheet.skills = blankSkills(R);
+  const d = computeSheet(sheet, { ruleset: R });
+  const cmd = buildDiceBotCommand(sheet, d, {});
+  const seg = (cmd.match(/母语\d+[^聆]*/) || [''])[0];
+  return seg.includes('母语80法语80拉丁语80')
+    && !cmd.includes('母语法语') && !cmd.includes('母语拉丁语');
+})());
+ok('宗教带分支时给「统称 → 旧叫法 → 分支」（宗教 神学 天主教）', (() => {
+  const sheet = {
+    ...blankSheet('u1', 'classic7e'),
+    kpcp: { enabled: true, toggles: KPCP_DEFAULT_RULES.toggles },
+    chars: { STR: 60, CON: 50, SIZ: 45, DEX: 44, APP: 71, INT: 75, POW: 75, EDU: 80 },
+  };
+  const R = resolveCardRuleset(sheet);
+  sheet.skills = blankSkills(R).map((s) => (s.key === 'religion' ? { ...s, custom: '天主教', interest: 40 } : s));
+  const d = computeSheet(sheet, { ruleset: R });
+  const cmd = buildDiceBotCommand(sheet, d, {});
+  const seg = (cmd.match(/宗教\d+[^炮术]*/) || [''])[0];
+  return /^宗教\d+神学\d+天主教\d+/.test(seg) && !cmd.includes('宗教天主教');
+})());
+
+section('审卡：规则集显式设回官方默认值（0 = 不检查）必须生效（v10.13.14）');
+const auditIds = (sheet, rules) => auditSheet(sheet, rules).findings.map((f) => f.id);
+const kpcpSheet = () => ({
+  ...blankSheet('u1', 'classic7e'),
+  kpcp: { enabled: true },
+  chars: { STR: 60, CON: 50, SIZ: 45, DEX: 44, APP: 71, INT: 75, POW: 75, EDU: 80 },
+});
+ok('通克默认要求填背景栏；显式设 0 后不再提示', (() => {
+  const sheet = { ...blankSheet('u1', 'pulp'), chars: { STR: 60, CON: 50, SIZ: 45, DEX: 44, APP: 71, INT: 75, POW: 75, EDU: 80 } };
+  return auditIds(sheet, {}).includes('backgroundMinFields')
+    && !auditIds(sheet, { backgroundMinFields: 0 }).includes('backgroundMinFields');
+})());
+ok('伴侣层同样可被显式 0 关掉', (() => {
+  const sheet = kpcpSheet();
+  return auditIds(sheet, {}).includes('backgroundMinFields')
+    && !auditIds(sheet, { backgroundMinFields: 0 }).includes('backgroundMinFields');
+})());
+ok('显式给出更严的栏数会触发提示，文案用实际栏数（伴侣版 8 栏）', (() => {
+  const f = auditSheet(kpcpSheet(), { backgroundMinFields: 3 }).findings.find((x) => x.id === 'backgroundMinFields');
+  return Boolean(f) && f.detail.includes('/ 8 栏');
+})());
+ok('职业技能上限设 0 同样能关掉阈值', (() => {
+  const sheet = {
+    ...blankSheet('u1', 'classic7e'),
+    chars: { STR: 60, CON: 50, SIZ: 45, DEX: 44, APP: 71, INT: 75, POW: 75, EDU: 80 },
+  };
+  sheet.skills = blankSkills().map((s) => (s.key === 'spotHidden' ? { ...s, occ: 60 } : s));
+  return auditIds(sheet, { occSkillMax: 50 }).includes('occSkillMax')
+    && !auditIds(sheet, { occSkillMax: 0 }).includes('occSkillMax');
+})());
+
+section('审卡：通俗核心属性下限（v10.13.14）');
+ok('原型核心属性低于设定的下限时报错，设 0 不检查', (() => {
+  const sheet = { ...blankSheet('u1', 'pulp'), chars: { STR: 60, CON: 50, SIZ: 45, DEX: 55, APP: 71, INT: 75, POW: 75, EDU: 80 } };
+  const R = resolveCardRuleset(sheet);
+  const arch = (R.archetypes || [])[0];
+  if (!arch) return false;
+  sheet.archetypeId = arch.id;
+  sheet.coreChar = arch.coreChar[0];
+  const hit = auditSheet(sheet, { coreCharMin: 70 }).findings.some((f) => f.id === 'coreCharMin');
+  const off = auditSheet(sheet, { coreCharMin: 0 }).findings.some((f) => f.id === 'coreCharMin');
+  return hit && !off;
+})());
 console.log(`\n================ 自检：${pass} 通过 / ${fails.length} 失败 ================`);
 if (fails.length) { console.log('失败项：\n - ' + fails.join('\n - ')); process.exit(1); }
