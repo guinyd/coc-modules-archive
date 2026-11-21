@@ -16,8 +16,8 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Calculator, ChevronLeft, ClipboardList, Download, FileWarning, Plus, Printer,
-  RotateCcw, Swords, Trash2,
+  Calculator, ChevronLeft, ClipboardList, Download, FileUp, FileWarning, Plus, Printer,
+  RotateCcw, Swords, Trash2, Wand2,
 } from 'lucide-react';
 import {
   Badge, Button, Field, Input, Panel, Textarea, cx,
@@ -25,6 +25,9 @@ import {
 import {
   attritionTable, buildMassUnit,
 } from '../../../shared/massCombat.js';
+import {
+  decodeStateMarker, deriveStatus, encodeStateMarker, parseStCommand,
+} from '../../../shared/kpTools.js';
 
 // ----------------------------------------------------------------- 通用小工具
 
@@ -202,6 +205,31 @@ function ToolShell({
   );
   if (typeof document === 'undefined') return shell;
   return createPortal(shell, document.body);
+}
+
+/** 导入面板：粘贴导出过的 .md（或 .st）后还原。两个工具共用同一套外观。 */
+function ImportPanel({
+  label, placeholder, value, onChange, onImport, onClose, message, tone = 'ok',
+}) {
+  return (
+    <div className="mt-3 rounded-[2px] border border-dashed border-amber-600/45 bg-ochre/[0.06] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-[12.5px] font-semibold text-ink">{label}</div>
+        <button type="button" onClick={onClose} className="text-[12px] text-ink-mute underline-offset-2 hover:underline">收起</button>
+      </div>
+      <Textarea
+        rows={3}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="mt-2 font-mono text-[12px]"
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button variant="ghost" size="sm" onClick={onImport}><Wand2 className="h-4 w-4" strokeWidth={1.8} /> 识别导入</Button>
+        <span className={cx('text-[12px]', tone === 'error' ? 'text-red-500' : 'text-ink-mute')}>{message || ''}</span>
+      </div>
+    </div>
+  );
 }
 
 // ----------------------------------------------------------------- 工具一：带团状态记录卡
@@ -461,6 +489,63 @@ function StatusTool({ onClose }) {
   const zoom = useFitZoom(previewRef, 210, mode);
 
   const { meta, fields, customFields, entries, cols } = state;
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importMsg, setImportMsg] = useState('');
+  const [importTone, setImportTone] = useState('ok');
+  const [hpRule, setHpRule] = useState('classic');
+  const [stEntry, setStEntry] = useState('');
+  const [stText, setStText] = useState('');
+  const [stMsg, setStMsg] = useState('');
+
+  /** 把导出过的 .md 整份还原（内部藏了备份标记） */
+  const doImportMd = () => {
+    const found = decodeStateMarker(importText);
+    if (!found || found.kind !== 'status' || !found.state || !Array.isArray(found.state.entries)) {
+      setImportTone('error');
+      setImportMsg('没找到这张表自己的备份标记。请粘贴本工具「导出 .md」得到的整份文件。');
+      return;
+    }
+    const next = {
+      ...STATUS_INIT,
+      ...found.state,
+      meta: { ...STATUS_INIT.meta, ...(found.state.meta || {}) },
+      fields: Array.isArray(found.state.fields) ? found.state.fields : DEFAULT_STATUS_FIELDS,
+      customFields: Array.isArray(found.state.customFields) ? found.state.customFields : [],
+      entries: found.state.entries.map((e) => ({ ...newEntry(), ...e })),
+    };
+    setState(next);
+    setImportTone('ok');
+    setImportMsg(`已还原：${next.entries.length} 位调查员、${next.fields.length} 个字段、${next.customFields.length} 个自定义字段。`);
+  };
+
+  /** 单个角色：粘贴骰娘 .st 指令后识别并回填，顺手算出重伤/异变等派生值 */
+  const doImportSt = (entryId) => {
+    const parsed = parseStCommand(stText);
+    const filled = Object.keys(parsed.values);
+    if (filled.length === 0) {
+      setStMsg('没识别到属性。请粘贴类似「.st 力量50str50 敏捷45dex45 …」的指令。');
+      return;
+    }
+    const derived = deriveStatus(parsed.values, { hpRule });
+    const merged = { ...parsed.values, ...derived };
+    const ids = Object.keys(merged);
+    setState((prev) => {
+      const nextFields = [...prev.fields];
+      ids.forEach((id) => { if (!nextFields.includes(id)) nextFields.push(id); });
+      return {
+        ...prev,
+        fields: nextFields,
+        entries: prev.entries.map((e) => (e.id === entryId
+          ? { ...e, values: { ...e.values, ...Object.fromEntries(ids.map((id) => [id, String(merged[id])])) } }
+          : e)),
+      };
+    });
+    const labelOf = (id) => STATUS_FIELDS.find((f) => f.id === id)?.label || id;
+    const derivedLabels = Object.keys(derived).map(labelOf);
+    setStMsg(`识别 ${parsed.tokens} 项，回填 ${filled.length} 项；按属性算出 ${derivedLabels.join(' / ')}（已自动勾选字段）。`);
+  };
+
   const toggleField = (id) => setState((prev) => ({
     ...prev,
     fields: prev.fields.includes(id) ? prev.fields.filter((f) => f !== id) : [...prev.fields, id],
@@ -503,7 +588,8 @@ function StatusTool({ onClose }) {
   };
 
   const doExport = () => {
-    downloadText(`${(meta.title || '带团状态记录').replace(/[\\/:*?"<>|]/g, '_')}.md`, statusMarkdown(state));
+    downloadText(`${(meta.title || '带团状态记录').replace(/[\\/:*?"<>|]/g, '_')}.md`,
+      statusMarkdown(state) + encodeStateMarker('status', state));
     setExportedAt(nowText());
   };
 
@@ -519,6 +605,7 @@ function StatusTool({ onClose }) {
       actions={(
         <>
           <Button variant="ghost" size="sm" onClick={addEntry}><Plus className="h-4 w-4" strokeWidth={2} /> 添加角色</Button>
+          <Button variant="ghost" size="sm" onClick={() => setImportOpen((v) => !v)}><FileUp className="h-4 w-4" strokeWidth={1.8} /> 导入 .md</Button>
           <Button variant="ghost" size="sm" onClick={doExport}><Download className="h-4 w-4" strokeWidth={1.8} /> 导出 .md</Button>
           <Button variant="primary" size="sm" onClick={() => window.print()}><Printer className="h-4 w-4" strokeWidth={1.8} /> 打印 / 导出 PDF</Button>
           <Button variant="ghost" size="sm" onClick={resetAll}><RotateCcw className="h-4 w-4" strokeWidth={1.8} /> 清空</Button>
@@ -539,6 +626,19 @@ function StatusTool({ onClose }) {
                 <Field label="备注" className="sm:col-span-2"><Textarea rows={2} value={meta.note} onChange={(e) => setState((p) => ({ ...p, meta: { ...p.meta, note: e.target.value } }))} placeholder="本轮开局位置、暗线、需要盯着的线索…" /></Field>
               </div>
             </Panel>
+
+            {importOpen ? (
+              <ImportPanel
+                label="从 .md 还原本表（粘贴本工具导出过的文件内容）"
+                placeholder="把「导出 .md」得到的整份文件粘贴到这里，识别后连角色、字段勾选、自定义字段一起还原。"
+                value={importText}
+                onChange={setImportText}
+                onImport={doImportMd}
+                onClose={() => setImportOpen(false)}
+                message={importMsg}
+                tone={importTone}
+              />
+            ) : null}
 
             <Panel className="p-5">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -612,8 +712,24 @@ function StatusTool({ onClose }) {
             <Panel className="p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="caption !text-[12px]">04 · 角色（{entries.length}）</div>
-                <Button variant="ghost" size="sm" onClick={addEntry}><Plus className="h-4 w-4" strokeWidth={2} /> 添加角色</Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[12px] text-ink-mute">生命算法</span>
+                  <select
+                    value={hpRule}
+                    onChange={(e) => setHpRule(e.target.value)}
+                    className="rounded-[2px] border border-line-strong bg-paper-raised px-2 py-1 text-[12.5px] text-ink"
+                    title="只影响粘贴 .st 时算出的重伤值"
+                  >
+                    <option value="classic">官方 ÷10</option>
+                    <option value="pulp">通克 ÷5</option>
+                  </select>
+                  <Button variant="ghost" size="sm" onClick={addEntry}><Plus className="h-4 w-4" strokeWidth={2} /> 添加角色</Button>
+                </div>
               </div>
+              <p className="mt-2 text-[12px] text-ink-mute">
+                每个角色可以单独粘贴骰娘 <span className="font-mono">.st</span> 指令（如 <span className="font-mono">.st 力量50str50 敏捷45dex45 …</span>），
+                会自动回填属性并算出重伤值（生命 ÷ 2）、异变值（意志 ÷ 5）、伤害加值与体格。
+              </p>
               <div className="mt-3 space-y-3">
                 {entries.map((entry, index) => (
                   <div key={entry.id} className="rounded-[2px] border border-line-strong p-3">
@@ -675,6 +791,28 @@ function StatusTool({ onClose }) {
                     >
                       沿用上一行的表头与勾选
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStEntry(stEntry === entry.id ? '' : entry.id);
+                        setStText('');
+                        setStMsg('');
+                      }}
+                      className="mt-2 ml-3 text-[12px] text-ink-mute underline-offset-2 hover:underline"
+                    >
+                      {stEntry === entry.id ? '收起 .st 导入' : '粘贴骰娘 .st 导入这一行'}
+                    </button>
+                    {stEntry === entry.id ? (
+                      <ImportPanel
+                        label={`把骰娘指令导进「${entry.values.char || `调查员 ${index + 1}`}」`}
+                        placeholder=".st 力量50str50 体质50con50 体型65siz65 敏捷45dex45 意志75pow75 教育80edu80 幸运80运气80 hp9体力9 san75理智75 mp15魔法15"
+                        value={stText}
+                        onChange={setStText}
+                        onImport={() => doImportSt(entry.id)}
+                        onClose={() => setStEntry('')}
+                        message={stMsg}
+                      />
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -913,6 +1051,25 @@ function MassTool({ onClose }) {
 
   const built = units.map((u) => buildMassUnit(u));
 
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importMsg, setImportMsg] = useState('');
+  const [importTone, setImportTone] = useState('ok');
+
+  /** 把导出过的 .md 整份还原（内部藏了备份标记） */
+  const doImportMd = () => {
+    const found = decodeStateMarker(importText);
+    if (!found || found.kind !== 'mass' || !found.state || !Array.isArray(found.state.units)) {
+      setImportTone('error');
+      setImportMsg('没找到这份登记表的备份标记。请粘贴本工具「导出 .md」得到的整份文件。');
+      return;
+    }
+    const next = { units: found.state.units.map((u) => ({ ...MASS_UNIT_INIT, ...u })) };
+    setRaw(next);
+    setImportTone('ok');
+    setImportMsg(`已还原 ${next.units.length} 组集群（含攻击技能与当前生命）。`);
+  };
+
   const patchUnit = (id, key, value) => setRaw(() => ({
     units: state.units.map((u) => (u.id === id ? { ...u, [key]: value } : u)),
   }));
@@ -954,7 +1111,8 @@ function MassTool({ onClose }) {
 
   const doExport = () => {
     const title = units.length > 1 ? '集群单位登记表' : (units[0]?.name || '集群单位');
-    downloadText(`${String(title).replace(/[\\/:*?"<>|]/g, '_')}.md`, massMarkdown(state));
+    downloadText(`${String(title).replace(/[\\/:*?"<>|]/g, '_')}.md`,
+      massMarkdown(state) + encodeStateMarker('mass', { units: state.units }));
     setExportedAt(nowText());
   };
 
@@ -983,6 +1141,7 @@ function MassTool({ onClose }) {
         <>
           <Button variant="ghost" size="sm" onClick={addUnit}><Plus className="h-4 w-4" strokeWidth={2} /> 添加集群</Button>
           <Button variant="ghost" size="sm" onClick={() => setRaw(MASS_INIT)}><RotateCcw className="h-4 w-4" strokeWidth={1.8} /> 重置</Button>
+          <Button variant="ghost" size="sm" onClick={() => setImportOpen((v) => !v)}><FileUp className="h-4 w-4" strokeWidth={1.8} /> 导入 .md</Button>
           <Button variant="ghost" size="sm" onClick={doExport}><Download className="h-4 w-4" strokeWidth={1.8} /> 导出 .md</Button>
           <Button variant="primary" size="sm" onClick={() => window.print()}><Printer className="h-4 w-4" strokeWidth={1.8} /> 打印 / 导出 PDF</Button>
         </>
@@ -991,6 +1150,18 @@ function MassTool({ onClose }) {
       <div className="px-4 py-5 sm:px-6">
         <div className="mx-auto grid max-w-[1400px] gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)]">
           <div className="space-y-4">
+            {importOpen ? (
+              <ImportPanel
+                label="从 .md 还原这份登记表（粘贴本工具导出过的文件内容）"
+                placeholder="把「导出 .md」得到的整份文件粘贴到这里，识别后连每个集群的名称、属性、攻击技能与当前生命一起还原。"
+                value={importText}
+                onChange={setImportText}
+                onImport={doImportMd}
+                onClose={() => setImportOpen(false)}
+                message={importMsg}
+                tone={importTone}
+              />
+            ) : null}
             {units.map((u, index) => {
               const unit = built[index];
               return (

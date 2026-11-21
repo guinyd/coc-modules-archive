@@ -19,6 +19,9 @@ import { KPCP_DEFAULT_RULES, KPCP_AUDIT_RULES } from '../shared/rulesets/kpcp.js
 import { PULP_AUDIT_RULES } from '../shared/rulesets/pulp.js';
 import { buildMassUnit, attritionTable, attritionStage } from '../shared/massCombat.js';
 import {
+  parseStCommand, deriveStatus, encodeStateMarker, decodeStateMarker,
+} from '../shared/kpTools.js';
+import {
   SPELL_CATALOG, SPELL_CATEGORIES, TOME_CATALOG,
   normalizeSpells, normalizeTomes, spellFromCatalog, tomeFromCatalog,
 } from '../shared/occult.js';
@@ -488,6 +491,49 @@ ok('群战：支持多个攻击技能（每项 ×2）',
       && u.attacks[1].total === 80
       && u.attack === 70;
   })(), JSON.stringify(buildMassUnit({ STR: 50, CON: 50, SIZ: 65, DEX: 45, attacks: [{ label: '格斗', value: 35 }, { label: '斧头', value: 40 }] }).attacks));
+
+// ---------------------------------------------------------------- KP 工具箱：.st 解析 / 派生 / .md 备份
+const ST_SAMPLE = '.st 力量50str50体质50con50体型65siz65敏捷45dex45外貌71app71教育80edu80智力75灵感75int75意志75pow75幸运80运气80hp9体力9san75理智75mp15魔法15会计5考古学1侦查80';
+
+ok('KP 工具箱：骰娘 .st 指令能认出属性/数值，且不把技能当属性',
+  (() => {
+    const r = parseStCommand(ST_SAMPLE);
+    return r.values.STR === 50 && r.values.CON === 50 && r.values.SIZ === 65
+      && r.values.DEX === 45 && r.values.APP === 71 && r.values.EDU === 80
+      && r.values.INT === 75 && r.values.POW === 75 && r.values.luck === 80
+      && r.values.hp === 9 && r.values.san === 75 && r.values.mp === 15
+      && r.unknown.includes('侦查') && !('侦查' in r.values);
+  })(), JSON.stringify(parseStCommand(ST_SAMPLE).values));
+
+ok('KP 工具箱：按属性算出重伤值 / 异变值 / 伤害加值 / 体格 / 移动（官方 ÷10）',
+  (() => {
+    const d = deriveStatus(parseStCommand(ST_SAMPLE).values);
+    return d.hpMax === 11 && d.wound === 5 && d.mutate === 15
+      && d.build === '0' && d.db === '0' && d.mov === '7';
+  })(), JSON.stringify(deriveStatus(parseStCommand(ST_SAMPLE).values)));
+
+ok('KP 工具箱：切成通克 ÷5 时重伤值随之变化',
+  (() => {
+    const d = deriveStatus(parseStCommand(ST_SAMPLE).values, { hpRule: 'pulp' });
+    return d.hpMax === 23 && d.wound === 11 && d.mutate === 15;
+  })(), JSON.stringify(deriveStatus(parseStCommand(ST_SAMPLE).values, { hpRule: 'pulp' })));
+
+ok('KP 工具箱：导出的 .md 带备份标记，能整份还原（含中文与勾选状态）',
+  (() => {
+    const state = {
+      meta: { title: '带团状态记录卡', module: '奈亚拉托提普的面具' },
+      fields: ['player', 'char', 'hp', 'checks'],
+      customFields: [{ id: 'c1', label: '随身物品' }],
+      entries: [{ id: 'e1', values: { char: '白鸦', hp: '11' }, checks: { wound: true }, custom: { c1: '旧钥匙' } }],
+    };
+    const md = `# 带团状态记录卡\n\n- 模组：奈亚拉托提普的面具\n${encodeStateMarker('status', state)}`;
+    const back = decodeStateMarker(md);
+    return Boolean(back) && back.kind === 'status'
+      && back.state.entries[0].values.char === '白鸦'
+      && back.state.entries[0].checks.wound === true
+      && back.state.entries[0].custom.c1 === '旧钥匙'
+      && decodeStateMarker('# 随便一份别的 md') === null;
+  })());
 
 console.log(`\n================ 自检：${pass} 通过 / ${fails.length} 失败 ================`);
 if (fails.length) { console.log('失败项：\n - ' + fails.join('\n - ')); process.exit(1); }

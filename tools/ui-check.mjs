@@ -1729,6 +1729,73 @@ try {
     ok('带团记录卡：填入角色名后 A4 预览同步显示',
       statusFilled?.ok === true && statusText.includes('UI 调查员甲'), JSON.stringify(statusFilled));
 
+    // 每个角色单独粘贴骰娘 .st，自动回填属性并算出重伤值 / 异变值
+    const stOpen = await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => (x.textContent || '').includes('粘贴骰娘 .st 导入这一行'));
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(400);
+    const stTyped = await page.eval(`(() => {
+      const ta = document.querySelector('textarea[placeholder*="力量50str50"]');
+      if (!ta) return { ok: false };
+      const panel = ta.closest('div');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(ta, '.st 力量50str50体质50con50体型65siz65敏捷45dex45意志75pow75教育80edu80幸运80运气80hp9体力9san75理智75mp15魔法15');
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      const go = [...panel.querySelectorAll('button')].find((x) => x.textContent.trim() === '识别导入');
+      if (go) go.click();
+      return { ok: Boolean(go) };
+    })()`);
+    await sleep(700);
+    const stValues = await page.eval(`(() => {
+      const read = (label) => {
+        const l = [...document.querySelectorAll('label')].find((x) => (x.innerText || '').trim().split('\\n')[0] === label && x.querySelector('input'));
+        return l?.querySelector('input')?.value ?? null;
+      };
+      return { STR: read('力量'), POW: read('意志'), hp: read('HP'), wound: read('重伤值'), mutate: read('异变值'), body: document.body.innerText.includes('识别') };
+    })()`);
+    ok('带团记录卡：粘贴 .st 能回填属性（力量 50 / 意志 75 / HP 9）',
+      stOpen === true && stTyped?.ok === true && stValues?.STR === '50' && stValues?.POW === '75' && stValues?.hp === '9',
+      JSON.stringify({ stOpen, stTyped, stValues }));
+    ok('带团记录卡：按属性自动算出重伤值 5、异变值 15',
+      stValues?.wound === '5' && stValues?.mutate === '15', JSON.stringify(stValues));
+
+    // 导出过的 .md 要能整份还原（内部备份标记），两个工具都有「导入 .md」
+    const mdBtn = await page.eval(`(() => ({
+      has: [...document.querySelectorAll('button')].some((x) => (x.textContent || '').includes('导入 .md')),
+    }))()`);
+    const mdRestore = await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => (x.textContent || '').includes('导入 .md'));
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(400);
+    const mdTyped = await page.eval(`(() => {
+      const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ kind: 'status', state: {
+        meta: { title: '带团状态记录卡', module: '', date: '', keeper: '', note: '' },
+        fields: ['char', 'hp', 'checks'],
+        customFields: [],
+        cols: 2,
+        entries: [{ id: 'uix1', values: { char: '还原调查员', hp: '12' }, checks: {}, custom: {} }],
+      } }))));
+      const ta = document.querySelector('textarea[placeholder*="导出 .md"]');
+      if (!ta) return { ok: false };
+      const panel = ta.closest('div');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(ta, '# x\\n<!-- kp-tools-state:v1:' + payload + ' -->');
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      const go = [...panel.querySelectorAll('button')].find((x) => x.textContent.trim() === '识别导入');
+      if (go) go.click();
+      return { ok: Boolean(go) };
+    })()`);
+    await sleep(700);
+    const mdText = await page.eval('document.body.innerText');
+    ok('带团记录卡：导入 .md 能整份还原本地备份',
+      mdBtn?.has === true && mdRestore === true && mdTyped?.ok === true
+      && mdText.includes('还原调查员'),
+      JSON.stringify({ mdBtn, mdRestore, mdTyped }));
+
     // 浮层必须真正铺满视口：编辑器在 .page-in（带 transform）里，fixed 会被祖先捕获
     const overlayFit = await page.eval(`(() => {
       const el = [...document.body.children].find((d) => /z-\\[60\\]/.test((d.className || '').toString()));
@@ -1917,6 +1984,36 @@ try {
     ok('群战构建器：系统内扣血后衰减阶段实时变化（57 扣 30 → 半残带惩罚骰）',
       massDamage === 3 && /半残/.test(massStage?.text || '') && /惩罚骰/.test(massStage?.text || ''),
       JSON.stringify({ massDamage, massStage }));
+
+    // 群战工具同样要能把导出过的 .md 还回来（两组集群 + 自定义攻击技能）
+    const massMd = await page.eval(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => (x.textContent || '').includes('导入 .md'));
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(400);
+    const massMdTyped = await page.eval(`(() => {
+      const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ kind: 'mass', state: { units: [
+        { id: 'u1', name: '还原集群甲', count: 5, STR: 50, CON: 50, SIZ: 65, DEX: 45, attacks: [{ id: 'a1', label: '格斗', value: 35 }], hpNow: '', note: '' },
+        { id: 'u2', name: '还原集群乙', count: 3, STR: 60, CON: 40, SIZ: 70, DEX: 50, attacks: [{ id: 'a2', label: '斧头', value: 40 }], hpNow: '', note: '' },
+      ] } }))));
+      const ta = document.querySelector('textarea[placeholder*="导出 .md"]');
+      if (!ta) return { ok: false };
+      const panel = ta.closest('div');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(ta, '# x\\n<!-- kp-tools-state:v1:' + payload + ' -->');
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      const go = [...panel.querySelectorAll('button')].find((x) => x.textContent.trim() === '识别导入');
+      if (go) go.click();
+      return { ok: Boolean(go) };
+    })()`);
+    await sleep(700);
+    const massMdText = await page.eval('document.body.innerText');
+    ok('群战构建器：导入 .md 能整份还原本地备份（多组集群）',
+      massMd === true && massMdTyped?.ok === true
+      && massMdText.includes('还原集群甲') && massMdText.includes('还原集群乙'),
+      JSON.stringify({ massMd, massMdTyped }));
+
     await page.eval(`(() => {
       const b = [...document.querySelectorAll('button')].find((x) => x.textContent.includes('返回工具箱'));
       if (b) b.click();
