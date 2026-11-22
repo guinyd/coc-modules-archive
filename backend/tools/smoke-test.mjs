@@ -718,6 +718,16 @@ try {
   const playerAdmin = await api('GET', '/api/admin/users', { token: playerToken });
   ok('普通玩家访问管理接口 → 403', playerAdmin.status === 403);
 
+  // 首席名册要能看出「这个号发下去有没有被用过」
+  const beforeLogin = await api('GET', '/api/admin/users', { token: A });
+  const fresh = Array.isArray(beforeLogin.json) ? beforeLogin.json.find((u) => u.id === newUserId) : null;
+  ok('新发账号的 lastLoginAt 为空（从未登录）', Boolean(fresh) && fresh.lastLoginAt === null, JSON.stringify(fresh));
+  const firstLogin = await api('POST', '/api/login', { body: { username: 'smokeplayer', password: 'abc123' } });
+  ok('新账号可以正常登录', firstLogin.status === 200);
+  const afterLogin = await api('GET', '/api/admin/users', { token: A });
+  const seenUser = Array.isArray(afterLogin.json) ? afterLogin.json.find((u) => u.id === newUserId) : null;
+  ok('登录后名册记下最近登录时间', Boolean(seenUser) && typeof seenUser.lastLoginAt === 'number' && seenUser.lastLoginAt > 1e12, JSON.stringify(seenUser));
+
   section('修改用户名');
   const renUser = await api('POST', '/api/admin/users', { token: A, body: { username: 'renametest', password: 'abc123' } });
   ok('建一个用于改名的账号', renUser.status === 200);

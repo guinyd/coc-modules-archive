@@ -108,6 +108,7 @@ export default function AdminUsersPanel({
   const [renaming, setRenaming] = useState(null);   // { id, username }
   const [renameTo, setRenameTo] = useState('');
   const [query, setQuery] = useState('');
+  const [onlyNever, setOnlyNever] = useState(false);
   const [promoteId, setPromoteId] = useState('');
   const [promoteTitle, setPromoteTitle] = useState(KP_TITLES[0]);
   // 首席移交后本机立即按普通守秘人渲染，避免继续显示仅首席可见的入口
@@ -285,9 +286,11 @@ export default function AdminUsersPanel({
     { label: '名下角色卡', value: users.reduce((sum, u) => sum + (u.characterCount || 0), 0), unit: '张' },
   ];
   const normalizedQuery = query.trim().toLowerCase();
-  const filteredUsers = normalizedQuery
-    ? users.filter((u) => u.username.toLowerCase().includes(normalizedQuery))
-    : users;
+  const neverCount = isChief ? users.filter((u) => !u.lastLoginAt).length : 0;
+  const filteredUsers = users.filter((u) => {
+    if (onlyNever && u.lastLoginAt) return false;
+    return normalizedQuery ? u.username.toLowerCase().includes(normalizedQuery) : true;
+  });
   const keepers = users
     .filter(isKeeperAccount)
     .sort((a, b) => (isChiefAccount(a) ? 0 : 1) - (isChiefAccount(b) ? 0 : 1));
@@ -295,7 +298,7 @@ export default function AdminUsersPanel({
   const KEEPER_PAGE = 4;
   const [accountPage, setAccountPage] = useState(1);
   const [keeperPage, setKeeperPage] = useState(1);
-  useEffect(() => { setAccountPage(1); }, [normalizedQuery]);
+  useEffect(() => { setAccountPage(1); }, [normalizedQuery, onlyNever]);
   const accountPages = Math.max(1, Math.ceil(filteredUsers.length / ACCOUNT_PAGE));
   const accountPageNow = Math.min(accountPage, accountPages);
   const pagedUsers = filteredUsers.slice((accountPageNow - 1) * ACCOUNT_PAGE, accountPageNow * ACCOUNT_PAGE);
@@ -305,9 +308,19 @@ export default function AdminUsersPanel({
   const players = users.filter((u) => u.role === 'user');
   const formatRegistered = (value) => {
     if (!value) return '—';
-    const date = new Date(String(value).replace(' ', 'T'));
+    const date = new Date(typeof value === 'number' ? value : String(value).replace(' ', 'T'));
     if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
     return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  };
+  /** 上次登录：服务端存的是毫秒时间戳；null = 账号发放后一次都没登录过 */
+  const formatLastSeen = (value) => {
+    if (!value) return null;
+    const date = new Date(typeof value === 'number' ? value : String(value).replace(' ', 'T'));
+    if (Number.isNaN(date.getTime())) return null;
+    const pad = (n) => String(n).padStart(2, '0');
+    const sameYear = date.getFullYear() === new Date().getFullYear();
+    const day = `${sameYear ? '' : `${date.getFullYear()}/`}${pad(date.getMonth() + 1)}/${pad(date.getDate())}`;
+    return `${day} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
   };
 
   return (
@@ -428,7 +441,7 @@ export default function AdminUsersPanel({
             <div className="mt-4 border-y border-line">
               {pagedKeepers.map((k) => (
                 <div key={k.id} className="flex flex-wrap items-center gap-x-4 gap-y-2.5 border-b border-line-soft py-3 last:border-b-0">
-                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                  <div className="flex w-full min-w-0 items-center gap-2.5 sm:w-auto sm:flex-1">
                     <span
                       aria-hidden="true"
                       className="flex h-7 w-7 shrink-0 items-center justify-center border border-red-500/50 bg-red-500/[0.04] font-serif text-[14px] font-bold text-red-600"
@@ -559,8 +572,24 @@ export default function AdminUsersPanel({
               />
             </div>
             <span className="border border-line-strong bg-paper px-2 py-1 font-mono text-[14px] tracking-[0.14em] text-slate-500 tabular">
-              {normalizedQuery ? `${filteredUsers.length} / ${users.length}` : users.length} 位在册
+              {normalizedQuery || onlyNever ? `${filteredUsers.length} / ${users.length}` : users.length} 位在册
             </span>
+            {isChief && (
+              <button
+                type="button"
+                onClick={() => setOnlyNever((v) => !v)}
+                aria-pressed={onlyNever}
+                title={onlyNever ? '显示全部账号' : '只看发放后一次都没登录过的账号（方便清理）'}
+                className={cx(
+                  'border px-2 py-1 font-mono text-[14px] tracking-[0.14em] tabular transition-colors',
+                  onlyNever
+                    ? 'border-amber-500/70 bg-amber-500/10 text-amber-500'
+                    : 'border-line-strong bg-paper text-slate-500 hover:border-amber-500/45 hover:text-amber-500',
+                )}
+              >
+                从未登录 {neverCount}
+              </button>
+            )}
           </div>
         </div>
 
@@ -583,6 +612,7 @@ export default function AdminUsersPanel({
             <tbody>
               {pagedUsers.map((u, idx) => {
                 const canDelete = isChief && !isChiefAccount(u) && u.id !== currentUser?.id;
+                const lastSeen = formatLastSeen(u.lastLoginAt);
                 return (
                   <tr key={u.id} className="border-b border-line transition-colors hover:bg-paper-deep/60">
                     <td className="px-3 py-[13px] font-mono text-[14px] text-slate-500 tabular">
@@ -601,7 +631,16 @@ export default function AdminUsersPanel({
                         >
                           {u.username.slice(0, 1)}
                         </span>
-                        <span className="max-w-[9.5rem] truncate text-[14.5px] font-medium text-slate-100" title={u.username}>{u.username}</span>
+                        <span className="min-w-0">
+                          <span className="block max-w-[9.5rem] truncate text-[14.5px] font-medium text-slate-100" title={u.username}>{u.username}</span>
+                          {isChief ? (
+                            lastSeen ? (
+                              <span className="mt-0.5 block font-mono text-[12.5px] tabular text-slate-500">上次登录 {lastSeen}</span>
+                            ) : (
+                              <span className="mt-0.5 block font-mono text-[12.5px] tracking-[0.04em] text-amber-500">从未登录</span>
+                            )
+                          ) : null}
+                        </span>
                         {u.mustChangePassword ? <Badge tone="red" className="!text-[14px]">弱口令待改</Badge> : null}
                       </span>
                     </td>
@@ -693,6 +732,7 @@ export default function AdminUsersPanel({
         <div className="md:hidden">
           {pagedUsers.map((u) => {
             const canDelete = isChief && !isChiefAccount(u) && u.id !== currentUser?.id;
+            const lastSeen = formatLastSeen(u.lastLoginAt);
             return (
               <article key={u.id} className="border-b border-line px-4 py-[14px] last:border-b-0">
                 <div className="flex items-start justify-between gap-3">
@@ -713,6 +753,11 @@ export default function AdminUsersPanel({
                       <p className="mt-0.5 font-kai text-[14px] tracking-[0.06em] text-slate-500">
                         {u.mustChangePassword ? '弱口令待改' : `加入于 ${formatRegistered(u.createdAt)}`}
                       </p>
+                      {isChief ? (
+                        lastSeen
+                          ? <p className="mt-0.5 font-mono text-[13px] tabular text-slate-500">上次登录 {lastSeen}</p>
+                          : <p className="mt-0.5 font-mono text-[13px] tracking-[0.04em] text-amber-500">从未登录 · 账号未被使用</p>
+                      ) : null}
                     </div>
                   </div>
                   <RoleBadge user={u} className="shrink-0" />

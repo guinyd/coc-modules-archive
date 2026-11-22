@@ -1138,6 +1138,35 @@ try {
     const saveBtn = await page.eval(`Boolean([...document.querySelectorAll('button')].find(x=>x.textContent.includes('保存用户名')))`);
     ok('提供保存用户名按钮', saveBtn === true);
 
+    console.log(String.fromCharCode(10) + '== 账号名册的最近登录标注 ==');
+    // 先造一个「发下去还没人用」的账号，再看名册能不能一眼看出来
+    const freshAcc = await fetch(`${API}/api/admin/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${seedUser.token}` },
+      body: JSON.stringify({ username: 'UI未登录账号', password: 'abc123' }),
+    }).then((r) => r.json()).catch(() => null);
+    await page.eval(`(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('账号管理'));b&&b.click();return 1})()`);
+    await sleep(1800);
+    const roster = await page.eval(`(()=>{
+      const txt=document.body.innerText;
+      const chip=[...document.querySelectorAll('button')].find(b=>(b.textContent||'').includes('从未登录'));
+      const rows=[...document.querySelectorAll('tbody tr')].slice(0, 3).map(tr=>tr.innerText);
+      return { hasRoster: txt.includes('馆员名册'), chip: chip?chip.textContent.trim():'', rows };
+    })()`);
+    ok('账号管理页给出「从未登录」统计', Boolean(roster?.hasRoster) && /从未登录\s*\d+/.test(roster.chip || ''), JSON.stringify(roster?.chip));
+    ok('账号行标出上次登录时间或从未登录', (roster?.rows || []).some((t) => t.includes('上次登录') || t.includes('从未登录')), JSON.stringify(roster?.rows || []).slice(0, 160));
+    await page.eval(`(()=>{const b=[...document.querySelectorAll('button')].find(x=>(x.textContent||'').includes('从未登录'));b&&b.click();return 1})()`);
+    await sleep(1000);
+    const filteredRoster = await page.eval(`(()=>{
+      const m=document.body.innerText.match(/(\\d+)\\s*\\/\\s*(\\d+)\\s*位在册/);
+      const rows=[...document.querySelectorAll('tbody tr')].map(tr=>tr.innerText);
+      return { pair: m?m[1]+'/'+m[2]:'', rows, allNever: rows.length>0 && rows.every((t)=>t.includes('从未登录')) };
+    })()`);
+    ok('筛选「从未登录」后名册只剩未被使用的账号', filteredRoster?.allNever === true && ((filteredRoster?.rows || []).some((t) => t.includes('UI未登录账号')) || filteredRoster?.pair === '1/1'), JSON.stringify(filteredRoster?.pair) + ' rows=' + (filteredRoster?.rows || []).length);
+    if (freshAcc?.user?.id) {
+      await fetch(`${API}/api/admin/users/${freshAcc.user.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${seedUser.token}` } }).catch(() => null);
+    }
+
     console.log('\n== 模组封面（铅印色版） ==');
     await page.send('Page.navigate', { url: BASE });
     await sleep(2400);
