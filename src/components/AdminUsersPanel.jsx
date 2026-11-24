@@ -852,6 +852,8 @@ export default function AdminUsersPanel({
               />
             </div>
           )}
+          {/* 手机端也要能翻页：桌面表格与卡片列表各自渲染一份分页条 */}
+          <Pager page={accountPageNow} total={filteredUsers.length} pageSize={ACCOUNT_PAGE} onChange={setAccountPage} label="位" />
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-ink px-4 py-2.5 sm:px-5">

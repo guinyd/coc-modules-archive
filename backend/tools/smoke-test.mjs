@@ -921,10 +921,15 @@ try {
   ok('自定义技能参与计算', csList.length === 2, `实际 ${csList.length}`);
   ok('自定义技能总成功率正确（1+15=16）', csList.find((x) => x.name === '驾驶（坦克）')?.total === 16);
   ok('未命名的自定义技能被丢弃', !csList.some((x) => !x.name));
+  const okCustom = await api('POST', '/api/characters', {
+    token: A, body: { ...blank, name: '上限内自定义', customSkills: Array.from({ length: 50 }, (_, i) => ({ id: `cs_y${i}`, name: `技能${i}`, base: 1 })) },
+  });
+  ok('自定义技能上限 50 项可保存', okCustom.status === 200);
   const badCustom = await api('POST', '/api/characters', {
-    token: A, body: { ...blank, name: '超量自定义', customSkills: Array.from({ length: 30 }, (_, i) => ({ id: `cs_x${i}`, name: `技能${i}`, base: 1 })) },
+    token: A, body: { ...blank, name: '超量自定义', customSkills: Array.from({ length: 51 }, (_, i) => ({ id: `cs_x${i}`, name: `技能${i}`, base: 1 })) },
   });
   ok('自定义技能数量超限 → 400', badCustom.status === 400);
+  if (okCustom.json?.id) await api('DELETE', `/api/characters/${okCustom.json.id}`, { token: A });
   await api('DELETE', `/api/characters/${withCustom.json.id}`, { token: A });
 
   section('职业模板（KP 自定义）');
@@ -1649,16 +1654,26 @@ try {
 
   const kpLang = await api('POST', '/api/characters', {
     token: A,
-    body: { ...kpBody, name: `伴侣母语卡_${kpTag}`, extraLanguages: ['西班牙语', '拉丁语'] },
+    body: { ...kpBody, name: `伴侣母语卡_${kpTag}`, extraLanguages: [{ name: '西班牙语', pool: 'occupation' }] },
   });
-  ok('第二母语可保存', kpLang.status === 200 && (kpLang.json?.extraLanguages || []).length === 2,
+  ok('第二母语可保存（对象含扣点来源）',
+    kpLang.status === 200 && (kpLang.json?.extraLanguages || []).length === 1
+      && kpLang.json?.extraLanguages?.[0]?.pool === 'occupation',
     JSON.stringify(kpLang.json?.extraLanguages));
   ok('第二母语起始值 = 教育', (kpLang.json?.derived?.skills || [])
     .filter((x) => x.extraLanguage).every((x) => x.total === 70));
-  ok('第二母语每门扣 10 点兴趣', kpLang.json?.derived?.spent?.interest === 20,
-    JSON.stringify(kpLang.json?.derived?.spent || {}));
+  ok('第二母语从职业点扣 10 点',
+    kpLang.json?.derived?.extraLanguageSpent?.occupation === 10,
+    JSON.stringify(kpLang.json?.derived?.extraLanguageSpent || {}));
   const kpLangRead = await api('GET', `/api/characters/${kpLang.json.id}`, { token: A });
-  ok('第二母语回读一致', (kpLangRead.json?.extraLanguages || []).join(',') === '西班牙语,拉丁语');
+  ok('第二母语回读一致', kpLangRead.json?.extraLanguages?.[0]?.name === '西班牙语'
+    && kpLangRead.json?.extraLanguages?.[0]?.pool === 'occupation',
+  JSON.stringify(kpLangRead.json?.extraLanguages));
+  const kpLangTwo = await api('POST', '/api/characters', {
+    token: A,
+    body: { ...kpBody, name: `伴侣母语越界_${kpTag}`, extraLanguages: [{ name: '西班牙语' }, { name: '拉丁语' }] },
+  });
+  ok('第二母语超过 1 门 → 400', kpLangTwo.status === 400);
 
   const kpPkgTpl = await api('POST', '/api/admin/occupations', {
     token: A,

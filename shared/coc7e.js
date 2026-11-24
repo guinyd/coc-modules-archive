@@ -61,7 +61,7 @@ export const SKILL_CAP = 99;
 export const CHAR_MIN = 0;
 export const CHAR_MAX = 99;
 /** 自定义技能数量上限 */
-export const CUSTOM_SKILL_MAX = 20;
+export const CUSTOM_SKILL_MAX = 50;
 
 /** 需要高亮显示的特殊技能（编辑器与打印共用同一份定义） */
 export const SPECIAL_SKILLS = ['credit', 'cthulhu'];
@@ -897,8 +897,10 @@ export function computeSheet(sheet, ctx = {}) {
     });
   }
 
-  // 守秘人伴侣：花 10 点（兴趣点）可再购一门母语，起始值 = 教育（书 p.「修订：母语」）
+  // 守秘人伴侣：花 10 点（职业点或兴趣点）可再购 **1 门**母语，起始值 = 教育
+  // 书里的「修订：母语」只说「花 10 点」，房规（本系统）允许玩家自选从职业点或兴趣点里扣。
   const extraLanguages = [];
+  const extraLanguageSpent = { occupation: 0, interest: 0 };
   const extraOwnLangOn = kpcpLayerToggle(R, s, ctx, 'secondOwnLanguage');
   if (extraOwnLangOn) {
     const rawExtras = Array.isArray(s.extraLanguages) ? s.extraLanguages : [];
@@ -908,10 +910,13 @@ export function computeSheet(sheet, ctx = {}) {
       const lang = String(raw || '').trim().slice(0, 24);
       if (!lang) continue;
       seq += 1;
-      if (seq > 3) break;
+      if (seq > 1) break;      // 伴侣规则只允许再添 1 门母语，多出来的忽略（参数层已拦）
       const cost = 10;
+      // 旧卡只有语言名（字符串）或被存成 `{ name }`，一律按兴趣点处理
+      const pool = (item && typeof item === 'object' && item.pool === 'occupation') ? 'occupation' : 'interest';
       const base = clampInt(eff.EDU, 0, inputMax, 0);
-      interestSpent += cost;
+      if (pool === 'occupation') occSpent += cost; else interestSpent += cost;
+      extraLanguageSpent[pool] += cost;
       const id = `ownLanguage#extra-${seq}`;
       skills.push({
         id, key: 'ownLanguage', custom: lang, name: skillName('ownLanguage', lang, R),
@@ -919,9 +924,9 @@ export function computeSheet(sheet, ctx = {}) {
         half: Math.floor(base / 2), fifth: Math.floor(base / 5),
         isOccupation: false, pickedOccupation: false, capExempt: false,
         spec: null, special: null, kind: 'standard', houseBase: false, used: true,
-        extraLanguage: true, cost,
+        extraLanguage: true, cost, extraLanguagePool: pool,
       });
-      extraLanguages.push({ id, name: lang, cost, total: base });
+      extraLanguages.push({ id, name: lang, cost, total: base, pool });
     }
   }
 
@@ -1013,7 +1018,7 @@ export function computeSheet(sheet, ctx = {}) {
     })() : null,
     allowedSkills: [...allowed],
     needs: occupationNeeds(occ, picks),
-    budget, spent, remaining, extraLanguages,
+    budget, spent, remaining, extraLanguages, extraLanguageSpent,
     creditRating,
     wealth,
     skills,
@@ -1717,6 +1722,16 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
       add('occPackageTotal', `职业包合计 ${occ.total} 点（原书即如此）`, 'info',
         '飞行员 340、私家侦探 290 属原书偏差，已放行；其余职业包应为 300 点');
     }
+    // 第二母语：KP 要一眼看出这 10 点是从职业点还是兴趣点扣的
+    const extraLangs = Array.isArray(c.extraLanguages) ? c.extraLanguages : [];
+    if (extraLangs.length) {
+      const byPool = (pool) => extraLangs.filter((x) => x.pool === pool).map((x) => x.name);
+      const occLangs = byPool('occupation');
+      const intLangs = byPool('interest');
+      add('secondLanguage', '第二母语', 'info',
+        `${extraLangs.map((x) => `${x.name}（${x.pool === 'occupation' ? '职业点' : '兴趣点'} 10 点，起始 ${x.total}%）`).join('、')}`
+        + `；可用职业点或兴趣点开启${occLangs.length ? `（本卡从职业点扣：${occLangs.join('、')}）` : ''}${intLangs.length ? `（从兴趣点扣：${intLangs.join('、')}）` : ''}`);
+    }
   }
   // 房规检查项：与审卡规则共用同一求值路径（deriveBase 已体现在 computeSheet 中）
   for (const f of evaluateHouseRules(sheet, ctx.houseRules, c)) findings.push(f);
@@ -1744,6 +1759,9 @@ export function auditSheet(sheet, rulesInput = {}, ctx = {}) {
       eduCount: c.eduGrowth.count,
       eduManual: c.eduGrowth.manual,
       houseRuleCount: Array.isArray(ctx.houseRules) ? ctx.houseRules.length : 0,
+      // 第二母语：列表里带上开启方式（职业点 / 兴趣点），KP 审卡与详情页都直接读这一份
+      extraLanguages: (c.extraLanguages || []).map((x) => ({ name: x.name, pool: x.pool, cost: x.cost, total: x.total })),
+      extraLanguageSpent: { ...(c.extraLanguageSpent || { occupation: 0, interest: 0 }) },
       // 多规则：审卡结果里带上规则集与通俗克苏鲁专属统计
       gameSystem: R.id,
       archetype: c.archetype?.zh || '',

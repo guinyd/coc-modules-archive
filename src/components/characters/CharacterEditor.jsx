@@ -113,7 +113,16 @@ export function toEditableSheet(character) {
     coreChar: character.coreChar || '',
     talents: Array.isArray(character.talents) ? character.talents.filter((t) => typeof t === 'string') : [],
     keyConnection: character.keyConnection || '',
-    extraLanguages: Array.isArray(character.extraLanguages) ? character.extraLanguages.slice(0, 3) : [],
+    // 第二母语：伴侣层只允许 1 门；旧卡可能是字符串，统一成 { name, pool }
+    extraLanguages: Array.isArray(character.extraLanguages)
+      ? character.extraLanguages.slice(0, 1).map((x) => {
+        const isObj = x && typeof x === 'object';
+        return {
+          name: String(isObj ? (x.name || '') : x).trim().slice(0, 24),
+          pool: (isObj && x.pool === 'occupation') ? 'occupation' : 'interest',
+        };
+      }).filter((x) => x.name)
+      : [],
     // 守秘人伴侣：叠加层开关（旧卡 gameSystem==='kpcp' 自动迁移）
     kpcp: {
       enabled: legacyKpcp || character.kpcp?.enabled === true,
@@ -479,14 +488,20 @@ function reshapeSkills(skills, R) {
 /** 守秘人伴侣：第二母语（每门消耗 10 点兴趣点，起始值 = 教育） */
 function ExtraLanguagePanel({ derived, enabled, value, onChange }) {
   const [draft, setDraft] = useState('');
+  const [pool, setPool] = useState('interest');
   const list = Array.isArray(value) ? value : [];
-  const remain = derived?.remaining?.interest ?? 0;
+  // 兼容旧卡（字符串数组）
+  const current = list[0]
+    ? (typeof list[0] === 'string' ? { name: list[0], pool: 'interest' } : { name: list[0].name, pool: list[0].pool === 'occupation' ? 'occupation' : 'interest' })
+    : null;
+  const remainInterest = derived?.remaining?.interest ?? 0;
+  const remainOcc = derived?.remaining?.occupation ?? 0;
+  const remain = pool === 'occupation' ? remainOcc : remainInterest;
   const add = () => {
     const name = draft.trim().slice(0, 24);
     if (!name) return;
-    if (list.length >= 3) return;
-    if (list.includes(name)) return;
-    onChange([...list, name]);
+    if (current) return;
+    onChange([{ name, pool }]);
     setDraft('');
   };
   return (
@@ -495,38 +510,65 @@ function ExtraLanguagePanel({ derived, enabled, value, onChange }) {
         <div className="flex items-center gap-2">
           <Languages className="h-4 w-4 text-amber-500" strokeWidth={1.7} />
           <h4 className="font-serif text-[16px] font-bold text-slate-100">第二母语</h4>
-          <Badge className="ml-1" tone="amber">每门 10 点兴趣</Badge>
+          <Badge className="ml-1" tone="amber">1 门 · 10 点（职业点或兴趣点）</Badge>
         </div>
-        <span className="text-[13px] text-ink-mute">剩余兴趣点 <b className={cx('font-mono', remain < 0 ? 'text-vermilion' : 'text-ink')}>{remain}</b></span>
+        <span className="text-[13px] text-ink-mute">
+          {pool === 'occupation' ? '剩余职业点' : '剩余兴趣点'} <b className={cx('font-mono', remain < 0 ? 'text-vermilion' : 'text-ink')}>{remain}</b>
+        </span>
       </div>
       <p className="text-[13.5px] leading-relaxed text-slate-500">
-        花 10 点可再添一门母语，起始值等于教育（{derived?.eff?.EDU ?? '—'}%）；更多语言请用「外语」购买。
+        花 10 点可再添<b className="text-slate-300">一门</b>母语，起始值等于教育（{derived?.eff?.EDU ?? '—'}%）；点数可从职业点或兴趣点里扣，由本卡自行选择。更多语言请用「外语」购买。
       </p>
       {enabled ? (
         <>
           <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 rounded-[2px] border border-line-strong bg-paper-deep/40 p-1" role="group" aria-label="第二母语点数来源">
+              {[['interest', '兴趣点'], ['occupation', '职业点']].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={pool === id}
+                  onClick={() => setPool(id)}
+                  className={cx(
+                    'rounded-[2px] px-2.5 py-1 text-[12.5px] transition',
+                    pool === id ? 'bg-amber-500/20 text-amber-200' : 'text-ink-mute hover:text-ink',
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <Input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder="例：西班牙语"
               className="w-48"
-              disabled={list.length >= 3}
+              disabled={Boolean(current)}
             />
-            <Button variant="secondary" onClick={add} disabled={!draft.trim() || list.length >= 3}>
+            <Button variant="secondary" onClick={add} disabled={!draft.trim() || Boolean(current)}>
               <Plus className="w-4 h-4" />添加母语
             </Button>
           </div>
-          {list.length ? (
+          {current ? (
             <ul className="flex flex-wrap gap-2">
-              {list.map((name, i) => (
-                <li key={`${name}-${i}`} className="flex items-center gap-2 rounded-[2px] border border-line-strong bg-paper-deep/40 px-2 py-1 text-[13px] text-slate-300">
-                  母语（{name}） <b className="font-mono text-ink">{derived?.eff?.EDU ?? 0}%</b>
-                  <button type="button" className="text-ink-mute hover:text-vermilion" onClick={() => onChange(list.filter((_, j) => j !== i))} title="移除">✕</button>
-                </li>
-              ))}
+              <li className="flex items-center gap-2 rounded-[2px] border border-line-strong bg-paper-deep/40 px-2 py-1 text-[13px] text-slate-300">
+                母语（{current.name}） <b className="font-mono text-ink">{derived?.eff?.EDU ?? 0}%</b>
+                <span className={cx('rounded-[2px] border px-1.5 py-[1px] text-[12px]', current.pool === 'occupation' ? 'border-violet/40 bg-violet/10 text-violet' : 'border-amber-600/40 bg-amber-500/10 text-amber-300')}>
+                  {current.pool === 'occupation' ? '职业点 10 点' : '兴趣点 10 点'}
+                </span>
+                <button
+                  type="button"
+                  className="text-[12px] text-ink-mute underline-offset-2 hover:text-ink hover:underline"
+                  onClick={() => onChange([{ ...current, pool: current.pool === 'occupation' ? 'interest' : 'occupation' }])}
+                  title="切换扣点来源"
+                >
+                  改为{current.pool === 'occupation' ? '兴趣点' : '职业点'}
+                </button>
+                <button type="button" className="text-ink-mute hover:text-vermilion" onClick={() => onChange([])} title="移除">✕</button>
+              </li>
             </ul>
           ) : (
-            <p className="text-[13px] text-ink-mute">尚未添加第二母语。</p>
+            <p className="text-[13px] text-ink-mute">尚未添加第二母语（伴侣规则只允许一门）。</p>
           )}
         </>
       ) : (
@@ -1708,7 +1750,7 @@ export default function CharacterEditor({
         <DerivedGrid derived={derived} sanityLabel={R?.terms?.sanity || '理智'} />
         <div className="grid gap-4 sm:grid-cols-2">
           <ProgressBar used={derived.spent.occupation} total={derived.budget.occupation} label="职业技能点" />
-          <ProgressBar used={derived.spent.interest} total={derived.budget.interest} label="兴趣技能点" hint={isKpcp ? '（教育+智力）' : '（智力×2）'} />
+          <ProgressBar used={derived.spent.interest} total={derived.budget.interest} label="兴趣技能点" hint={isKpcp ? undefined : '（智力×2）'} />
         </div>
         {isPulp ? (
           <ProgressBar used={derived.spent.bonus} total={derived.budget.bonus} label="英雄奖励点" hint="（每原型 100 点，仅限原型技能）" />
@@ -2314,7 +2356,7 @@ export default function CharacterEditor({
           <div className="sticky top-[64px] sm:top-[86px] z-20 -mx-1 rounded-[2px] border border-line bg-paper/95 px-2 py-2 shadow-[0_6px_16px_-12px_rgba(0,0,0,0.45)] backdrop-blur-sm">
             <div className="grid sm:grid-cols-2 gap-4">
               <ProgressBar used={derived.spent.occupation} total={derived.budget.occupation} label="职业技能点" />
-              <ProgressBar used={derived.spent.interest} total={derived.budget.interest} label="兴趣技能点" hint={isKpcp ? '（教育+智力）' : '（智力×2）'} />
+              <ProgressBar used={derived.spent.interest} total={derived.budget.interest} label="兴趣技能点" hint={isKpcp ? undefined : '（智力×2）'} />
             </div>
           </div>
 

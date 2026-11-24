@@ -582,13 +582,16 @@ export function parseCharacter(body, { partial = false, knownModuleIds = null, c
   if (need('talents')) out.talents = parseTalents(b.talents, R);
   if (need('keyConnection')) out.keyConnection = parseKeyConnection(b.keyConnection);
 
-  // 守秘人伴侣：第二母语（每门 10 点兴趣点）
+  // 守秘人伴侣：第二母语（1 门，10 点；可选用职业点或兴趣点开启）
   if (need('extraLanguages') || !partial) {
     out.extraLanguages = isKpcpLayer(R)
-      ? vArray(b.extraLanguages, '第二母语', { max: 3 })
-        .map((x) => (typeof x === 'string' ? x : x?.name))
-        .map((x) => vText(x, '第二母语', { max: 24 }))
-        .filter(Boolean)
+      ? vArray(b.extraLanguages, '第二母语', { max: 1 })
+        .map((x) => {
+          const name = typeof x === 'string' ? x : x?.name;
+          const pool = (x && typeof x === 'object' && x.pool === 'occupation') ? 'occupation' : 'interest';
+          return { name: vText(name, '第二母语', { max: 24 }), pool };
+        })
+        .filter((x) => x.name)
       : [];
   }
 
@@ -764,7 +767,7 @@ function parseOccupationKeys(value) {
 
 /** 额外允许的自定义技能名（供 KP 模板使用，玩家不选职业也能被标记为本职） */
 function parseCustomKeys(value) {
-  return vArray(value, '自定义本职技能', { max: 20 })
+  return vArray(value, '自定义本职技能', { max: CUSTOM_SKILL_MAX })
     .map((k) => (typeof k === 'string' ? k.trim().slice(0, 24) : ''))
     .filter(Boolean)
     .filter((k, i, a) => a.indexOf(k) === i);

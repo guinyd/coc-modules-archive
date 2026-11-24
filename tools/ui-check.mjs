@@ -1163,6 +1163,60 @@ try {
       return { pair: m?m[1]+'/'+m[2]:'', rows, allNever: rows.length>0 && rows.every((t)=>t.includes('从未登录')) };
     })()`);
     ok('筛选「从未登录」后名册只剩未被使用的账号', filteredRoster?.allNever === true && ((filteredRoster?.rows || []).some((t) => t.includes('UI未登录账号')) || filteredRoster?.pair === '1/1'), JSON.stringify(filteredRoster?.pair) + ' rows=' + (filteredRoster?.rows || []).length);
+    // v10.14.7：手机端名册也要能翻页（桌面表格的分页条在 md:hidden 里看不到）
+    const pageAccs = [];
+    for (let i = 1; i <= 12; i += 1) {
+      const created = await fetch(`${API}/api/admin/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${seedUser.token}` },
+        body: JSON.stringify({ username: `UI翻页${String(i).padStart(2, '0')}`, password: 'abc123' }),
+      }).then((r) => r.json()).catch(() => null);
+      if (created?.user?.id) pageAccs.push(created.user.id);
+    }
+    await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await page.send('Page.navigate', { url: BASE });
+    await sleep(2200);
+    await page.eval(`(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes(${JSON.stringify(seedUser.user.username)}));b&&b.click();return 1})()`);
+    await sleep(1500);
+    await page.eval(`(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('账号管理'));b&&b.click();return 1})()`);
+    await sleep(1600);
+    const mobileRoster = await page.eval(`(()=>{
+      const visible = (el) => !!el && el.offsetParent !== null && el.getBoundingClientRect().width > 0;
+      const next = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === '下一页' && visible(b));
+      const box = next ? next.closest('div') : null;
+      return { hasPager: !!next, text: box ? box.innerText : '' };
+    })()`);
+    ok('手机端名册有分页条（能翻到后面的账号）',
+      mobileRoster?.hasPager === true && /第 1 \/ \d+ 页/.test(mobileRoster?.text || ''),
+      JSON.stringify(mobileRoster).slice(0, 160));
+    {
+      const clip = await page.eval(`(()=>{
+        const b=[...document.querySelectorAll('button')].find((x)=>x.textContent.trim()==='下一页' && x.offsetParent!==null);
+        if(!b) return null;
+        const r=b.closest('div').getBoundingClientRect();
+        return { x: Math.max(0, r.left + window.scrollX), y: Math.max(0, r.top + window.scrollY - 200), width: Math.min(390, r.width), height: 300 };
+      })()`);
+      await sleep(300);
+      const shot = await page.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { ...(clip || { x: 0, y: 0, width: 390, height: 300 }), scale: 2 } });
+      fs.writeFileSync(path.join(SHOTS, 'accounts-mobile-pager.png'), Buffer.from(shot.data, 'base64'));
+      console.log(`  截图：${path.join(SHOTS, 'accounts-mobile-pager.png')}`);
+    }
+    await page.eval(`(()=>{const b=[...document.querySelectorAll('button')].find((x)=>x.textContent.trim()==='下一页' && x.offsetParent!==null); if(b){b.click();return 1;} return 0;})()`);
+    await sleep(900);
+    const mobileRoster2 = await page.eval(`(()=>{
+      const visible = (el) => !!el && el.offsetParent !== null && el.getBoundingClientRect().width > 0;
+      const next = [...document.querySelectorAll('button')].find((b) => (b.textContent.trim() === '下一页' || b.textContent.trim() === '上一页') && visible(b));
+      const box = next ? next.closest('div') : null;
+      return { text: box ? box.innerText : '', body: document.body.innerText.includes('UI翻页') };
+    })()`);
+    ok('手机端点「下一页」能翻到第 2 页',
+      /第 2 \/ \d+ 页/.test(mobileRoster2?.text || '') && mobileRoster2?.body === true,
+      JSON.stringify(mobileRoster2).slice(0, 160));
+    await page.send('Emulation.clearDeviceMetricsOverride');
+    for (const id of pageAccs) {
+      await fetch(`${API}/api/admin/users/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${seedUser.token}` } }).catch(() => null);
+    }
+
     if (freshAcc?.user?.id) {
       await fetch(`${API}/api/admin/users/${freshAcc.user.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${seedUser.token}` } }).catch(() => null);
     }
@@ -1513,6 +1567,13 @@ try {
     // 第二母语：技能页添加一门，断言生成技能行
     await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('技能')); if(b) b.click(); return Boolean(b); })()`);
     await sleep(900);
+    await page.eval(`(() => {
+      const box = document.querySelector('[aria-label="第二母语点数来源"]');
+      const b = box ? [...box.querySelectorAll('button')].find((x) => x.textContent.trim() === '职业点') : null;
+      if (b) b.click();
+      return Boolean(b);
+    })()`);
+    await sleep(300);
     const hasLangBlock = await page.eval(`(() => {
       const input = [...document.querySelectorAll('input')].find((i) => (i.placeholder || '').includes('西班牙语'));
       if (!input) return false;
@@ -1525,8 +1586,15 @@ try {
     await page.eval(`(() => { const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('添加母语')); if(b) b.click(); return Boolean(b); })()`);
     await sleep(900);
     const langText = await page.eval('document.body.innerText');
-    ok('伴侣层可添加第二母语（每门 10 点）',
-      hasLangBlock === true && langText.includes('母语（西班牙语）'), langText.slice(0, 200));
+    ok('伴侣层可添加第二母语（1 门 10 点，可用职业点开）',
+      hasLangBlock === true && langText.includes('母语（西班牙语）') && langText.includes('职业点 10 点'), langText.slice(0, 200));
+    const langOnce = await page.eval(`(() => {
+      const box = document.querySelector('[aria-label="第二母语点数来源"]');
+      const inBox = box ? Boolean(box) : false;
+      const addBtn = [...document.querySelectorAll('button')].find((x) => x.textContent.includes('添加母语'));
+      return { inBox, disabled: Boolean(addBtn && addBtn.disabled) };
+    })()`);
+    ok('第二母语只允许 1 门（添加按钮已禁用）', langOnce.disabled === true, JSON.stringify(langOnce));
 
     // 背景故事栏目按规则集取（v10.13.13）：编辑器先填伴侣版的「描述」，保存后到详情页核对
     await page.eval(`(() => {
@@ -1588,6 +1656,10 @@ try {
     ok('详情/审卡阅览：经历记录显示在背景故事页',
       kpDetailBg.includes('经历记录') && kpDetailBg.includes('UI 样本经历：雨夜追踪的第七天'),
       kpDetailBg.slice(-300));
+    // v10.14.6：第二母语要标明是职业点还是兴趣点开的
+    ok('详情/审卡阅览：第二母语标明扣点来源（职业点 10 点）',
+      kpDetailBg.includes('第二母语') && kpDetailBg.includes('职业点 10 点'),
+      kpDetailBg.slice(0, 300));
 
     // 骰娘指令按规则集取名（v10.13.7）：伴侣层卡必须用伴侣修订表的技能名
     await page.eval(`(() => {

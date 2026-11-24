@@ -807,7 +807,7 @@ export function Popconfirm({
 export function Pager({ page, total, pageSize = 8, onChange, label = '条' }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   if (pages <= 1) return null;
-  const btn = 'border border-line px-3 py-1.5 text-[14px] tracking-[0.1em] text-ink-soft transition-colors hover:border-moon hover:text-moon disabled:pointer-events-none disabled:opacity-35';
+  const btn = 'inline-flex min-h-[36px] items-center border border-line px-4 py-2 text-[14px] tracking-[0.1em] text-ink-soft transition-colors hover:border-moon hover:text-moon disabled:pointer-events-none disabled:opacity-35 sm:min-h-0 sm:px-3 sm:py-1.5';
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3 font-mono text-[14px] tracking-[0.14em] text-ink-mute">
       <span>第 {page} / {pages} 页 · 共 {total} {label}</span>

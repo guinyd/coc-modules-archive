@@ -353,14 +353,14 @@ ok('伴侣版多门母语拆成「母语 + 各分支」，不再出现「母语�
     ...blankSheet('u1', 'classic7e'),
     kpcp: { enabled: true, toggles: KPCP_DEFAULT_RULES.toggles },
     chars: { STR: 60, CON: 50, SIZ: 45, DEX: 44, APP: 71, INT: 75, POW: 75, EDU: 80 },
-    extraLanguages: ['法语', '拉丁语'],
+    extraLanguages: [{ name: '法语', pool: 'interest' }],
   };
   const R = resolveCardRuleset(sheet);
   sheet.skills = blankSkills(R);
   const d = computeSheet(sheet, { ruleset: R });
   const cmd = buildDiceBotCommand(sheet, d, {});
   const seg = (cmd.match(/母语\d+[^聆]*/) || [''])[0];
-  return seg.includes('母语80法语80拉丁语80')
+  return seg.includes('母语80法语80')
     && !cmd.includes('母语法语') && !cmd.includes('母语拉丁语');
 })());
 ok('宗教带分支时给「统称 → 旧叫法 → 分支」（宗教 神学 天主教）', (() => {

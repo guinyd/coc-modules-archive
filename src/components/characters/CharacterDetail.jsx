@@ -478,6 +478,23 @@ export default function CharacterDetail({
                     </div>
                   </div>
                 ) : null}
+                {isKpcp && Array.isArray(d.extraLanguages) && d.extraLanguages.length ? (
+                  <div className="rounded-[2px] border border-line-strong bg-paper-deep/40 p-3">
+                    <div className="text-ink-mute">第二母语</div>
+                    {d.extraLanguages.map((x) => (
+                      <div key={x.name} className="mt-1 flex flex-wrap items-baseline gap-x-1.5 leading-tight">
+                        <span className="font-serif text-[15px] font-bold text-ink">{x.name}</span>
+                        <span className={cx(
+                          'rounded-[2px] border px-1 py-[1px] text-[11.5px]',
+                          x.pool === 'occupation' ? 'border-violet/40 bg-violet/10 text-violet' : 'border-amber-600/40 bg-amber-500/10 text-amber-300',
+                        )}
+                        >
+                          {x.pool === 'occupation' ? '职业点' : '兴趣点'} {x.cost} 点
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
               {c.audit.findings.length > 0 ? (

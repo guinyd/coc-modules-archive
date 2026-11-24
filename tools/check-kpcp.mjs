@@ -136,12 +136,22 @@ ok('专精下限关闭后保持规则书原值（斗殴 25 / 斧 15）',
   && floorOff.skills.filter((s) => s.id === 'fighting#1')[0]?.base === 15);
 
 section('第二母语');
-const dLang = derive({ ...kcard(), extraLanguages: ['法语', '拉丁语'] });
-ok('每门第二母语消耗 10 点兴趣', dLang.spent.interest === 20, String(dLang.spent.interest));
-ok('生成两行母语技能', dLang.skills.filter((s) => s.extraLanguage).length === 2);
+const dLang = derive({ ...kcard(), extraLanguages: [{ name: '法语', pool: 'occupation' }] });
+ok('第二母语可以从职业点里扣 10 点',
+  dLang.spent.occupation === 10 && dLang.extraLanguageSpent?.occupation === 10,
+  `${dLang.spent.occupation} / ${JSON.stringify(dLang.extraLanguageSpent)}`);
+ok('只生成一行母语技能', dLang.skills.filter((s) => s.extraLanguage).length === 1);
 ok('第二母语起始值 = EDU', dLang.skills.filter((s) => s.extraLanguage).every((s) => s.total === 70));
+ok('技能行上标明是从职业点开的', dLang.skills.filter((s) => s.extraLanguage)[0]?.extraLanguagePool === 'occupation');
+const dLangTwo = derive({ ...kcard(), extraLanguages: [{ name: '法语', pool: 'interest' }, { name: '拉丁语', pool: 'interest' }] });
+ok('第二门母语会被引擎忽略（伴侣规则只允许 1 门）',
+  dLangTwo.skills.filter((s) => s.extraLanguage).length === 1 && dLangTwo.spent.interest === 10);
+ok('旧卡里存的字符串按兴趣点处理', (() => {
+  const d = derive({ ...kcard(), extraLanguages: ['拉丁语'] });
+  return d.extraLanguages?.[0]?.pool === 'interest' && d.spent.interest === 10;
+})());
 ok('关闭开关后不计点也不生成', (() => {
-  const off = derive({ ...kcard(), extraLanguages: ['法语'] }, { secondOwnLanguage: false });
+  const off = derive({ ...kcard(), extraLanguages: [{ name: '法语', pool: 'interest' }] }, { secondOwnLanguage: false });
   return off.spent.interest === 0 && off.skills.filter((s) => s.extraLanguage).length === 0;
 })());
 

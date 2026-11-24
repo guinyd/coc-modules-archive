@@ -9,7 +9,7 @@
  */
 
 import {
-  ALL_CHARS, BACKGROUND_FIELDS, CHAR_LABEL, STATUS_LABEL,
+  ALL_CHARS, BACKGROUND_FIELDS, CHAR_LABEL, CUSTOM_SKILL_MAX, STATUS_LABEL,
   blankSheet, clampInt, computeSheet, skillName,
 } from './coc7e.js';
 import { CLASSIC_ID, resolveCardRuleset } from './rulesets/index.js';
@@ -114,7 +114,7 @@ export function unpackCard(obj) {
       }));
   }
   if (Array.isArray(obj.customSkills)) {
-    out.customSkills = obj.customSkills.slice(0, 20).map((s, i) => ({
+    out.customSkills = obj.customSkills.slice(0, CUSTOM_SKILL_MAX).map((s, i) => ({
       id: typeof s?.id === 'string' && s.id ? s.id.slice(0, 32) : `cs_import${i}`,
       name: str(s?.name, 24),
       base: int(s?.base, 0, 99, 0),
@@ -173,7 +173,13 @@ export function unpackCard(obj) {
       : [],
   };
   out.extraLanguages = out.kpcp.enabled && Array.isArray(obj.extraLanguages)
-    ? obj.extraLanguages.map((x) => (typeof x === 'string' ? x : x?.name)).map((x) => str(x, 24)).filter(Boolean).slice(0, 3)
+    ? obj.extraLanguages.slice(0, 1).map((x) => {
+      const isObj = x && typeof x === 'object';
+      return {
+        name: str(isObj ? x.name : x, 24),
+        pool: (isObj && x.pool === 'occupation') ? 'occupation' : 'interest',
+      };
+    }).filter((x) => x.name)
     : [];
   out.keyConnection = str(obj.keyConnection, 40);
   // 导入的卡一律从「未提交审核」的草稿开始，且不带传奇标记（那要 KP 单独给）
@@ -280,7 +286,7 @@ export function buildCardMarkdown(character, derived) {
     const rep = s.kpcp?.reputation || {};
     lines.push(`- 伴侣规则：${on} 项开启 · 团内自定义 ${custom} 条`);
     if (Array.isArray(d.extraLanguages) && d.extraLanguages.length) {
-      lines.push(`- 第二母语：${d.extraLanguages.map((x) => `${x.name}（${x.total}%，花 ${x.cost} 点）`).join('、')}`);
+      lines.push(`- 第二母语：${d.extraLanguages.map((x) => `${x.name}（${x.total}%，${x.pool === 'occupation' ? '职业点' : '兴趣点'} ${x.cost} 点）`).join('、')}`);
     }
     lines.push(`- 声望：英勇 ${rep.heroism ?? 0} / 可靠 ${rep.reliability ?? 0} / 神秘 ${rep.mystery ?? 0}`);
     lines.push(`- 理智术语：${terms?.temporary || '临时性疯狂'} / ${terms?.indefinite || '不定性疯狂'} / ${terms?.permanent || '永久性疯狂'}`);

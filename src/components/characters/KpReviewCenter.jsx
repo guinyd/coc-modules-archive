@@ -26,7 +26,7 @@ import {
   KPCP_TOGGLES, KPCP_TOGGLE_GROUPS, kpcpRuleSummary, normalizeKpcpRules,
 } from '../../../shared/rulesets/kpcp.js';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../../lib/api.js';
-import { eduGrowthLabel, grantEduReroll } from '../../../shared/coc7e.js';
+import { CUSTOM_SKILL_MAX, eduGrowthLabel, grantEduReroll } from '../../../shared/coc7e.js';
 import EduQuickModal from './EduQuickModal.jsx';
 import {
   Badge, Button, EmptyState, Field, Input, NumberInput, PageHeader, Panel, Popconfirm, Tabs,
@@ -1799,7 +1799,7 @@ function TemplateEditor({ value, onClose, onSaved, showToast }) {
       return showToast('这是内置技能，直接在上面勾选即可', 'error');
     }
     if ((form.customKeys || []).includes(name)) return showToast('已经加过了', 'error');
-    if ((form.customKeys || []).length >= 20) return showToast('自定义技能最多 20 项', 'error');
+    if ((form.customKeys || []).length >= CUSTOM_SKILL_MAX) return showToast(`自定义技能最多 ${CUSTOM_SKILL_MAX} 项`, 'error');
     setForm((prev) => ({ ...prev, customKeys: [...(prev.customKeys || []), name] }));
     setCustomKey('');
   };
