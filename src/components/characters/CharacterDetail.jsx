@@ -393,7 +393,11 @@ export default function CharacterDetail({
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3 lg:grid-cols-7">
           <StatBox label="生命值 HP" value={d.hp} />
           <StatBox label="魔法点 MP" value={d.mp} />
-          <StatBox label="理智 SAN" value={`${d.san} / ${d.sanMax}`} />
+          <StatBox
+            label="理智 SAN"
+            value={`${d.san} / ${d.sanMax}`}
+            sub={Number(d.sanGrowth) ? `意志成长 ${d.sanGrowth > 0 ? '+' : ''}${d.sanGrowth}` : ''}
+          />
           <StatBox label="移动力 MOV" value={d.mov} />
           <StatBox label="伤害加值" value={d.db} tone="amber" />
           <StatBox label="体格" value={d.build} tone="amber" />
@@ -583,6 +587,9 @@ export default function CharacterDetail({
                     {d.eff[k]}
                   </div>
                   <div className="tabular mt-1 text-[14px] text-ink-mute">基础 {d.raw[k]}</div>
+                  {Number(d.charGrowth?.[k]) ? (
+                    <div className="tabular text-[13px] font-semibold text-moon">成长 +{d.charGrowth[k]}</div>
+                  ) : null}
                   {legendary.enabled ? (
                     <div className="font-mono text-[14px] font-semibold text-ochre">传奇 +{legendaryBonus[k] || 0}</div>
                   ) : null}

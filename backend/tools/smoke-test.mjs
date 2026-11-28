@@ -922,11 +922,11 @@ try {
   ok('自定义技能总成功率正确（1+15=16）', csList.find((x) => x.name === '驾驶（坦克）')?.total === 16);
   ok('未命名的自定义技能被丢弃', !csList.some((x) => !x.name));
   const okCustom = await api('POST', '/api/characters', {
-    token: A, body: { ...blank, name: '上限内自定义', customSkills: Array.from({ length: 50 }, (_, i) => ({ id: `cs_y${i}`, name: `技能${i}`, base: 1 })) },
+    token: A, body: { ...blank, name: '上限内自定义', customSkills: Array.from({ length: 100 }, (_, i) => ({ id: `cs_y${i}`, name: `技能${i}`, base: 1 })) },
   });
-  ok('自定义技能上限 50 项可保存', okCustom.status === 200);
+  ok('自定义技能上限 100 项可保存', okCustom.status === 200);
   const badCustom = await api('POST', '/api/characters', {
-    token: A, body: { ...blank, name: '超量自定义', customSkills: Array.from({ length: 51 }, (_, i) => ({ id: `cs_x${i}`, name: `技能${i}`, base: 1 })) },
+    token: A, body: { ...blank, name: '超量自定义', customSkills: Array.from({ length: 101 }, (_, i) => ({ id: `cs_x${i}`, name: `技能${i}`, base: 1 })) },
   });
   ok('自定义技能数量超限 → 400', badCustom.status === 400);
   if (okCustom.json?.id) await api('DELETE', `/api/characters/${okCustom.json.id}`, { token: A });

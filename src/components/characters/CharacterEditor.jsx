@@ -2001,7 +2001,7 @@ export default function CharacterEditor({
             </div>
             {isPulp ? (
               <p className="mb-4 border-l-2 border-amber-600/50 bg-amber-500/[0.06] px-3.5 py-2.5 text-[14px] leading-[1.75] text-ink-soft">
-                通俗克苏鲁不套用年龄补正与教育增强：属性直接使用掷骰结果，年龄只作记录；本页不提供年龄豁免、成长等入口。
+                通俗克苏鲁不套用年龄补正与教育增强：年龄只作记录，本页不提供年龄补正与教育增强入口；属性的「成长」照常在属性明细里填写。
               </p>
             ) : null}
             {currentUser?.role === 'admin' ? (
@@ -2067,18 +2067,16 @@ export default function CharacterEditor({
                       <div className="mb-1 font-mono text-[14px] font-semibold tracking-[0.06em] text-ink-mute">掷骰值</div>
                       <NumberInput value={sheet.chars[k]} onChange={(v) => setChar(k, v)} className="!py-2" />
                     </div>
-                    {isPulp ? null : (
-                      <div className="w-16">
-                        <div className="mb-1 font-mono text-[14px] font-semibold tracking-[0.06em] text-moon">成长 +</div>
-                        <NumberInput
-                          min={0}
-                          max={99}
-                          value={sheet.charGrowth?.[k] || 0}
-                          onChange={(v) => setCharGrowth(k, v)}
-                          className="!py-2 !border-moon/50"
-                        />
-                      </div>
-                    )}
+                    <div className="w-16">
+                      <div className="mb-1 font-mono text-[14px] font-semibold tracking-[0.06em] text-moon">成长 +</div>
+                      <NumberInput
+                        min={0}
+                        max={99}
+                        value={sheet.charGrowth?.[k] || 0}
+                        onChange={(v) => setCharGrowth(k, v)}
+                        className="!py-2 !border-moon/50"
+                      />
+                    </div>
                     {derived.legendary.enabled ? (
                       <div className="w-20">
                         <div className="mb-1 font-mono text-[14px] font-semibold tracking-[0.06em] text-ochre">传奇 +</div>
@@ -2115,24 +2113,22 @@ export default function CharacterEditor({
                   起始 = min(意志 + 成长, 99 − 神话知识)，最低 0；上限随克苏鲁神话增长而下降（当前神话 {derived.mythos}）。成长可正可负——剧本削减 SAN 时填负数。
                 </p>
               </div>
-              {isPulp ? null : (
-                <label className="flex items-center gap-2">
-                  <span className="text-[14px] font-semibold text-moon">成长 ±</span>
-                  <NumberInput
-                    min={-99}
-                    max={99}
-                    value={sheet.sanGrowth || 0}
-                    onChange={(v) => { patch({ sanGrowth: v === '' ? 0 : Math.max(-99, Math.min(99, Math.trunc(Number(v)) || 0)) }); }}
-                    className="!w-20 !py-2 !border-moon/50"
-                  />
-                </label>
-              )}
+              <label className="flex items-center gap-2">
+                <span className="text-[14px] font-semibold text-moon">成长 ±</span>
+                <NumberInput
+                  min={-99}
+                  max={99}
+                  value={sheet.sanGrowth || 0}
+                  onChange={(v) => { patch({ sanGrowth: v === '' ? 0 : Math.max(-99, Math.min(99, Math.trunc(Number(v)) || 0)) }); }}
+                  className="!w-20 !py-2 !border-moon/50"
+                />
+              </label>
             </div>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               {isPulp ? (
                 <div className="rounded-[2px] border border-amber-600/40 bg-amber-500/[0.06] px-4 py-3 text-[14px] leading-[1.7] text-ink-soft">
-                  通俗克苏鲁不使用年龄补正与教育增强：有效属性等于掷骰值与成长以外的直接结果。
+                  通俗克苏鲁不使用年龄补正与教育增强：有效属性 = 掷骰值 + 成长 +（传奇加成）；剧本或房规奖励的属性提升填在「成长」里。
                 </div>
               ) : ignoreAge ? (
                 <div className="rounded-[2px] border border-amber-600/40 bg-amber-500/[0.06] px-4 py-3 text-[14px] leading-[1.7] text-ink-soft">

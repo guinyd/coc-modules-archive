@@ -61,7 +61,7 @@ export const SKILL_CAP = 99;
 export const CHAR_MIN = 0;
 export const CHAR_MAX = 99;
 /** 自定义技能数量上限 */
-export const CUSTOM_SKILL_MAX = 50;
+export const CUSTOM_SKILL_MAX = 100;
 
 /** 需要高亮显示的特殊技能（编辑器与打印共用同一份定义） */
 export const SPECIAL_SKILLS = ['credit', 'cthulhu'];

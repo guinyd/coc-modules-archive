@@ -1291,6 +1291,13 @@ try {
       return sel ? sel.value : '';
     })()`);
     ok('核心属性自动落在原型属性上', coreVal === 'DEX' || coreVal === 'APP' || coreVal === '', coreVal);
+    const pulpGrowth = await page.eval(`(() => {
+      const attrLabels = [...document.querySelectorAll('div')].filter((d) => d.children.length === 0 && (d.textContent || '').trim() === '成长 +');
+      const sanLabel = [...document.querySelectorAll('span')].find((s) => (s.textContent || '').trim() === '成长 ±');
+      return { attrs: attrLabels.length, san: Boolean(sanLabel) };
+    })()`);
+    ok('通克属性也能填成长（9 项「成长 +」）', pulpGrowth.attrs >= 9, JSON.stringify(pulpGrowth));
+    ok('通克理智也能填成长（「成长 ±」输入）', pulpGrowth.san === true, JSON.stringify(pulpGrowth));
 
     // v10.13.14：技能分配页的点数条吸顶（下滚时仍能看见剩余点）
     await page.eval(`(() => {

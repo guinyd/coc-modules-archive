@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import {
   blankSheet, blankSkills, computeSheet, validateSheet, auditSheet,
   ageAdjust, effectiveChars, damageBonusBuild, occupationAllowed,
-  OCCUPATIONS, normalizeHouseRules, backgroundFieldsOf, AUDIT_RULE_META,
+  OCCUPATIONS, normalizeHouseRules, backgroundFieldsOf, AUDIT_RULE_META, CUSTOM_SKILL_MAX,
 } from '../shared/coc7e.js';
 import { buildDiceBotCommand, DICEBOT_FORMATS, diceBotSkillNames } from '../shared/dicebot.js';
 import { buildCardBackup, buildCardMarkdown, importCardData } from '../shared/cardmd.js';
@@ -534,6 +534,18 @@ ok('KP 工具箱：导出的 .md 带备份标记，能整份还原（含中文�
       && back.state.entries[0].custom.c1 === '旧钥匙'
       && decodeStateMarker('# 随便一份别的 md') === null;
   })());
+
+// v10.14.8：自定义技能上限 100；通克也要吃得下属性/理智成长
+ok('自定义技能上限为 100', CUSTOM_SKILL_MAX === 100, String(CUSTOM_SKILL_MAX));
+{
+  const gs = { ...blankSheet('u1', 'classic7e'), gameSystem: 'pulp' };
+  gs.chars = { STR: 60, CON: 50, SIZ: 65, DEX: 45, APP: 50, INT: 70, POW: 75, EDU: 80, Luck: 50 };
+  gs.charGrowth = { STR: 5 };
+  gs.sanGrowth = 4;
+  const gd = computeSheet(gs, {});
+  ok('通克属性成长计入有效值', gd.eff.STR === 65 && gd.raw.STR === 60, `${gd.raw.STR} -> ${gd.eff.STR}`);
+  ok('通克理智成长计入起始 SAN', gd.san === gd.eff.POW + 4, `${gd.eff.POW} + 4 = ${gd.san}`);
+}
 
 console.log(`\n================ 自检：${pass} 通过 / ${fails.length} 失败 ================`);
 if (fails.length) { console.log('失败项：\n - ' + fails.join('\n - ')); process.exit(1); }
