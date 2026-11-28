@@ -68,7 +68,7 @@ function IndexPanel({ stats, latest, currentUser, onOpenModule, onGoAuth, onGoCh
         {stats.map((s, i) => (
           <div key={s.label} className="group flex items-baseline justify-between gap-3 py-2.5">
             <dt className="flex items-center gap-2 font-mono text-[14px] tracking-[0.18em] text-ink-mute">
-              <span className="text-vermilion/80">{pad2(i + 1)}</span>
+              <span className="text-vermilion">{pad2(i + 1)}</span>
               {s.label}
             </dt>
             <dd className="flex items-baseline gap-1 font-serif text-[27px] font-black leading-none text-ink tabular transition-colors group-hover:text-vermilion">
@@ -92,7 +92,7 @@ function IndexPanel({ stats, latest, currentUser, onOpenModule, onGoAuth, onGoCh
                 onClick={() => onOpenModule(m)}
                 className="group flex h-8 w-full items-center gap-2 text-left"
               >
-                <span className="font-mono text-[14px] text-vermilion/70">{pad2(i + 1)}</span>
+                <span className="font-mono text-[14px] text-vermilion">{pad2(i + 1)}</span>
                 <span className="min-w-0 flex-1 truncate font-serif text-[14.5px] font-semibold text-ink-soft transition-colors group-hover:text-vermilion">
                   {m.title}
                 </span>
@@ -484,11 +484,11 @@ export default function HomeView({
                       className={cx(
                         'group relative flex min-h-11 items-center gap-2.5 border-b border-line/70 pl-2.5 pr-1 text-left last:border-0',
                         'transition-all duration-300 ease-[var(--ease-soft)]',
-                        active ? 'bg-vermilion/[0.07]' : 'hover:bg-paper-deep/50',
+                        active ? 'bg-vermilion/[0.03]' : 'hover:bg-paper-deep/50',
                       )}
                     >
                       <span aria-hidden="true" className={cx('absolute inset-y-1.5 left-0 w-[2px] transition-transform duration-300', active ? 'scale-y-100 bg-vermilion' : 'scale-y-0 bg-vermilion/40')} />
-                      <span className={cx('font-mono text-[14px] tracking-[0.1em]', active ? 'text-vermilion' : 'text-ink-mute/70')}>{pad2(i + 1)}</span>
+                      <span className={cx('font-mono text-[14px] tracking-[0.1em]', active ? 'text-vermilion' : 'text-ink-mute/85')}>{pad2(i + 1)}</span>
                       <it.icon className={cx('h-[13px] w-[13px] transition-colors', active ? 'text-vermilion' : 'text-ink-mute')} strokeWidth={1.9} />
                       <span className={cx('flex-1 font-serif text-[15px] font-semibold transition-colors', active ? 'text-ink' : 'text-ink-soft group-hover:text-ink')}>{it.label}</span>
                       {active ? <span aria-hidden="true" className="h-[4px] w-[4px] bg-vermilion" /> : null}

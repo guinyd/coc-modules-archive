@@ -723,7 +723,7 @@ export default function App() {
       >
         <div className="mx-auto max-w-[1240px] px-4 sm:px-6 lg:px-8">
           {/* 报头细目：卷期与身份 */}
-          <div className="masthead-strip hidden h-[22px] items-center justify-end gap-4 border-b border-white/10 font-mono text-[14px] leading-none tracking-[0.2em] text-[var(--c-masthead-ink)]/45 sm:flex sm:text-[14px] sm:tracking-[0.28em]">
+          <div className="masthead-strip hidden h-[22px] items-center justify-end gap-4 border-b border-white/10 font-mono text-[14px] leading-none tracking-[0.2em] text-[var(--c-masthead-ink)]/70 sm:flex sm:text-[14px] sm:tracking-[0.28em]">
             <span className="flex shrink-0 items-center gap-2.5">
               <span className="hidden md:inline">VOL. IV · NO. 27</span>
               <span className="hidden items-center gap-2.5 sm:flex">
@@ -802,7 +802,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="hidden p-2 text-[var(--c-masthead-ink)]/45 transition-colors hover:bg-vermilion/20 hover:text-vermilion xl:block"
+                    className="hidden p-2 text-[var(--c-masthead-ink)]/70 transition-colors hover:bg-vermilion/20 hover:text-vermilion xl:block"
                     title="登出"
                     aria-label="登出"
                   >
@@ -1005,7 +1005,7 @@ export default function App() {
               </span>
               <div>
                 <p className="font-serif text-[17px] font-black leading-none tracking-[0.14em]">秘密调查档案馆</p>
-                <p className="mt-2 font-mono text-[14px] tracking-[0.24em] text-[var(--c-masthead-ink)]/45">THE DROWNED ARCHIVE · ARCHIVE OF SECRET INQUIRY</p>
+                <p className="mt-2 font-mono text-[14px] tracking-[0.24em] text-[var(--c-masthead-ink)]/70">THE DROWNED ARCHIVE · ARCHIVE OF SECRET INQUIRY</p>
                 <p className="mt-3 font-kai text-[14px] leading-relaxed tracking-[0.1em] text-[var(--c-masthead-ink)]/60">
                   凡不可名状者，皆有其卷宗。<br />馆内资料仅供在册调查员查阅。
                 </p>
@@ -1023,16 +1023,16 @@ export default function App() {
                 <span className="truncate tracking-[0.16em]">GitHub 仓库</span>
               </a>
               <span className="inline-flex min-w-0 items-center gap-2.5">
-                <Scale className="h-[18px] w-[18px] shrink-0 text-[var(--c-masthead-ink)]/45" strokeWidth={1.6} />
+                <Scale className="h-[18px] w-[18px] shrink-0 text-[var(--c-masthead-ink)]/70" strokeWidth={1.6} />
                 <span className="truncate tracking-[0.16em]">授权协议 · MIT</span>
               </span>
               <span className="inline-flex min-w-0 items-center gap-2.5 sm:col-span-2">
-                <Mail className="h-[18px] w-[18px] shrink-0 text-[var(--c-masthead-ink)]/45" strokeWidth={1.6} />
+                <Mail className="h-[18px] w-[18px] shrink-0 text-[var(--c-masthead-ink)]/70" strokeWidth={1.6} />
                 <span className="tracking-[0.16em]">馆长邮箱 · yundecoc@agent.qq.com</span>
               </span>
             </div>
           </div>
-          <div className="mt-8 flex justify-end border-t border-white/12 pt-3 font-mono text-[14px] tracking-[0.24em] text-[var(--c-masthead-ink)]/35">
+          <div className="mt-8 flex justify-end border-t border-white/12 pt-3 font-mono text-[14px] tracking-[0.24em] text-[var(--c-masthead-ink)]/60">
             <span>OPEN SOURCE · MIT LICENSE</span>
           </div>
         </div>
@@ -1226,11 +1226,11 @@ function NavButton({ active, onClick, label, index }) {
       onClick={onClick}
       className={cx(
         'group relative flex items-center gap-1.5 px-2 text-[14px] font-semibold tracking-[0.05em] whitespace-nowrap transition-colors duration-300 lg:px-2.5 lg:text-[14px]',
-        active ? 'text-[var(--c-masthead-ink)]' : 'text-[var(--c-masthead-ink)]/55 hover:text-[var(--c-masthead-ink)]',
+        active ? 'text-[var(--c-masthead-ink)]' : 'text-[var(--c-masthead-ink)]/72 hover:text-[var(--c-masthead-ink)]',
       )}
     >
       {index ? (
-        <span className={cx('font-mono text-[14px] tracking-[0.06em] transition-colors duration-300', active ? 'text-vermilion' : 'text-white/30 group-hover:text-vermilion/80')}>
+        <span className={cx('font-mono text-[14px] tracking-[0.06em] transition-colors duration-300', active ? 'text-vermilion' : 'text-white/55 group-hover:text-vermilion/80')}>
           {index}
         </span>
       ) : null}
@@ -1340,7 +1340,7 @@ function NavDrawer({ open, onClose, view, currentUser, isAdmin, isChief, theme, 
             </span>
             <span className="flex flex-col leading-none">
               <span className="font-serif text-[16px] font-black tracking-[0.12em]">秘密调查档案馆</span>
-              <span className="mt-1 font-mono text-[14px] tracking-[0.22em] text-[var(--c-masthead-ink)]/45">THE DROWNED ARCHIVE</span>
+              <span className="mt-1 font-mono text-[14px] tracking-[0.22em] text-[var(--c-masthead-ink)]/70">THE DROWNED ARCHIVE</span>
             </span>
           </div>
           <button

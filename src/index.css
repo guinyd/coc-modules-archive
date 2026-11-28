@@ -707,7 +707,8 @@ html.theme-push::view-transition-group(root) {
     letter-spacing: 0.04em;
     color: var(--color-ink-soft);
     background: var(--color-paper-raised);
-    transition: all 280ms var(--ease-swift);
+    transition: color 280ms var(--ease-swift), border-color 280ms var(--ease-swift),
+      background-color 280ms var(--ease-swift), box-shadow 280ms var(--ease-swift), transform 280ms var(--ease-swift);
   }
   .filter-chip:hover { border-color: var(--color-vermilion); color: var(--color-vermilion); transform: translateY(-1px); }
   .filter-chip[data-active="true"] {

@@ -162,7 +162,7 @@
 .glass-bar[data-scrolled="true"] {
   box-shadow: 0 24px 46px -34px rgba(0, 0, 0, 0.95);
 }
-.glass-bar[data-scrolled="true"] .masthead-strip { opacity: 0.55; }
+.glass-bar[data-scrolled="true"] .masthead-strip { opacity: 0.8; }
 .masthead-strip { transition: opacity 320ms var(--ease-soft); }
 
 /* 路由顶部扫描线：请求 >140ms 才出现，避免短请求闪一下。 */
